@@ -1,0 +1,19 @@
+# Cache and data files (contain sensitive data)
+session_history.json
+
+# Node modules (not needed - uses built-in modules only)
+node_modules/
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

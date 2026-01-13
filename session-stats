@@ -1,0 +1,206 @@
+#!/usr/bin/env python3
+"""
+Shows token statistics for the current OpenCode session.
+Usage: session-stats
+
+Features:
+- Tracks input/output tokens per model.
+- Calculates estimated costs based on hardcoded prices.
+- Maintains a persistent history per session.
+"""
+
+import json
+import datetime
+from pathlib import Path
+
+def get_current_session():
+    """Finds the most recent (active) session."""
+    msg_dir = Path.home() / ".local/share/opencode/storage/message"
+    if not msg_dir.exists():
+        return None
+    
+    sessions = list(msg_dir.iterdir())
+    if not sessions:
+        return None
+    
+    # Sort by modification date (most recent first)
+    sessions.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    return sessions[0]
+
+def get_session_stats(session_path):
+    """Extracts statistics from a session."""
+    stats = {
+        "total_messages": 0,
+        "by_model": {}
+    }
+    
+    for msg_file in session_path.glob("*.json"):
+        try:
+            with open(msg_file) as f:
+                msg = json.load(f)
+            
+            stats["total_messages"] += 1
+            
+            # Only count tokens from assistant responses
+            if msg.get("role") != "assistant":
+                continue
+            
+            tokens = msg.get("tokens", {})
+            if not tokens:
+                continue
+            
+            model = msg.get("modelID", "unknown")
+            
+            if model not in stats["by_model"]:
+                stats["by_model"][model] = {
+                    "requests": 0,
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0
+                }
+            
+            stats["by_model"][model]["requests"] += 1
+            stats["by_model"][model]["input"] += tokens.get("input", 0)
+            stats["by_model"][model]["output"] += tokens.get("output", 0)
+            stats["by_model"][model]["reasoning"] += tokens.get("reasoning", 0)
+            
+        except (json.JSONDecodeError, KeyError):
+            continue
+    
+    return stats
+
+def format_number(n):
+    """Formats large numbers with separators."""
+    if n >= 1000000:
+        return f"{n/1000000:.1f}M"
+    elif n >= 1000:
+        return f"{n/1000:.1f}K"
+    return str(n)
+
+def format_cost(cost):
+    """Formats cost in dollars."""
+    if cost >= 1:
+        return f"${cost:.2f}"
+    elif cost >= 0.01:
+        return f"${cost:.4f}"
+    return f"${cost:.6f}"
+
+# Costs per 1M tokens (in USD)
+MODEL_COSTS = {
+    "glm-4.7-free": {"input": 0.43, "output": 2.2},
+    "gpt-5.1-codex-max": {"input": 1.25, "output": 10},
+    "codex-max": {"input": 1.25, "output": 10},
+    "gpt-5.2-codex": {"input": 1.75, "output": 14},
+    "gpt-5.2": {"input": 1.75, "output": 14},
+    "antigravity-claude-opus-4-5-thinking-high": {"input": 5, "output": 25},
+    "claude-opus-4-5-thinking": {"input": 5, "output": 25},
+    "antigravity-claude-sonnet-4-5": {"input": 3, "output": 15},
+    "antigravity-claude-sonnet-4-5-thinking": {"input": 3, "output": 15},
+    "claude-sonnet-4-5": {"input": 3, "output": 15},
+    "claude-sonnet-4-5-thinking": {"input": 3, "output": 15},
+    "antigravity-gemini-3-flash": {"input": 0.5, "output": 3},
+    "gemini-3-flash": {"input": 0.5, "output": 3},
+    "antigravity-gemini-3-pro-low": {"input": 2, "output": 12},
+    "antigravity-gemini-3-pro-high": {"input": 2, "output": 12},
+    "antigravity-gemini-3-pro": {"input": 2, "output": 12},
+    "gemini-3-pro-low": {"input": 2, "output": 12},
+    "gemini-3-pro-high": {"input": 2, "output": 12},
+    "gemini-3-pro": {"input": 2, "output": 12},
+    "grok-code": {"input": 0.20, "output": 1.5},
+}
+
+def calculate_cost(model, input_tokens, output_tokens):
+    """Calculates estimated cost for a model."""
+    costs = MODEL_COSTS.get(model)
+    if not costs:
+        model_lower = model.lower()
+        if "codex-max" in model_lower: costs = {"input": 1.25, "output": 10}
+        elif "gemini-3-pro" in model_lower: costs = {"input": 2, "output": 12}
+        elif "gemini-3-flash" in model_lower: costs = {"input": 0.5, "output": 3}
+        elif "claude-opus" in model_lower: costs = {"input": 5, "output": 25}
+        elif "claude-sonnet" in model_lower: costs = {"input": 3, "output": 15}
+        elif "glm-4" in model_lower: costs = {"input": 0.43, "output": 2.2}
+            
+    if not costs:
+        return 0
+        
+    input_cost = (input_tokens / 1000000) * costs["input"]
+    output_cost = (output_tokens / 1000000) * costs["output"]
+    return input_cost + output_cost
+
+HISTORY_FILE = Path(__file__).parent / "session_history.json"
+
+def update_history(session_id, requests, input_tokens, output_tokens, cost, by_model, date=None):
+    """Updates the history and returns the grand total."""
+    data = {}
+    if HISTORY_FILE.exists():
+        try:
+            with open(HISTORY_FILE, 'r') as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            pass
+    
+    data[session_id] = {
+        "date": date or datetime.datetime.now().isoformat(),
+        "requests": requests,
+        "input": input_tokens,
+        "output": output_tokens,
+        "cost": cost,
+        "by_model": by_model
+    }
+    
+    try:
+        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(HISTORY_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
+
+    total_historical_cost = sum(item["cost"] for item in data.values())
+    total_sessions = len(data)
+    
+    return total_historical_cost, total_sessions
+
+def main():
+    session = get_current_session()
+    if not session:
+        print("No active session found")
+        return
+    
+    stats = get_session_stats(session)
+    
+    total_requests = sum(m["requests"] for m in stats["by_model"].values())
+    total_input = sum(m["input"] for m in stats["by_model"].values())
+    total_output = sum(m["output"] for m in stats["by_model"].values())
+    
+    total_session_cost = 0
+    for model, data in stats["by_model"].items():
+        total_session_cost += calculate_cost(model, data["input"], data["output"])
+    
+    by_model_with_cost = {}
+    for model, data in stats["by_model"].items():
+        model_cost = calculate_cost(model, data["input"], data["output"])
+        by_model_with_cost[model] = {
+            "requests": data["requests"], "input": data["input"], "output": data["output"], "cost": model_cost
+        }
+    
+    session_date = datetime.datetime.fromtimestamp(session.stat().st_mtime).isoformat()
+    
+    # Save to history
+    total_historical_cost, total_sessions = update_history(
+        session.name, total_requests, total_input, total_output, 
+        total_session_cost, by_model_with_cost, date=session_date
+    )
+    
+    print(f"📊 Current Session: {total_requests} req | In: {format_number(total_input)} | Out: {format_number(total_output)}")
+    
+    # Breakdown by model
+    for model, data in stats["by_model"].items():
+        short_model = model.replace("antigravity-", "").replace("-thinking-high", "")
+        model_cost = calculate_cost(model, data["input"], data["output"])
+        print(f"   └─ {short_model}: {data['requests']} req, in:{format_number(data['input'])}, out:{format_number(data['output'])}, cost:{format_cost(model_cost)}")
+
+    print(f"\n💰 Session Cost: {format_cost(total_session_cost)} - Historical Total ({total_sessions} sessions): {format_cost(total_historical_cost)}")
+
+if __name__ == "__main__":
+    main()

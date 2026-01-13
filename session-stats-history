@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""
+Muestra el historial acumulado de todas las sesiones de OpenCode.
+Uso: session-stats-history
+
+Lee session_history.json y muestra:
+- Total de sesiones
+- Total de requests
+- Total de tokens input/output
+- Costo total acumulado
+- Desglose por modelo
+"""
+
+import json
+from pathlib import Path
+
+def format_number(n):
+    """Formatea números grandes con separadores."""
+    if n >= 1000000:
+        return f"{n/1000000:.1f}M"
+    elif n >= 1000:
+        return f"{n/1000:.1f}K"
+    return str(n)
+
+def format_cost(cost):
+    """Formatea costo en dólares."""
+    if cost >= 1:
+        return f"${cost:.2f}"
+    elif cost >= 0.01:
+        return f"${cost:.4f}"
+    return f"${cost:.6f}"
+
+def main():
+    history_file = Path(__file__).parent / "session_history.json"
+    
+    if not history_file.exists():
+        print("No hay historial de sesiones disponible")
+        return
+    
+    try:
+        with open(history_file, 'r') as f:
+            data = json.load(f)
+    except json.JSONDecodeError:
+        print("Error leyendo el historial de sesiones")
+        return
+    
+    if not data:
+        print("El historial está vacío")
+        return
+    
+    # Sumar todos los valores
+    total_requests = sum(item.get("requests", 0) for item in data.values())
+    total_input = sum(item.get("input", 0) for item in data.values())
+    total_output = sum(item.get("output", 0) for item in data.values())
+    total_cost = sum(item.get("cost", 0) for item in data.values())
+    total_sessions = len(data)
+    
+    # Agrupar por modelo de todas las sesiones
+    models_totals = {}
+    for session in data.values():
+        by_model = session.get("by_model", {})
+        for model, model_data in by_model.items():
+            if model not in models_totals:
+                models_totals[model] = {"requests": 0, "input": 0, "output": 0, "cost": 0}
+            models_totals[model]["requests"] += model_data.get("requests", 0)
+            models_totals[model]["input"] += model_data.get("input", 0)
+            models_totals[model]["output"] += model_data.get("output", 0)
+            models_totals[model]["cost"] += model_data.get("cost", 0)
+    
+    # Mostrar resumen
+    print(f"📊 HISTORIAL ACUMULADO ({total_sessions} sesiones)")
+    print(f"   Requests: {total_requests}")
+    print(f"   Input:    {format_number(total_input)} tokens")
+    print(f"   Output:   {format_number(total_output)} tokens")
+    
+    # Mostrar desglose por modelo
+    if models_totals:
+        print(f"\n📈 DESGLOSE POR MODELO:")
+        # Ordenar por costo descendente
+        sorted_models = sorted(models_totals.items(), key=lambda x: x[1]["cost"], reverse=True)
+        for model, mdata in sorted_models:
+            short_model = model.replace("antigravity-", "").replace("-thinking-high", "")
+            print(f"   └─ {short_model}: {mdata['requests']} req, in:{format_number(mdata['input'])}, out:{format_number(mdata['output'])}, costo:{format_cost(mdata['cost'])}")
+    
+    print(f"\n💰 Costo Total Acumulado: {format_cost(total_cost)}")
+
+if __name__ == "__main__":
+    main()

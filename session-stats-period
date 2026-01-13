@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""
+Muestra estadísticas de uso de OpenCode filtradas por período.
+Uso: session-stats-period [dia|semana|mes]
+"""
+
+import json
+import sys
+import datetime
+from pathlib import Path
+
+def format_number(n):
+    if n >= 1000000: return f"{n/1000000:.1f}M"
+    elif n >= 1000: return f"{n/1000:.1f}K"
+    return str(n)
+
+def format_cost(cost):
+    if cost >= 1: return f"${cost:.2f}"
+    elif cost >= 0.01: return f"${cost:.4f}"
+    return f"${cost:.6f}"
+
+def main():
+    history_file = Path(__file__).parent / "session_history.json"
+    
+    if len(sys.argv) < 2:
+        print("Uso: session-stats-period [dia|semana|mes]")
+        return
+
+    period = sys.argv[1].lower()
+    now = datetime.datetime.now()
+    
+    if period == "dia":
+        # Desde las 00:00:00 de hoy
+        threshold = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        label = "Hoy"
+    elif period == "semana":
+        # Últimos 7 días incluyendo hoy
+        delta = datetime.timedelta(days=7)
+        threshold = (now - delta).replace(hour=0, minute=0, second=0, microsecond=0)
+        label = "Últimos 7 días"
+    elif period == "mes":
+        # Últimos 30 días incluyendo hoy
+        delta = datetime.timedelta(days=30)
+        threshold = (now - delta).replace(hour=0, minute=0, second=0, microsecond=0)
+        label = "Últimos 30 días"
+    else:
+        print(f"Error: Período '{period}' no reconocido. Usa: dia, semana o mes.")
+        return
+
+    if not history_file.exists():
+        print("No hay historial disponible.")
+        return
+
+    try:
+        with open(history_file, 'r') as f:
+            data = json.load(f)
+    except:
+        print("Error leyendo el historial.")
+        return
+
+    # Filtrar y acumular
+    period_stats = {
+        "requests": 0, "input": 0, "output": 0, "cost": 0,
+        "sessions_count": 0, "by_model": {}
+    }
+
+    for session_id, sdata in data.items():
+        sdate_str = sdata.get("date")
+        if not sdate_str: continue
+        
+        try:
+            sdate = datetime.datetime.fromisoformat(sdate_str)
+        except: continue
+
+        if sdate >= threshold:
+            period_stats["sessions_count"] += 1
+            period_stats["requests"] += sdata.get("requests", 0)
+            period_stats["input"] += sdata.get("input", 0)
+            period_stats["output"] += sdata.get("output", 0)
+            period_stats["cost"] += sdata.get("cost", 0)
+            
+            # Desglose por modelo
+            by_model = sdata.get("by_model", {})
+            for model, mdata in by_model.items():
+                if model not in period_stats["by_model"]:
+                    period_stats["by_model"][model] = {"requests": 0, "input": 0, "output": 0, "cost": 0}
+                period_stats["by_model"][model]["requests"] += mdata.get("requests", 0)
+                period_stats["by_model"][model]["input"] += mdata.get("input", 0)
+                period_stats["by_model"][model]["output"] += mdata.get("output", 0)
+                period_stats["by_model"][model]["cost"] += mdata.get("cost", 0)
+
+    if period_stats["sessions_count"] == 0:
+        print(f"No hay actividad registrada en el período: {label}")
+        return
+
+    # Mostrar resultados
+    print(f"📅 RESUMEN: {label.upper()} ({period_stats['sessions_count']} sesiones)")
+    print(f"   Requests: {period_stats['requests']}")
+    print(f"   Input:    {format_number(period_stats['input'])} tokens")
+    print(f"   Output:   {format_number(period_stats['output'])} tokens")
+    
+    if period_stats["by_model"]:
+        print(f"\n📈 DESGLOSE POR MODELO:")
+        sorted_models = sorted(period_stats["by_model"].items(), key=lambda x: x[1]["cost"], reverse=True)
+        for model, mdata in sorted_models:
+            short_model = model.replace("antigravity-", "").replace("-thinking-high", "")
+            print(f"   └─ {short_model}: {mdata['requests']} req, costo:{format_cost(mdata['cost'])}")
+    
+    print(f"\n💰 Costo Total Período: {format_cost(period_stats['cost'])}")
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,56 @@
+#!/bin/bash
+#
+# Antigravity Quota + Session Stats
+# Shows Antigravity quotas and OpenCode session statistics
+#
+# Usage:
+#   quota              - Show quotas (30s cache) + session stats
+#   quota --refresh    - Force quota refresh
+#   quota --help       - Show help
+#
+
+# Get the directory where this script is located (resolving symlinks)
+SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$SOURCE" ]; do
+    DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+
+# Colors
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Process arguments
+QUOTA_ARGS=""
+for arg in "$@"; do
+    case $arg in
+        --refresh|-r)
+            QUOTA_ARGS="--refresh"
+            ;;
+        --help|-h)
+            echo "Antigravity Quota + Session Stats"
+            echo ""
+            echo "Usage: quota [options]"
+            echo ""
+            echo "Options:"
+            echo "  --refresh, -r    Force refresh (ignore cache)"
+            echo "  --help, -h       Show this help"
+            echo ""
+            echo "The script shows:"
+            echo "  1. Antigravity API quotas (with 30 second cache)"
+            echo "  2. OpenCode session statistics"
+            exit 0
+            ;;
+    esac
+done
+
+# Run Antigravity quota in compact mode
+node "$SCRIPT_DIR/antigravity-quota.js" --compact $QUOTA_ARGS
+
+# Separator
+echo ""
+
+# Run session-stats
+"$SCRIPT_DIR/session-stats"
