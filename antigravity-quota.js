@@ -33,11 +33,14 @@ const CONFIG_DIR = path.join(os.homedir(), '.config', 'opencode');
 const ACCOUNTS_PATH = path.join(CONFIG_DIR, 'antigravity-accounts.json');
 const TOKENS_CACHE_PATH = path.join(CONFIG_DIR, 'antigravity-tokens.json');
 const QUOTA_CACHE_PATH = path.join(CONFIG_DIR, 'antigravity-quota-cache.json');
+const SESSION_HISTORY_PATH = path.join(os.homedir(), 'scripts', 'session-stats', 'session_history.json');
 
 const DELAY_MS = 1000; // 1 segundo entre cuentas
 const TIMEOUT_MS = 10000; // 10 segundos timeout
 const TOKEN_EXPIRY_BUFFER = 60000; // 1 minuto de buffer antes de expiración
 const QUOTA_CACHE_TTL = 30000; // 30 segundos de caché para quotas
+const RECENT_ACTIVITY_WINDOW_MS = 60 * 60 * 1000; // 60 minutos
+const WINDOW_ACTIVE_THRESHOLD_MS = 6 * 60 * 60 * 1000; // 6 horas
 
 // Constantes de la API
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -237,6 +240,57 @@ function extractProjectId(project) {
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function parseSessionDate(dateString) {
+  if (!dateString) return null;
+  const parsed = new Date(dateString);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+async function loadSessionHistory() {
+  try {
+    if (!fsSync.existsSync(SESSION_HISTORY_PATH)) {
+      return {};
+    }
+    const content = await fs.readFile(SESSION_HISTORY_PATH, 'utf-8');
+    return JSON.parse(content);
+  } catch (error) {
+    return {};
+  }
+}
+
+function getRecentActivityByEmail(history, config, sinceMs) {
+  const activity = {};
+  const emailByIndex = config.accounts.map(account => account.email);
+
+  Object.values(history).forEach((session) => {
+    const sessionDate = parseSessionDate(session?.date);
+    if (!sessionDate) return;
+    if (sessionDate.getTime() < sinceMs) return;
+
+    Object.keys(session?.by_model || {}).forEach((modelKey) => {
+      if (!modelKey.startsWith('antigravity-')) return;
+      const stripped = modelKey.replace('antigravity-', '');
+
+      if (stripped.includes('gemini') && config.activeIndexByFamily?.gemini != null) {
+        const email = emailByIndex[config.activeIndexByFamily.gemini];
+        if (email) activity[email] = true;
+      }
+
+      if (stripped.includes('claude') && config.activeIndexByFamily?.claude != null) {
+        const email = emailByIndex[config.activeIndexByFamily.claude];
+        if (email) activity[email] = true;
+      }
+    });
+  });
+
+  return activity;
+}
+
+function isWindowActive(result) {
+  if (!result?.models?.length) return false;
+  return result.models.some((model) => model.timeUntilReset > 0 && model.timeUntilReset < WINDOW_ACTIVE_THRESHOLD_MS);
 }
 
 // ==================== HTTP HELPERS ====================
@@ -564,6 +618,8 @@ function formatResults(results, config, cacheInfo) {
   let output = '';
   const checkType = cacheInfo.checkType || (cacheInfo.fromCache ? 'cache' : 'full');
   const activeEmail = cacheInfo.activeEmail;
+  const recentActivity = cacheInfo.recentActivity || {};
+  const windowActiveEmails = cacheInfo.windowActiveEmails || new Set();
   
   // Header con info de check
   if (checkType === 'cache') {
@@ -593,6 +649,8 @@ function formatResults(results, config, cacheInfo) {
         percentage: model.remainingPercentage,
         resetIn: model.timeUntilResetFormatted,
         isExhausted: model.isExhausted,
+        recentActivity: Boolean(recentActivity[result.email]),
+        windowActive: windowActiveEmails.has(result.email),
       });
     }
   }
@@ -632,7 +690,11 @@ function formatResults(results, config, cacheInfo) {
       const bar = progressBar(acc.percentage);
       const reset = acc.resetIn.padEnd(10);
       const email = shortEmail(acc.email);
-      output += `${bar}  ${reset}  ${email}\n`;
+      const tags = [];
+      if (acc.recentActivity) tags.push('actividad reciente');
+      if (!acc.recentActivity && acc.windowActive) tags.push('ventana activa');
+      const tagText = tags.length ? ` (${tags.join(', ')})` : '';
+      output += `${bar}  ${reset}  ${email}${tagText}\n`;
     }
   }
 
@@ -660,7 +722,15 @@ async function main() {
   const activeIndex = config.activeIndex ?? 0;
   const activeAccount = config.accounts[activeIndex];
   
-  // 2. Verificar caché de quotas
+  // 2. Leer actividad reciente
+  const sessionHistory = await loadSessionHistory();
+  const recentActivity = getRecentActivityByEmail(
+    sessionHistory,
+    config,
+    Date.now() - RECENT_ACTIVITY_WINDOW_MS
+  );
+
+  // 3. Verificar caché de quotas
   let results;
   let cache = await loadQuotaCache();
   let checkType = 'full';
@@ -677,8 +747,8 @@ async function main() {
       const prevActive = cache.results?.find(r => r.email === activeAccount.email);
       const isExhausted = isAccountExhausted(prevActive);
       
-      if (isExhausted) {
-        // Agotada -> Full Sweep
+      if (isExhausted || recentActivity[activeAccount.email]) {
+        // Agotada o con actividad -> Full Sweep
         checkType = 'full';
       } else {
         // OK -> Smart Check (solo la activa)
@@ -712,11 +782,19 @@ async function main() {
   }
 
   // 4. Formatear y mostrar resultados
+  const windowActiveEmails = new Set(
+    results
+      .filter(result => isWindowActive(result))
+      .map(result => result.email)
+  );
+
   const cacheInfo = { 
     checkType, 
     timestamp, 
     fromCache: checkType === 'cache',
-    activeEmail: activeAccount.email 
+    activeEmail: activeAccount.email,
+    recentActivity,
+    windowActiveEmails,
   };
 
   if (FLAGS.json) {

@@ -79,7 +79,7 @@ def main():
         # Ordenar por costo descendente
         sorted_models = sorted(models_totals.items(), key=lambda x: x[1]["cost"], reverse=True)
         for model, mdata in sorted_models:
-            short_model = model.replace("antigravity-", "").replace("-thinking-high", "")
+            short_model = model.replace("antigravity-", "").replace("-thinking-high", "").replace("claude-opus-4-5", "claude-opus-4.5")
             print(f"   └─ {short_model}: {mdata['requests']} req, in:{format_number(mdata['input'])}, out:{format_number(mdata['output'])}, costo:{format_cost(mdata['cost'])}")
     
     print(f"\n💰 Costo Total Acumulado: {format_cost(total_cost)}")
