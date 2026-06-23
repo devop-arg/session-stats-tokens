@@ -1,6 +1,6 @@
-# OpenCode Antigravity Stats & Quota
+# OpenCode/Kilo/Codex Antigravity Stats
 
-Monitor your Antigravity API quotas and track OpenCode session statistics including token usage and estimated costs.
+Monitor your Antigravity API quotas and track Kilo/OpenCode/Codex session statistics including token usage and estimated costs.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
@@ -12,17 +12,19 @@ Monitor your Antigravity API quotas and track OpenCode session statistics includ
   - 30-second cache to minimize API calls
   - Hybrid token caching with auto-retry on invalid tokens
 
-- **Session Stats**: Track token usage and costs per OpenCode session
-  - Input/output tokens per model
-  - Estimated costs based on model pricing
-  - Historical tracking across sessions
+- **Session Stats**: Track token usage and costs per Kilo/OpenCode/Codex session
+   - Lee de tres fuentes: Kilo (SQLite), OpenCode (JSON), Codex (JSONL)
+   - Detecta automáticamente qué herramienta se está usando
+   - Input/output tokens por modelo
+   - Estimated costs based on model pricing
+   - Historical tracking across sessions
+   - Recálculo unificado desde tokens (consistencia total)
 
 ## Requirements
 
 - **Node.js** 18 or higher
-- **Python** 3.8 or higher
-- **OpenCode CLI** 1.1.12 or higher
-- **opencode-antigravity-auth** plugin 1.2.9-beta.1 or higher
+- **Python** 3.8 or higher (con módulo `sqlite3` incluido)
+- **OpenCode CLI** 1.1.12+ (JSON) o 1.3.0+ (SQLite), **Kilo CLI** 7.0.50+, o **Codex CLI** 0.98.0+
 
 ## Installation
 
@@ -81,7 +83,7 @@ Example structure (created by the plugin):
 
 1. Install the plugin:
 ```bash
-opencode plugin install opencode-antigravity-auth@1.2.9-beta.1
+opencode plugin install opencode-antigravity-auth@1.3.1
 ```
 
 2. Add accounts:
@@ -119,24 +121,25 @@ node antigravity-quota.js --json       # JSON output
 ### Sample Output
 
 ```
-🚀 Smart Check: Updating account1...
-[1/1] account1
-   ⏳ Token... ✓ cache (45m)
-   ⏳ Quotas... ✓ 4 models
+📊 Current Session [Kilo]: 253 req | In: 1.1M | Out: 95.5K
+   └─ mimo-v2-pro: 253 req, in:20.6M (cache:19.5M), out:95.5K, cost:$1.36
 
-☁️  QUOTAS (smart: account1)
+💰 Session Cost: $1.36 - Historical Total (195 sessions): $915.09
+```
 
-### Claude Sonnet 4.5
-[██████████] 100%  4h 32m    account1
+### Sample History Output
 
-### Gemini 3 Pro
-[████░░░░░░]  42%  2h 15m    account1
+```
+HISTORIAL ACUMULADO (195 sesiones)
+   Requests: 11981
+   Input:    315.8M tokens
+   Output:   5.0M tokens
 
-📊 Current Session: 15 req | In: 125.3K | Out: 42.1K
-   └─ claude-sonnet-4-5: 10 req, in:98.2K, out:35.4K, cost:$0.0421
-   └─ gemini-3-flash: 5 req, in:27.1K, out:6.7K, cost:$0.0034
-
-💰 Session Cost: $0.0455 - Historical Total (12 sessions): $0.8234
+DESGLOSE POR MODELO:
+   claude-opus-4.5: 3896 req, in:98.1M, out:1.9M, costo:$538.00
+   gpt-5.4: 167 req, in:135.5M (cache:66.0M), out:471.9K, costo:$128.30
+   gpt-5.3-codex: 73 req, in:77.3M (cache:37.2M), out:161.2K, costo:$72.35
+   ...
 ```
 
 ## OpenCode Integration
@@ -172,22 +175,37 @@ These files are created in `~/.config/opencode/` and contain sensitive data:
 
 ## Model Pricing
 
-Estimated costs per 1M tokens (USD):
+Costos estimados por 1M tokens (USD). Algunos modelos tienen precios de caché especiales.
 
-| Model | Input | Output |
-|-------|-------|--------|
-| Claude Opus 4.5 Thinking | $5.00 | $25.00 |
-| Claude Sonnet 4.5 | $3.00 | $15.00 |
-| Gemini 3 Pro | $2.00 | $12.00 |
-| Gemini 3 Flash | $0.50 | $3.00 |
-| GPT 5.2 Codex | $1.75 | $14.00 |
-| Codex Max | $1.25 | $10.00 |
+| Model | Input | Output | Cache |
+|-------|-------|--------|-------|
+| Claude Opus 4.5/4.6 | $5.00 | $25.00 | - |
+| Claude Sonnet 4.5 | $3.00 | $15.00 | - |
+| Claude Haiku 4.5 | $1.00 | $5.00 | - |
+| Gemini 3 Pro | $2.00 | $12.00 | - |
+| Gemini 3 Flash | $0.50 | $3.00 | - |
+| GPT 5.2 Codex | $1.75 | $14.00 | - |
+| GPT 5.2 | $1.75 | $14.00 | - |
+| Codex Max | $1.25 | $10.00 | - |
+| GPT 5 Mini | $0.25 | $2.00 | - |
+| GLM-4.7 Free | $0.43 | $2.20 | - |
+| GLM-5 | $0.80 | $2.56 | $0.16 |
+| Step 3.5 Flash | $0.10 | $0.30 | - |
+| Kimi K2.5 | $0.50 | $2.60 | $0.09 |
+| Minimax M2.1 | $0.27 | $0.95 | - |
+| Minimax M2.5 | $0.30 | $1.20 | $0.03 |
+| Trinity Large Preview | $0.25 | $1.00 | - |
+| Grok 4.1 Fast | $0.20 | $0.50 | $0.05 |
+
+**Nota:** Los tokens de caché (cache.read) se suman al input para el cálculo de costos.
 
 ## Troubleshooting
 
 ### "No session found"
-- Make sure OpenCode is running and has an active session
-- Check that `~/.local/share/opencode/storage/message/` exists
+- Make sure Kilo, OpenCode, or Codex is running and has an active session
+- Kilo: `~/.local/share/kilo/kilo.db` debe existir
+- OpenCode: `~/.local/share/opencode/storage/message/` debe existir
+- Codex: `~/.codex/sessions/` debe existir
 
 ### "Could not read accounts file"
 - Run `opencode /antigravity-auth login` to set up accounts
@@ -205,3 +223,145 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 - Based on concepts from [opencode-antigravity-quota](https://github.com/frieser/opencode-antigravity-quota) by frieser
 - Developed for use with [OpenCode CLI](https://opencode.ai)
+
+## Changelog
+
+### 2026-02-12 - Cache Tokens Support
+
+**Problema resuelto:** Los tokens de caché (`cache.read`) no se estaban incluyendo en los cálculos de tokens ni en los costos.
+
+**Cambios realizados:**
+
+1. **session-stats** (`session-stats`)
+   - Ahora extrae y suma `tokens.cache.read` al total de input
+   - Guarda el campo `cache` por separado para cálculo de costos
+   - Muestra los tokens de caché en el output: `in:791.9K (cache:742.0K)`
+   - Pasa el parámetro `cache` a `calculate_cost()` para calcular el costo correctamente
+
+2. **session-stats-history** (`session-stats-history`)
+   - Soporte completo para tokens de caché en el historial
+   - Muestra cache en el desglose por modelo
+   - Recalcula costos con cache para todas las sesiones
+
+3. **stats_common.py**
+   - Función `calculate_cost()` ahora acepta parámetro `cache_tokens`
+   - Calcula: `input_cost + output_cost + cache_cost`
+   - MODEL_COSTS actualizado con precios de cache para:
+     - `glm-5`: cache $0.16/M
+     - `kimi-k2.5`: cache $0.09/M
+     - `minimax-m2.5`: cache $0.03/M
+   - MODEL_ALIASES actualizado:
+     - `minimax-m2.5-free` → `minimax-m2.5`
+     - `minimax-m2.5` → `minimax-m2.5`
+   - Fallbacks actualizados para detectar modelos no encontrados en MODEL_COSTS
+
+4. **Precios actualizados:**
+   | Model | Input | Output | Cache |
+   |-------|-------|--------|-------|
+   | GLM-5 | $0.80 | $2.56 | $0.16 |
+   | Kimi K2.5 | $0.50 | $2.60 | $0.09 |
+   | Minimax M2.5 | $0.30 | $1.20 | $0.03 |
+   | Grok 4.1 Fast | $0.20 | $0.50 | $0.05 |
+
+**Nota:** Las sesiones históricas guardadas antes de esta actualización no tienen el campo `cache`, por lo que los costos históricos no incluyen cache. Solo las sesiones nuevas a partir de esta fecha tendrán el cálculo completo.
+
+### 2026-03-23 - Soporte Kilo 7.0.50 + Limpieza
+
+**Problema resuelto:** 
+- Kilo 7.0.50 migró a SQLite (`~/.local/share/kilo/kilo.db`) y session-stats no mostraba sus datos.
+- Los costos de `session-stats` y `session-stats-history` no coincidían ($7.34 de diferencia).
+- Secciones innecesarias (Kilocode CLI legacy, Consultas externas) ensuciaban el output.
+
+**Cambios realizados:**
+
+1. **session-stats** (`session-stats`)
+   - Lee de Kilo (SQLite) y OpenCode (JSON), detecta automáticamente la fuente
+   - Muestra etiqueta `[Kilo]` o `[OpenCode]` en el encabezado
+   - Usa `recalculate_historical_cost()` para cálculo unificado de costos
+   - Eliminada sección "Consultas externas"
+   - Eliminada sección "Kilocode CLI" (legacy)
+   - Funciones nuevas: `get_kilo_sessions()`, `get_session_stats_sqlite()`, `has_real_usage_sqlite()`
+
+2. **session-stats-history** (`session-stats-history`)
+   - Usa `recalculate_historical_cost()` compartida (antes calculaba inline)
+   - Eliminada sección "CONSULTAS EXTERNAS"
+   - Eliminada sección "KILOCODE CLI"
+   - Output limpio: solo historial + desglose por modelo
+
+3. **stats_common.py**
+   - Nueva función `recalculate_historical_cost(history_file)` compartida
+   - Recalcula costos desde tokens con la lógica actual (siempre consistente)
+   - Retorna: `total_cost`, `total_sessions`, `total_requests`, `total_input`, `total_output`, `models_totals`
+
+4. **session_history.json**
+   - Entrada `kilocode_legacy` agregada con datos de las 7 tareas viejas de Kilocode CLI
+   - Preserva tokens y costos legacy en el historial sin mostrar sección aparte
+
+5. **Fuentes de datos**
+
+   | Fuente | Ruta | Método |
+   |--------|------|--------|
+   | Kilo | `~/.local/share/kilo/kilo.db` | SQLite (tabla `message`) |
+   | OpenCode | `~/.local/share/opencode/opencode.db` | SQLite (v1.3.0+) |
+   | OpenCode | `~/.local/share/opencode/storage/message/` | JSON (v1.1.x fallback) |
+   | Codex | `~/.codex/sessions/**/*.jsonl` | JSONL (eventos `token_count`) |
+   | Historial | `session_history.json` | Recálculo desde tokens |
+
+6. **Totales verificados:** `session-stats` y `session-stats-history` dan exactamente el mismo costo total.
+
+### 2026-03-23 - Soporte Codex CLI (OpenAI)
+
+**Problema resuelto:** Las sesiones de Codex CLI (`@openai/codex`) no se mostraban en session-stats ni en el historial.
+
+**Investigación de datos de Codex:**
+- Codex CLI 0.115.0 almacena sesiones en `~/.codex/sessions/2026/**/*.jsonl`
+- Cada sesión JSONL contiene eventos `token_count` con desglose completo de tokens
+- `state_5.sqlite` tiene tabla `threads` con `tokens_used` (no desglosado, se usa JSONL)
+- Modelos usados: `gpt-5.3-codex` (15 sesiones feb 2026), `gpt-5.4` (3 sesiones mar 2026)
+
+**Cambios realizados:**
+
+1. **stats_common.py**
+   - Nuevas funciones: `get_codex_sessions()`, `has_real_usage_codex()`, `get_codex_session_stats()`
+   - `recalculate_historical_cost()` ahora incluye sesiones de Codex desde JSONL
+   - Evita doble conteo: sesiones Codex ya guardadas en `session_history.json` se saltan
+   - `gpt-5.3-codex` agregado a `MODEL_COSTS` ($1.75/$14) y `MODEL_ALIASES`
+
+2. **session-stats** (`session-stats`)
+   - `get_current_session()` ahora detecta Codex (JSONL) además de Kilo y OpenCode
+   - Etiqueta `[Codex]` en el encabezado cuando la sesión activa es de Codex
+   - Extrae stats de `token_count` events (input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens)
+
+3. **session-stats-history** (`session-stats-history`)
+   - El total histórico ahora incluye sesiones de Codex automáticamente (18 sesiones, ~$199.68)
+
+4. **Fuentes de datos actualizadas:**
+
+   | Fuente | Ruta | Método |
+   |--------|------|--------|
+   | Kilo | `~/.local/share/kilo/kilo.db` | SQLite (tabla `message`) |
+   | OpenCode | `~/.local/share/opencode/opencode.db` | SQLite (v1.3.0+) |
+   | OpenCode | `~/.local/share/opencode/storage/message/` | JSON (v1.1.x fallback) |
+   | Codex | `~/.codex/sessions/**/*.jsonl` | JSONL (eventos `token_count`) |
+   | Historial | `session_history.json` | Recálculo desde tokens |
+
+5. **Totales verificados:** 206 sesiones, $920.73 total (session-stats = session-stats-history)
+
+### 2026-03-23 (b) - Soporte OpenCode 1.3.0 (SQLite)
+
+**Problema resuelto:** OpenCode 1.3.0 migró de JSON a SQLite (`~/.local/share/opencode/opencode.db`). Las sesiones nuevas no aparecían en session-stats porque seguía leyendo los JSON viejos.
+
+**Cambios realizados:**
+
+1. **stats_common.py**
+   - Nueva función `get_opencode_sqlite_sessions()` para leer sesiones de OpenCode SQLite
+   - `recalculate_historical_cost()` incluye sesiones OpenCode SQLite no guardadas en historial
+   - Constante `OPENCODE_DB_PATH`
+
+2. **session-stats** (`session-stats`)
+   - `get_opencode_sessions()` intenta SQLite primero (v1.3.0+), fallback a JSON (v1.1.x)
+   - `get_session_stats_sqlite()` y `has_real_usage_sqlite()` aceptan `db_path` parametrizable
+   - `get_current_session()` maneja `opencode_sqlite` y `opencode_json` como fuentes separadas
+   - Muestra título de sesión de OpenCode cuando está disponible
+
+3. **Totales verificados:** 206 sesiones, $920.73 (11 sesiones nuevas de OpenCode SQLite sumadas)

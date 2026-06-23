@@ -1,51 +1,152 @@
 #!/usr/bin/env python3
 """
 Muestra estadísticas de uso de OpenCode filtradas por período.
-Uso: session-stats-period [dia|semana|mes]
+Uso: session-stats-period [dia|semana|mes|YYMM|list]
+
+Ejemplos:
+  session-stats-period dia       -> Hoy
+  session-stats-period semana    -> Últimos 7 días
+  session-stats-period mes       -> Últimos 30 días
+  session-stats-period 2604     -> Abril 2026
+  session-stats-period list     -> Lista todos los meses disponibles
 """
 
 import json
 import sys
 import datetime
 from pathlib import Path
+from io import StringIO
 
-def format_number(n):
-    if n >= 1000000: return f"{n/1000000:.1f}M"
-    elif n >= 1000: return f"{n/1000:.1f}K"
+WIDTH = 78
+
+def fmt_num(n):
+    if n >= 1000000:
+        return f"{n/1000000:.1f}M"
+    elif n >= 1000:
+        return f"{n/1000:.1f}K"
     return str(n)
 
-def format_cost(cost):
-    if cost >= 1: return f"${cost:.2f}"
-    elif cost >= 0.01: return f"${cost:.4f}"
+def fmt_cost(cost):
+    if cost >= 1:
+        return f"${cost:,.2f}"
+    elif cost >= 0.01:
+        return f"${cost:.4f}"
     return f"${cost:.6f}"
+
+def fmt_commas(n):
+    return f"{n:,}"
+
+def pad_right(text, width):
+    return text + " " * max(0, width - len(text))
+
+def print_box(text, out=None):
+    line = f"│ {pad_right(text, WIDTH - 4)}│"
+    if out is None:
+        print(line)
+    else:
+        out.write(line + "\n")
+
+def print_sep(out=None):
+    if out is None:
+        print("├" + "─" * (WIDTH - 2) + "┤")
+    else:
+        out.write("├" + "─" * (WIDTH - 2) + "┤\n")
+
+def print_header(out=None):
+    if out is None:
+        print("┌" + "─" * (WIDTH - 2) + "┐")
+    else:
+        out.write("┌" + "─" * (WIDTH - 2) + "┐\n")
+
+def print_footer(out=None):
+    if out is None:
+        print("└" + "─" * (WIDTH - 2) + "┘")
+    else:
+        out.write("└" + "─" * (WIDTH - 2) + "┘\n")
+
+def shorten_name(model):
+    short = model.replace("antigravity-", "").replace("-thinking-high", "").replace("claude-opus-4-5", "claude-opus-4.5")
+    if "/" in short:
+        short = short.split("/", 1)[0]
+    short = short.replace("-thinking", "")
+    short = short.replace("grok-code-fast-1-optimized-free", "grok-code")
+    short = short.replace("x-ai", "grok-4.1-fast")
+    short = short.replace("deepseek-v4-flash", "ds-v4-flash")
+    short = short.replace("deepseek-v4-pro", "ds-v4-pro")
+    return short
+
+def render_stats(label, total_sessions, total_requests, total_input, total_output, total_cost, grouped):
+    paid = []
+    free = []
+    for model, mdata in grouped.items():
+        if mdata["cost"] > 0:
+            paid.append((model, mdata, mdata["input"] + mdata["cache"]))
+        else:
+            free.append((model, mdata, mdata["input"] + mdata["cache"]))
+
+    paid.sort(key=lambda x: x[1]["cost"], reverse=True)
+    free.sort(key=lambda x: x[1]["requests"], reverse=True)
+
+    out = StringIO()
+
+    print_header(out)
+    print_box(label, out)
+    print_box(f"Sesiones: {fmt_commas(total_sessions)} | Requests: {fmt_commas(total_requests)} | Costo: {fmt_cost(total_cost)}", out)
+    print_box(f"Input: {fmt_num(total_input)} tokens | Output: {fmt_num(total_output)} tokens", out)
+    print_sep(out)
+    print_box(f"{'#':>2}  {'Modelo':<22} {'Requests':>9} {'Input':>8} {'Cache':>7} {'Output':>7} {'Costo':>9}", out)
+    print_sep(out)
+
+    for i, (name, mdata, _) in enumerate(paid, 1):
+        name_col = name[:22]
+        cache_str = fmt_num(mdata["cache"]) if mdata["cache"] > 0 else "-"
+        row = f"{i:>2}  {name_col:<22} {fmt_commas(mdata['requests']):>9} {fmt_num(mdata['input']):>8} {cache_str:>7} {fmt_num(mdata['output']):>7} {fmt_cost(mdata['cost']):>9}"
+        print_box(row, out)
+
+    if free:
+        print_box("", out)
+        print_box("MODELOS GRATIS / SIN COSTO", out)
+        print_box(f"{'':>4} {'Modelo':<22} {'Requests':>9} {'Input':>8} {'Cache':>7} {'Output':>7}", out)
+        print_sep(out)
+        for name, mdata, _ in free:
+            name_col = name[:22]
+            cache_str = fmt_num(mdata["cache"]) if mdata["cache"] > 0 else "-"
+            row = f"  {name_col:<22} {fmt_commas(mdata['requests']):>9} {fmt_num(mdata['input']):>8} {cache_str:>7} {fmt_num(mdata['output']):>7}"
+            print_box(row, out)
+
+    print_box("", out)
+    print_box(f"Costo Total: {fmt_cost(total_cost)}", out)
+    print_box(f"{len(grouped)} modelos | {fmt_commas(total_sessions)} sesiones", out)
+    print_box("", out)
+    print_footer(out)
+
+    print(out.getvalue(), end="")
+
+def collect_models(sessions):
+    grouped = {}
+    for ses in sessions:
+        for model, mdata in ses.get("by_model", {}).items():
+            key = shorten_name(model)
+            if key not in grouped:
+                grouped[key] = {"requests": 0, "input": 0, "output": 0, "cache": 0, "cost": 0.0}
+            grouped[key]["requests"] += mdata.get("requests", 0)
+            grouped[key]["input"] += mdata.get("input", 0)
+            grouped[key]["output"] += mdata.get("output", 0)
+            grouped[key]["cache"] += mdata.get("cache", 0)
+            grouped[key]["cost"] += mdata.get("cost", 0.0)
+    return grouped
 
 def main():
     history_file = Path(__file__).parent / "session_history.json"
-    
+
     if len(sys.argv) < 2:
-        print("Uso: session-stats-period [dia|semana|mes]")
-        return
+        print("Uso: session-stats-period [dia|semana|mes|YYMM|list]")
+        print("Ejemplos: session-stats-period dia")
+        print("          session-stats-period 2604")
+        print("          session-stats-period list")
+        sys.exit(1)
 
     period = sys.argv[1].lower()
-    now = datetime.datetime.now()
-    
-    if period == "dia":
-        # Desde las 00:00:00 de hoy
-        threshold = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        label = "Hoy"
-    elif period == "semana":
-        # Últimos 7 días incluyendo hoy
-        delta = datetime.timedelta(days=7)
-        threshold = (now - delta).replace(hour=0, minute=0, second=0, microsecond=0)
-        label = "Últimos 7 días"
-    elif period == "mes":
-        # Últimos 30 días incluyendo hoy
-        delta = datetime.timedelta(days=30)
-        threshold = (now - delta).replace(hour=0, minute=0, second=0, microsecond=0)
-        label = "Últimos 30 días"
-    else:
-        print(f"Error: Período '{period}' no reconocido. Usa: dia, semana o mes.")
-        return
 
     if not history_file.exists():
         print("No hay historial disponible.")
@@ -54,59 +155,109 @@ def main():
     try:
         with open(history_file, 'r') as f:
             data = json.load(f)
-    except:
+    except Exception:
         print("Error leyendo el historial.")
         return
 
-    # Filtrar y acumular
-    period_stats = {
-        "requests": 0, "input": 0, "output": 0, "cost": 0,
-        "sessions_count": 0, "by_model": {}
-    }
+    sessions = {k: v for k, v in data.items() if k != "historical_total" and "date" in v}
 
-    for session_id, sdata in data.items():
-        sdate_str = sdata.get("date")
-        if not sdate_str: continue
-        
-        try:
-            sdate = datetime.datetime.fromisoformat(sdate_str)
-        except: continue
+    if period == "list":
+        from collections import defaultdict
+        MONTH_NAMES = {
+            "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril",
+            "05": "Mayo", "06": "Junio", "07": "Julio", "08": "Agosto",
+            "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre"
+        }
+        months = defaultdict(lambda: {"sessions": 0, "requests": 0, "cost": 0.0})
+        for ses in sessions.values():
+            date_str = ses.get("date", "")
+            if len(date_str) >= 7:
+                yymm = date_str[2:4] + date_str[5:7]
+                months[yymm]["sessions"] += 1
+                months[yymm]["requests"] += ses.get("requests", 0)
+                months[yymm]["cost"] += ses.get("cost", 0.0)
 
-        if sdate >= threshold:
-            period_stats["sessions_count"] += 1
-            period_stats["requests"] += sdata.get("requests", 0)
-            period_stats["input"] += sdata.get("input", 0)
-            period_stats["output"] += sdata.get("output", 0)
-            period_stats["cost"] += sdata.get("cost", 0)
-            
-            # Desglose por modelo
-            by_model = sdata.get("by_model", {})
-            for model, mdata in by_model.items():
-                if model not in period_stats["by_model"]:
-                    period_stats["by_model"][model] = {"requests": 0, "input": 0, "output": 0, "cost": 0}
-                period_stats["by_model"][model]["requests"] += mdata.get("requests", 0)
-                period_stats["by_model"][model]["input"] += mdata.get("input", 0)
-                period_stats["by_model"][model]["output"] += mdata.get("output", 0)
-                period_stats["by_model"][model]["cost"] += mdata.get("cost", 0)
-
-    if period_stats["sessions_count"] == 0:
-        print(f"No hay actividad registrada en el período: {label}")
+        print(f"{'Comando':<12} {'Período':<20} {'Sesiones':>8} {'Requests':>10} {'Costo':>10}")
+        print("-" * 62)
+        for yymm in sorted(months.keys()):
+            m = months[yymm]
+            mon = yymm[2:]
+            mon_name = MONTH_NAMES.get(mon, mon)
+            print(f"  ssh{yymm}    {mon_name} 20{yymm[:2]:<10} {m['sessions']:>8} {fmt_commas(m['requests']):>10} {fmt_cost(m['cost'])}")
         return
 
-    # Mostrar resultados
-    print(f"📅 RESUMEN: {label.upper()} ({period_stats['sessions_count']} sesiones)")
-    print(f"   Requests: {period_stats['requests']}")
-    print(f"   Input:    {format_number(period_stats['input'])} tokens")
-    print(f"   Output:   {format_number(period_stats['output'])} tokens")
-    
-    if period_stats["by_model"]:
-        print(f"\n📈 DESGLOSE POR MODELO:")
-        sorted_models = sorted(period_stats["by_model"].items(), key=lambda x: x[1]["cost"], reverse=True)
-        for model, mdata in sorted_models:
-            short_model = model.replace("antigravity-", "").replace("-thinking-high", "")
-            print(f"   └─ {short_model}: {mdata['requests']} req, costo:{format_cost(mdata['cost'])}")
-    
-    print(f"\n💰 Costo Total Período: {format_cost(period_stats['cost'])}")
+    if len(period) == 4 and period.isdigit():
+        year = "20" + period[:2]
+        month = period[2:]
+        MONTH_NAMES = {
+            "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril",
+            "05": "Mayo", "06": "Junio", "07": "Julio", "08": "Agosto",
+            "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre"
+        }
+        mon_name = MONTH_NAMES.get(month, month)
+        label = f"PERÍODO: {mon_name} {year}"
+
+        filtered = []
+        for ses in sessions.values():
+            date_str = ses.get("date", "")
+            if date_str.startswith(year) and date_str[5:7] == month:
+                filtered.append(ses)
+
+        if not filtered:
+            print(f"No hay sesiones para el período {period}")
+            return
+
+        total_sessions = len(filtered)
+        total_requests = sum(s.get("requests", 0) for s in filtered)
+        total_input = sum(s.get("input", 0) for s in filtered)
+        total_output = sum(s.get("output", 0) for s in filtered)
+        total_cost = sum(s.get("cost", 0.0) for s in filtered)
+        grouped = collect_models(filtered)
+        render_stats(label, total_sessions, total_requests, total_input, total_output, total_cost, grouped)
+        return
+
+    from collections import defaultdict
+    now = datetime.datetime.now()
+
+    if period == "dia":
+        threshold = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        label = "PERÍODO: HOY"
+    elif period == "semana":
+        delta = datetime.timedelta(days=7)
+        threshold = (now - delta).replace(hour=0, minute=0, second=0, microsecond=0)
+        label = "PERÍODO: ÚLTIMOS 7 DÍAS"
+    elif period == "mes":
+        delta = datetime.timedelta(days=30)
+        threshold = (now - delta).replace(hour=0, minute=0, second=0, microsecond=0)
+        label = "PERÍODO: ÚLTIMOS 30 DÍAS"
+    else:
+        print(f"Error: Período '{period}' no reconocido.")
+        print("Usá: dia, semana, mes, YYMM o list")
+        return
+
+    filtered = []
+    for ses in sessions.values():
+        date_str = ses.get("date")
+        if not date_str:
+            continue
+        try:
+            sdate = datetime.datetime.fromisoformat(date_str)
+        except Exception:
+            continue
+        if sdate >= threshold:
+            filtered.append(ses)
+
+    if not filtered:
+        print(f"No hay actividad registrada en el período")
+        return
+
+    total_sessions = len(filtered)
+    total_requests = sum(s.get("requests", 0) for s in filtered)
+    total_input = sum(s.get("input", 0) for s in filtered)
+    total_output = sum(s.get("output", 0) for s in filtered)
+    total_cost = sum(s.get("cost", 0.0) for s in filtered)
+    grouped = collect_models(filtered)
+    render_stats(label, total_sessions, total_requests, total_input, total_output, total_cost, grouped)
 
 if __name__ == "__main__":
     main()

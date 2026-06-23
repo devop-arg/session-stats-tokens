@@ -1,88 +1,523 @@
 #!/usr/bin/env python3
 """
-Muestra el historial acumulado de todas las sesiones de OpenCode.
-Uso: session-stats-history
+Muestra el historial acumulado de todas las sesiones de Kilo/OpenCode/Codex.
+Uso: session-stats-history [total]
 
-Lee session_history.json y muestra:
-- Total de sesiones
-- Total de requests
-- Total de tokens input/output
-- Costo total acumulado
-- Desglose por modelo
+Sin argumentos: menu interactivo con resumen mensual y opcion de seleccionar
+session-stats-history total: muestra historial completo directamente
 """
 
 import json
+import sys
+import os
+import re
+import datetime
+import sqlite3
 from pathlib import Path
+from collections import defaultdict
 
-def format_number(n):
-    """Formatea números grandes con separadores."""
+STATS_DIR = Path("/home/capw/scripts/session-stats")
+sys.path.insert(0, str(STATS_DIR))
+from stats_common import (
+    recalculate_historical_cost, normalize_model_name, calculate_cost,
+    get_codex_sessions, has_real_usage_codex, get_codex_session_stats,
+    get_opencode_sqlite_sessions,
+)
+from stats_common import OPENCODE_DB_PATH
+
+WIDTH = 84
+
+BOLD = '\033[1m'
+DIM = '\033[2m'
+RED = '\033[91m'
+YELLOW = '\033[93m'
+GREEN = '\033[92m'
+CYAN = '\033[36m'
+MAGENTA = '\033[95m'
+RESET = '\033[0m'
+
+MONTH_NAMES = {
+    "01": "Enero", "02": "Febrero", "03": "Marzo", "04": "Abril",
+    "05": "Mayo", "06": "Junio", "07": "Julio", "08": "Agosto",
+    "09": "Septiembre", "10": "Octubre", "11": "Noviembre", "12": "Diciembre"
+}
+
+
+def fmt_num(n):
     if n >= 1000000:
         return f"{n/1000000:.1f}M"
     elif n >= 1000:
         return f"{n/1000:.1f}K"
     return str(n)
 
-def format_cost(cost):
-    """Formatea costo en dólares."""
+
+def fmt_cost(cost):
     if cost >= 1:
-        return f"${cost:.2f}"
+        return f"${cost:,.2f}"
     elif cost >= 0.01:
         return f"${cost:.4f}"
     return f"${cost:.6f}"
 
-def main():
+
+def color_cost(cost):
+    s = fmt_cost(cost)
+    if cost >= 50:
+        return f"{RED}{BOLD}{s}{RESET}"
+    elif cost >= 10:
+        return f"{YELLOW}{s}{RESET}"
+    elif cost >= 1:
+        return f"{GREEN}{s}{RESET}"
+    return f"{DIM}{s}{RESET}"
+
+
+def fmt_commas(n):
+    return f"{n:,}"
+
+
+def visible_len(text):
+    return len(re.sub(r'\033\[[0-9;]*m', '', text))
+
+
+def ljust_ansi(text, width):
+    return text + " " * max(0, width - visible_len(text))
+
+
+def rjust_ansi(text, width):
+    return " " * max(0, width - visible_len(text)) + text
+
+
+def pad_right(text, width):
+    return text + " " * max(0, width - visible_len(text))
+
+
+def print_box(text):
+    print(f"\u2502 {pad_right(text, WIDTH - 4)}\u2502")
+
+
+def print_header():
+    print("\u250c" + "\u2500" * (WIDTH - 2) + "\u2510")
+
+
+def print_footer():
+    print("\u2514" + "\u2500" * (WIDTH - 2) + "\u2518")
+
+
+def print_separator():
+    print("\u251c" + "\u2500" * (WIDTH - 2) + "\u2524")
+
+
+def date_to_mmyy(date_str):
+    if not date_str or len(date_str) < 7:
+        return None
+    return date_str[5:7] + date_str[2:4]
+
+
+def load_full_data_by_month():
+    """Replica la logica de recalculate_historical_cost pero agrupando por mes.
+
+    Retorna dict {yymm: {"sessions": N, "requests": N, "input": N, "output": N, "cache": N, "by_model": {model: {requests, input, output, cache}}}}
+    Tambien retorna "historical_adjustment" float que se suma al costo total.
+    """
     history_file = Path(__file__).parent / "session_history.json"
-    
-    if not history_file.exists():
-        print("No hay historial de sesiones disponible")
-        return
-    
-    try:
-        with open(history_file, 'r') as f:
-            data = json.load(f)
-    except json.JSONDecodeError:
-        print("Error leyendo el historial de sesiones")
-        return
-    
-    if not data:
-        print("El historial está vacío")
-        return
-    
-    # Sumar todos los valores
-    total_requests = sum(item.get("requests", 0) for item in data.values())
-    total_input = sum(item.get("input", 0) for item in data.values())
-    total_output = sum(item.get("output", 0) for item in data.values())
-    total_cost = sum(item.get("cost", 0) for item in data.values())
-    total_sessions = len(data)
-    
-    # Agrupar por modelo de todas las sesiones
-    models_totals = {}
-    for session in data.values():
+    data = {}
+    if history_file.exists():
+        try:
+            with open(history_file, "r") as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            pass
+
+    monthly = defaultdict(lambda: {
+        "sessions": 0, "requests": 0, "input": 0, "output": 0, "cache": 0,
+        "by_model": defaultdict(lambda: {"requests": 0, "input": 0, "output": 0, "cache": 0})
+    })
+    historical_adjustment = 0.0
+
+    existing_keys = [k for k in data.keys() if k != "historical_total"]
+
+    def add_to_month(yymm, model, reqs, inp, out, cache):
+        monthly[yymm]["requests"] += reqs
+        monthly[yymm]["input"] += inp
+        monthly[yymm]["output"] += out
+        monthly[yymm]["cache"] += cache
+        monthly[yymm]["by_model"][model]["requests"] += reqs
+        monthly[yymm]["by_model"][model]["input"] += inp
+        monthly[yymm]["by_model"][model]["output"] += out
+        monthly[yymm]["by_model"][model]["cache"] += cache
+
+    # 1. Historical total (sesiones pre-acumuladas con fecha 2025-01-01)
+    if "historical_total" in data:
+        ht = data["historical_total"]
+        ht_sessions = ht.get("sessions", 0)
+        ht_date = ht.get("date", "2025-01-01T00:00:00")
+        ht_mmyy = date_to_mmyy(ht_date) or "0125"
+        monthly[ht_mmyy]["sessions"] += ht_sessions
+
+        historical_models_cost = 0.0
+        for model, mdata in ht.get("by_model", {}).items():
+            normalized = normalize_model_name(model)
+            reqs = mdata.get("requests", 0)
+            inp = mdata.get("input", 0)
+            out = mdata.get("output", 0)
+            cache = mdata.get("cache", 0)
+            add_to_month(ht_mmyy, normalized, reqs, inp, out, cache)
+            historical_models_cost += calculate_cost(normalized, inp, out, cache)
+
+        ht_cost = ht.get("cost", 0)
+        historical_adjustment = ht_cost - historical_models_cost
+
+    # 2. Sesiones individuales del JSON
+    for key in existing_keys:
+        session = data[key]
+        mmyy = date_to_mmyy(session.get("date", ""))
+        if not mmyy:
+            continue
+        monthly[mmyy]["sessions"] += 1
+
         by_model = session.get("by_model", {})
-        for model, model_data in by_model.items():
-            if model not in models_totals:
-                models_totals[model] = {"requests": 0, "input": 0, "output": 0, "cost": 0}
-            models_totals[model]["requests"] += model_data.get("requests", 0)
-            models_totals[model]["input"] += model_data.get("input", 0)
-            models_totals[model]["output"] += model_data.get("output", 0)
-            models_totals[model]["cost"] += model_data.get("cost", 0)
-    
-    # Mostrar resumen
-    print(f"📊 HISTORIAL ACUMULADO ({total_sessions} sesiones)")
-    print(f"   Requests: {total_requests}")
-    print(f"   Input:    {format_number(total_input)} tokens")
-    print(f"   Output:   {format_number(total_output)} tokens")
-    
-    # Mostrar desglose por modelo
-    if models_totals:
-        print(f"\n📈 DESGLOSE POR MODELO:")
-        # Ordenar por costo descendente
-        sorted_models = sorted(models_totals.items(), key=lambda x: x[1]["cost"], reverse=True)
-        for model, mdata in sorted_models:
-            short_model = model.replace("antigravity-", "").replace("-thinking-high", "").replace("claude-opus-4-5", "claude-opus-4.5")
-            print(f"   └─ {short_model}: {mdata['requests']} req, in:{format_number(mdata['input'])}, out:{format_number(mdata['output'])}, costo:{format_cost(mdata['cost'])}")
-    
-    print(f"\n💰 Costo Total Acumulado: {format_cost(total_cost)}")
+        if by_model:
+            for model, mdata in by_model.items():
+                normalized = normalize_model_name(model)
+                add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
+        else:
+            reqs = session.get("requests", 0)
+            inp = session.get("input", 0)
+            out = session.get("output", 0)
+            cache = session.get("cache", 0)
+            monthly[mmyy]["requests"] += reqs
+            monthly[mmyy]["input"] += inp
+            monthly[mmyy]["output"] += out
+            monthly[mmyy]["cache"] += cache
+            model_name = session.get("model", "unknown")
+            normalized = normalize_model_name(model_name)
+            add_to_month(mmyy, normalized, reqs, inp, out, cache)
+
+    # 3. Sesiones Codex que NO estan en el JSON
+    existing_codex_ids = {k.replace("codex_", "") for k in existing_keys if k.startswith("codex_")}
+    codex_total_sessions = 0
+    for sess_file in get_codex_sessions():
+        if not has_real_usage_codex(sess_file):
+            continue
+        stats = get_codex_session_stats(sess_file)
+        sid = stats.get("session_id", "")
+        if sid and sid in existing_codex_ids:
+            continue
+        codex_total_sessions += 1
+        mmyy = date_to_mmyy(stats.get("date", ""))
+        if not mmyy:
+            continue
+        monthly[mmyy]["sessions"] += 1
+        monthly[mmyy]["requests"] += stats.get("requests", 0)
+        monthly[mmyy]["input"] += stats.get("input", 0)
+        monthly[mmyy]["output"] += stats.get("output", 0)
+        monthly[mmyy]["cache"] += stats.get("cache", 0)
+        normalized = normalize_model_name(stats["model"])
+        add_to_month(mmyy, normalized, stats["requests"], stats["input"], stats["output"], stats["cache"])
+
+    # 4. Sesiones OpenCode SQLite que NO estan en el JSON (leo directo el DB para tener fechas)
+    opencode_sqlite = get_opencode_sqlite_sessions()
+    session_keys_set = set(existing_keys)
+    if OPENCODE_DB_PATH.exists():
+        try:
+            conn = sqlite3.connect(str(OPENCODE_DB_PATH))
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, time_updated FROM session ORDER BY time_updated DESC')
+            for sid, time_upd in cursor.fetchall():
+                if sid in session_keys_set:
+                    continue
+                stats = opencode_sqlite.get(sid, {})
+                if not stats:
+                    continue
+                try:
+                    date_str = datetime.datetime.fromtimestamp(time_upd / 1000).isoformat()
+                except Exception:
+                    date_str = ""
+                # Override with real date
+                mmyy = date_to_mmyy(date_str)
+                if not mmyy:
+                    continue
+                monthly[mmyy]["sessions"] += 1
+                monthly[mmyy]["requests"] += stats.get("requests", 0)
+                monthly[mmyy]["input"] += stats.get("input", 0)
+                monthly[mmyy]["output"] += stats.get("output", 0)
+                monthly[mmyy]["cache"] += stats.get("cache", 0)
+                by_model = stats.get("by_model", {})
+                if by_model:
+                    for model, mdata in by_model.items():
+                        normalized = normalize_model_name(model)
+                        add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
+                else:
+                    normalized = normalize_model_name(stats.get("model", "unknown"))
+                    add_to_month(mmyy, normalized, stats.get("requests", 0), stats.get("input", 0), stats.get("output", 0), stats.get("cache", 0))
+            conn.close()
+        except Exception:
+            pass
+    else:
+        for sid, stats in opencode_sqlite.items():
+            if sid in session_keys_set:
+                continue
+            mmyy = date_to_mmyy(stats.get("date", ""))
+            if not mmyy:
+                continue
+            monthly[mmyy]["sessions"] += 1
+            monthly[mmyy]["requests"] += stats.get("requests", 0)
+            monthly[mmyy]["input"] += stats.get("input", 0)
+            monthly[mmyy]["output"] += stats.get("output", 0)
+            monthly[mmyy]["cache"] += stats.get("cache", 0)
+            by_model = stats.get("by_model", {})
+            if by_model:
+                for model, mdata in by_model.items():
+                    normalized = normalize_model_name(model)
+                    add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
+            else:
+                normalized = normalize_model_name(stats.get("model", "unknown"))
+                add_to_month(mmyy, normalized, stats.get("requests", 0), stats.get("input", 0), stats.get("output", 0), stats.get("cache", 0))
+
+    return monthly, historical_adjustment
+
+
+def build_grouped_from_monthly(monthly_data):
+    """Convierte datos de un mes al formato grouped para render_stats_box.
+    Filtra modelos con 1 request."""
+    grouped = {}
+    for model, mdata in monthly_data["by_model"].items():
+        if mdata["requests"] <= 1:
+            continue
+        cost = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+        grouped[model] = {
+            "requests": mdata["requests"],
+            "input": mdata["input"],
+            "output": mdata["output"],
+            "cache": mdata["cache"],
+            "cost": cost,
+        }
+    return grouped
+
+
+def render_stats_box(label, total_sessions, total_requests, total_input, total_output, total_cost, grouped, show_free=True):
+    paid = []
+    free = []
+    for model, mdata in grouped.items():
+        total_in = mdata["input"] + mdata["cache"]
+        if mdata["cost"] > 0:
+            paid.append((model, mdata, total_in))
+        else:
+            free.append((model, mdata, total_in))
+    paid.sort(key=lambda x: x[1]["cost"], reverse=True)
+    free.sort(key=lambda x: x[1]["requests"], reverse=True)
+
+    cost_per_session = total_cost / total_sessions if total_sessions > 0 else 0
+    cost_per_request = total_cost / total_requests if total_requests > 0 else 0
+
+    print_header()
+    print_box(f"{BOLD}{label}{RESET}")
+    print_box(f"Sesiones: {fmt_commas(total_sessions)} | Requests: {fmt_commas(total_requests)} | Costo: {color_cost(total_cost)}")
+    print_box(f"Input: {fmt_num(total_input)} tokens | Output: {fmt_num(total_output)} tokens")
+    print_separator()
+    print_box(f"{'#':>2}  {'Modelo':<22} {'Requests':>9} {'Input':>8} {'Cache':>7} {'Output':>7} {'Costo':>9} {'%':>6}")
+    print_separator()
+
+    for i, (name, mdata, _) in enumerate(paid, 1):
+        name_col = name[:22]
+        cache_str = fmt_num(mdata["cache"]) if mdata["cache"] > 0 else "-"
+        pct = (mdata["cost"] / total_cost * 100) if total_cost > 0 else 0
+        if i <= 3:
+            num_str = f"{MAGENTA}{BOLD}►{i}{RESET}"
+            name_str = ljust_ansi(f"{BOLD}{CYAN}{name_col}{RESET}", 22)
+        else:
+            num_str = f"{i:>2}"
+            name_str = ljust_ansi(f"{CYAN}{name_col}{RESET}", 22)
+            name_str = ljust_ansi(f"{CYAN}{name_col}{RESET}", 22)
+        cost_str = rjust_ansi(color_cost(mdata["cost"]), 9)
+        row = f"{num_str}  {name_str} {fmt_commas(mdata['requests']):>9} {fmt_num(mdata['input']):>8} {cache_str:>7} {fmt_num(mdata['output']):>7} {cost_str} {pct:5.1f}%"
+        print_box(row)
+
+    if show_free and free:
+        print_box("")
+        print_box(f"{DIM}MODELOS GRATIS / SIN COSTO{RESET}")
+        print_box(f"{'':>4} {'Modelo':<22} {'Requests':>9} {'Input':>8} {'Cache':>7} {'Output':>7}")
+        print_separator()
+        for name, mdata, _ in free:
+            name_col = name[:22]
+            cache_str = fmt_num(mdata["cache"]) if mdata["cache"] > 0 else "-"
+            name_str = ljust_ansi(f"{CYAN}{name_col}{RESET}", 22)
+            row = f"  {name_str} {fmt_commas(mdata['requests']):>9} {fmt_num(mdata['input']):>8} {cache_str:>7} {fmt_num(mdata['output']):>7}"
+            print_box(row)
+
+    print_box("")
+    print_box(f"Costo Total: {color_cost(total_cost)}")
+    print_box(f"Costo/sesion: {color_cost(cost_per_session)} | Costo/request: {color_cost(cost_per_request)}")
+
+    if not show_free and free:
+        print_box(f"{len(paid)} modelos pagos | {DIM}{len(free)} modelos gratis ocultos{RESET}")
+    else:
+        total_models = len(paid) + (len(free) if show_free else 0)
+        print_box(f"{total_models} modelos | {fmt_commas(total_sessions)} sesiones")
+    print_box("")
+    print_footer()
+
+
+def show_total():
+    monthly, adjustment = load_full_data_by_month()
+    # Acumular todo
+    total_sessions = 0
+    total_requests = 0
+    total_input = 0
+    total_output = 0
+    total_cost = 0.0
+    all_by_model = defaultdict(lambda: {"requests": 0, "input": 0, "output": 0, "cache": 0})
+
+    for mmyy, mdata in monthly.items():
+        total_sessions += mdata["sessions"]
+        total_requests += mdata["requests"]
+        total_input += mdata["input"]
+        total_output += mdata["output"]
+        for model, mdata2 in mdata["by_model"].items():
+            all_by_model[model]["requests"] += mdata2["requests"]
+            all_by_model[model]["input"] += mdata2["input"]
+            all_by_model[model]["output"] += mdata2["output"]
+            all_by_model[model]["cache"] += mdata2["cache"]
+
+    # Filtrar modelos con > 1 request
+    grouped = {}
+    for model, mdata in all_by_model.items():
+        if mdata["requests"] <= 1:
+            continue
+        cost = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+        grouped[model] = {
+            "requests": mdata["requests"],
+            "input": mdata["input"],
+            "output": mdata["output"],
+            "cache": mdata["cache"],
+            "cost": cost,
+        }
+
+    total_cost = sum(m["cost"] for m in grouped.values()) + adjustment
+
+    render_stats_box(
+        "HISTORIAL ACUMULADO",
+        total_sessions,
+        total_requests,
+        total_input,
+        total_output,
+        total_cost,
+        grouped,
+        show_free=False
+    )
+
+
+def show_month_menu(monthly_data):
+    print_header()
+    print_box(f"{BOLD}RESUMEN MENSUAL{RESET}" + pad_right("", 36) + "Ses   Req       Costo")
+    print_separator()
+
+    running_sessions = 0
+    running_requests = 0
+    running_cost = 0.0
+    adjustment = 0.0
+
+    _, adjustment = load_full_data_by_month()
+
+    def sort_key(mmyy):
+        month, year = int(mmyy[:2]), int(mmyy[2:])
+        return (year, month)
+
+    for mmyy in sorted(monthly_data.keys(), key=sort_key, reverse=True):
+        mdata = monthly_data[mmyy]
+        if mdata["sessions"] == 0 and mdata["requests"] == 0:
+            continue
+        running_sessions += mdata["sessions"]
+        running_requests += mdata["requests"]
+
+        grouped = build_grouped_from_monthly(mdata)
+        month_cost = sum(m["cost"] for m in grouped.values())
+        running_cost += month_cost
+
+        mon_name = MONTH_NAMES.get(mmyy[:2], mmyy[:2])
+        label = f"  {mmyy}  {mon_name} 20{mmyy[2:]}"
+        req_str = fmt_commas(mdata["requests"]) if mdata["requests"] < 100000 else fmt_num(mdata["requests"])
+        line = f"{label:<46}{mdata['sessions']:>3}  {req_str:>8}  {rjust_ansi(color_cost(month_cost), 10)}"
+        print_box(line)
+
+    total_cost = running_cost + adjustment
+    total_req_str = fmt_commas(running_requests) if running_requests < 100000 else fmt_num(running_requests)
+    total_cost_str = rjust_ansi(color_cost(total_cost), 10)
+    total_line = f"{BOLD}TOTAL{RESET}{'':41}{running_sessions:>3}  {total_req_str:>8}  {total_cost_str}"
+    print_separator()
+    print_box(total_line)
+    print_separator()
+    print_box(f"{len(sorted(monthly_data.keys()))} periodos disponibles")
+    print_box("")
+    line = f"  t = Ver historial total | mmaa = Seleccionar mes | q = Salir"
+    print_box(line)
+    print_footer()
+
+
+def show_month(month, year, monthly_data):
+    mmyy = month + year[2:]
+    if mmyy not in monthly_data:
+        print(f"No hay sesiones para {MONTH_NAMES.get(month, month)} {year}")
+        return
+
+    mdata = monthly_data[mmyy]
+    if mdata["sessions"] == 0 and mdata["requests"] == 0:
+        print(f"No hay sesiones para {MONTH_NAMES.get(month, month)} {year}")
+        return
+
+    mon_name = MONTH_NAMES.get(month, month)
+    label = f"PERIODO: {mon_name} {year}"
+    total_sessions = mdata["sessions"]
+    total_requests = mdata["requests"]
+    total_input = mdata["input"]
+    total_output = mdata["output"]
+    grouped = build_grouped_from_monthly(mdata)
+    _, adjustment = load_full_data_by_month()
+    total_cost = sum(m["cost"] for m in grouped.values())
+
+    # Para historico (0125), incluir adjustment proporcional
+    # Pero para meses individuales no aplica el adjustment, solo el calculado desde tokens
+    render_stats_box(label, total_sessions, total_requests, total_input, total_output, total_cost, grouped)
+
+
+def interactive_mode():
+    monthly_data, _ = load_full_data_by_month()
+    month_yymms = sorted([k for k in monthly_data.keys()
+                          if monthly_data[k]["sessions"] > 0 or monthly_data[k]["requests"] > 0])
+
+    while True:
+        os.system("clear")
+        show_month_menu(monthly_data)
+        try:
+            choice = input("\nOpcion: ").strip().lower()
+        except EOFError:
+            break
+        if choice == "q":
+            break
+        if choice == "t":
+            os.system("clear")
+            show_total()
+            try:
+                input("\nPresiona Enter para continuar...")
+            except EOFError:
+                break
+            continue
+        if len(choice) == 4 and choice.isdigit():
+            os.system("clear")
+            show_month(choice[:2], "20" + choice[2:], monthly_data)
+            try:
+                input("\nPresiona Enter para continuar...")
+            except EOFError:
+                break
+            continue
+        print(f"Opcion invalida: {choice}")
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1].lower() == "total":
+        show_total()
+    else:
+        interactive_mode()
+
 
 if __name__ == "__main__":
     main()

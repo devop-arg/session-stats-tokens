@@ -1,34 +1,179 @@
 #!/usr/bin/env python3
 """
-Shows token statistics for the current OpenCode session.
+Shows token statistics for the current Kilo/OpenCode/Codex session.
 Usage: session-stats
 
 Features:
+- Reads from Kilo (SQLite), OpenCode (SQLite/JSON), and Codex (JSONL) storage.
+- Auto-detects the most recently active session across all tools.
 - Tracks input/output tokens per model.
 - Calculates estimated costs based on hardcoded prices.
 - Maintains a persistent history per session.
 """
 
 import json
+import sqlite3
 import datetime
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).parent))
+from stats_common import MODEL_COSTS, MODEL_ALIASES, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+KILO_DB_PATH = Path.home() / ".local/share/kilo/kilo.db"
+OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
+
+def get_opencode_sessions():
+    """Returns list of OpenCode sessions.
+    
+    Primero intenta leer de SQLite (v1.3.0+), sino fallback a JSON (v1.1.x).
+    Returns list of dicts: {id, title, time_updated (ms), source: "sqlite"|"json"}
+    """
+    # Intentar SQLite primero (OpenCode 1.3.0+)
+    if OPENCODE_DB_PATH.exists():
+        try:
+            conn = sqlite3.connect(str(OPENCODE_DB_PATH))
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, title, time_updated FROM session ORDER BY time_updated DESC")
+            sessions = [{"id": row[0], "title": row[1], "time_updated": row[2], "source": "sqlite"} 
+                        for row in cursor.fetchall()]
+            conn.close()
+            if sessions:
+                return sessions
+        except Exception:
+            pass
+    
+    # Fallback: JSON (OpenCode 1.1.x)
+    opencode_dir = Path.home() / ".local/share/opencode/storage/message"
+    if not opencode_dir.exists():
+        return []
+    sessions = []
+    for d in opencode_dir.iterdir():
+        if d.is_dir():
+            sessions.append({"id": d.name, "title": "", "time_updated": int(d.stat().st_mtime * 1000), "source": "json", "path": d})
+    sessions.sort(key=lambda x: x["time_updated"], reverse=True)
+    return sessions
+
+def get_kilo_sessions():
+    """Returns list of Kilo sessions from SQLite database.
+    
+    Returns list of dicts: {id, title, time_updated (ms)}
+    """
+    if not KILO_DB_PATH.exists():
+        return []
+    try:
+        conn = sqlite3.connect(str(KILO_DB_PATH))
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, title, time_updated FROM session ORDER BY time_updated DESC")
+        sessions = [{"id": row[0], "title": row[1], "time_updated": row[2]} for row in cursor.fetchall()]
+        conn.close()
+        return sessions
+    except Exception:
+        return []
+
+def has_real_usage_json(session_path):
+    """Check if a JSON session directory has real token usage."""
+    for msg_file in session_path.glob("*.json"):
+        try:
+            with open(msg_file) as f:
+                msg = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if msg.get("role") != "assistant":
+            continue
+        if msg.get("error"):
+            continue
+        tokens = msg.get("tokens", {}) or {}
+        cache = tokens.get("cache", {}) if isinstance(tokens.get("cache", {}), dict) else {}
+        total = (
+            abs(tokens.get("input", 0))
+            + abs(tokens.get("output", 0))
+            + abs(tokens.get("reasoning", 0))
+            + abs(cache.get("read", 0))
+            + abs(cache.get("write", 0))
+        )
+        if total > 0:
+            return True
+    return False
+
+def has_real_usage_sqlite(session_id, db_path=None):
+    """Check if a SQLite session has real token usage."""
+    if db_path is None:
+        db_path = KILO_DB_PATH
+    if not db_path.exists():
+        return False
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        cursor.execute("SELECT data FROM message WHERE session_id = ?", (session_id,))
+        for (data_str,) in cursor.fetchall():
+            try:
+                msg = json.loads(data_str)
+                if msg.get("role") != "assistant":
+                    continue
+                tokens = msg.get("tokens", {}) or {}
+                cache = tokens.get("cache", {}) or {}
+                total = (
+                    abs(tokens.get("input", 0))
+                    + abs(tokens.get("output", 0))
+                    + abs(tokens.get("reasoning", 0))
+                    + abs(cache.get("read", 0))
+                    + abs(cache.get("write", 0))
+                )
+                if total > 0:
+                    conn.close()
+                    return True
+            except (json.JSONDecodeError, KeyError):
+                continue
+        conn.close()
+        return False
+    except Exception:
+        return False
 
 def get_current_session():
-    """Finds the most recent (active) session."""
-    msg_dir = Path.home() / ".local/share/opencode/storage/message"
-    if not msg_dir.exists():
-        return None
-    
-    sessions = list(msg_dir.iterdir())
-    if not sessions:
-        return None
-    
-    # Sort by modification date (most recent first)
-    sessions.sort(key=lambda x: x.stat().st_mtime, reverse=True)
-    return sessions[0]
+    """Finds the most recently active session from all sources (Kilo, OpenCode, Codex, Hermes).
 
-def get_session_stats(session_path):
-    """Extracts statistics from a session."""
+    Returns a tuple: (source, session_ref, time_updated_ms)
+    source: "kilo", "opencode_sqlite", "opencode_json", "codex", or "hermes"
+    """
+    candidates = []
+
+    # Collect Kilo sessions with real usage
+    for sess in get_kilo_sessions():
+        if has_real_usage_sqlite(sess["id"]):
+            candidates.append(("kilo", sess["id"], sess["time_updated"]))
+
+    # Collect OpenCode sessions with real usage
+    for sess in get_opencode_sessions():
+        if sess["source"] == "sqlite":
+            if has_real_usage_sqlite(sess["id"], OPENCODE_DB_PATH):
+                candidates.append(("opencode_sqlite", sess["id"], sess["time_updated"]))
+        else:
+            if has_real_usage_json(sess["path"]):
+                candidates.append(("opencode_json", sess["path"], sess["time_updated"]))
+
+    # Collect Codex sessions with real usage
+    for sess_file in get_codex_sessions():
+        if has_real_usage_codex(sess_file):
+            ts_ms = int(sess_file.stat().st_mtime * 1000)
+            candidates.append(("codex", sess_file, ts_ms))
+
+    # Collect Hermes sessions with real usage
+    for sess in get_hermes_sessions():
+        if has_real_usage_hermes(sess["id"]):
+            ts_ms = int(sess["started_at"] * 1000) if sess.get("started_at") else 0
+            candidates.append(("hermes", sess["id"], ts_ms))
+
+    if not candidates:
+        return None
+
+    # Return the one with the highest timestamp
+    best = max(candidates, key=lambda x: x[2])
+    return best
+
+def get_session_stats_json(session_path):
+    """Extracts statistics from an OpenCode JSON session."""
     stats = {
         "total_messages": 0,
         "by_model": {}
@@ -41,7 +186,73 @@ def get_session_stats(session_path):
             
             stats["total_messages"] += 1
             
-            # Only count tokens from assistant responses
+            if msg.get("role") != "assistant":
+                continue
+            
+            tokens = msg.get("tokens", {})
+            if not tokens:
+                continue
+            if msg.get("error"):
+                continue
+            
+            model = msg.get("modelID", "unknown")
+            
+            if model not in stats["by_model"]:
+                stats["by_model"][model] = {
+                    "requests": 0,
+                    "input": 0,
+                    "output": 0,
+                    "reasoning": 0,
+                    "cache": 0
+                }
+
+            stats["by_model"][model]["requests"] += 1
+            cache_read = tokens.get("cache", {}).get("read", 0)
+            stats["by_model"][model]["input"] += abs(tokens.get("input", 0))
+            stats["by_model"][model]["cache"] += abs(cache_read)
+            stats["by_model"][model]["output"] += abs(tokens.get("output", 0))
+            stats["by_model"][model]["reasoning"] += abs(tokens.get("reasoning", 0))
+            
+        except (json.JSONDecodeError, KeyError):
+            continue
+    
+    return stats
+
+def get_session_stats_sqlite(session_id, db_path=None):
+    """Extracts statistics from a SQLite session (Kilo or OpenCode)."""
+    stats = {
+        "total_messages": 0,
+        "by_model": {},
+        "session_title": "",
+        "time_updated": 0
+    }
+    
+    if db_path is None:
+        db_path = KILO_DB_PATH
+    if not db_path.exists():
+        return stats
+    
+    try:
+        conn = sqlite3.connect(str(db_path))
+        cursor = conn.cursor()
+        
+        # Get session metadata
+        cursor.execute("SELECT title, time_updated FROM session WHERE id = ?", (session_id,))
+        row = cursor.fetchone()
+        if row:
+            stats["session_title"] = row[0] or ""
+            stats["time_updated"] = row[1] or 0
+        
+        # Get messages
+        cursor.execute("SELECT data FROM message WHERE session_id = ? ORDER BY time_created", (session_id,))
+        for (data_str,) in cursor.fetchall():
+            try:
+                msg = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
+            
+            stats["total_messages"] += 1
+            
             if msg.get("role") != "assistant":
                 continue
             
@@ -56,16 +267,20 @@ def get_session_stats(session_path):
                     "requests": 0,
                     "input": 0,
                     "output": 0,
-                    "reasoning": 0
+                    "reasoning": 0,
+                    "cache": 0
                 }
-            
+
             stats["by_model"][model]["requests"] += 1
-            stats["by_model"][model]["input"] += tokens.get("input", 0)
-            stats["by_model"][model]["output"] += tokens.get("output", 0)
-            stats["by_model"][model]["reasoning"] += tokens.get("reasoning", 0)
-            
-        except (json.JSONDecodeError, KeyError):
-            continue
+            cache_read = (tokens.get("cache") or {}).get("read", 0)
+            stats["by_model"][model]["input"] += abs(tokens.get("input", 0) or 0)
+            stats["by_model"][model]["cache"] += abs(cache_read or 0)
+            stats["by_model"][model]["output"] += abs(tokens.get("output", 0) or 0)
+            stats["by_model"][model]["reasoning"] += abs(tokens.get("reasoning", 0) or 0)
+        
+        conn.close()
+    except Exception:
+        pass
     
     return stats
 
@@ -85,51 +300,19 @@ def format_cost(cost):
         return f"${cost:.4f}"
     return f"${cost:.6f}"
 
-# Costs per 1M tokens (in USD)
-MODEL_COSTS = {
-    "glm-4.7-free": {"input": 0.43, "output": 2.2},
-    "gpt-5.1-codex-max": {"input": 1.25, "output": 10},
-    "codex-max": {"input": 1.25, "output": 10},
-    "gpt-5.2-codex": {"input": 1.75, "output": 14},
-    "gpt-5.2": {"input": 1.75, "output": 14},
-    "gpt-5-mini": {"input": 0.25, "output": 2},
-    "antigravity-claude-opus-4-5-thinking-high": {"input": 5, "output": 25},
-    "claude-opus-4-5-thinking": {"input": 5, "output": 25},
-    "antigravity-claude-sonnet-4-5": {"input": 3, "output": 15},
-    "antigravity-claude-sonnet-4-5-thinking": {"input": 3, "output": 15},
-    "claude-sonnet-4-5": {"input": 3, "output": 15},
-    "claude-sonnet-4-5-thinking": {"input": 3, "output": 15},
-    "claude-haiku-4-5": {"input": 1, "output": 5},
-    "antigravity-gemini-3-flash": {"input": 0.5, "output": 3},
-    "gemini-3-flash": {"input": 0.5, "output": 3},
-    "antigravity-gemini-3-pro-low": {"input": 2, "output": 12},
-    "antigravity-gemini-3-pro-high": {"input": 2, "output": 12},
-    "antigravity-gemini-3-pro": {"input": 2, "output": 12},
-    "gemini-3-pro-low": {"input": 2, "output": 12},
-    "gemini-3-pro-high": {"input": 2, "output": 12},
-    "gemini-3-pro": {"input": 2, "output": 12},
-    "grok-code": {"input": 0.20, "output": 1.5},
-}
-
-def calculate_cost(model, input_tokens, output_tokens):
-    """Calculates estimated cost for a model."""
-    costs = MODEL_COSTS.get(model)
-    if not costs:
-        model_lower = model.lower()
-        if "codex-max" in model_lower: costs = {"input": 1.25, "output": 10}
-        elif "gemini-3-pro" in model_lower: costs = {"input": 2, "output": 12}
-        elif "gemini-3-flash" in model_lower: costs = {"input": 0.5, "output": 3}
-        elif "claude-opus" in model_lower: costs = {"input": 5, "output": 25}
-        elif "claude-haiku" in model_lower: costs = {"input": 1, "output": 5}
-        elif "claude-sonnet" in model_lower: costs = {"input": 3, "output": 15}
-        elif "glm-4" in model_lower: costs = {"input": 0.43, "output": 2.2}
-            
-    if not costs:
-        return 0
-        
-    input_cost = (input_tokens / 1000000) * costs["input"]
-    output_cost = (output_tokens / 1000000) * costs["output"]
-    return input_cost + output_cost
+def merge_model_stats(by_model):
+    """Combina estadisticas de modelos que son aliases."""
+    merged = {}
+    for model, data in by_model.items():
+        normalized = normalize_model_name(model)
+        if normalized not in merged:
+            merged[normalized] = {"requests": 0, "input": 0, "output": 0, "reasoning": 0, "cache": 0}
+        merged[normalized]["requests"] += data.get("requests", 0)
+        merged[normalized]["input"] += data.get("input", 0)
+        merged[normalized]["output"] += data.get("output", 0)
+        merged[normalized]["reasoning"] += data.get("reasoning", 0)
+        merged[normalized]["cache"] += data.get("cache", 0)
+    return merged
 
 HISTORY_FILE = Path(__file__).parent / "session_history.json"
 
@@ -143,8 +326,6 @@ def update_history(session_id, requests, input_tokens, output_tokens, cost, by_m
         except json.JSONDecodeError:
             pass
     
-    # Only update if there are requests OR if it's a new session
-    # This prevents overwriting with 0s if messages were deleted
     if requests > 0 or session_id not in data:
         data[session_id] = {
             "date": date or datetime.datetime.now().isoformat(),
@@ -162,49 +343,241 @@ def update_history(session_id, requests, input_tokens, output_tokens, cost, by_m
     except Exception:
         pass
 
-    total_historical_cost = sum(item["cost"] for item in data.values())
-    total_sessions = len(data)
+    total_historical_cost = sum(item.get("cost", 0) for key, item in data.items() if key != "historical_total")
+    historical_total_cost = data.get("historical_total", {}).get("cost", 0)
+    total_historical_cost += historical_total_cost
+    base_sessions = data.get("historical_total", {}).get("sessions", 0)
+    total_sessions = base_sessions + len([k for k in data.keys() if k != "historical_total"])
     
     return total_historical_cost, total_sessions
 
+def capture_all_sessions():
+    """Captura y persiste TODAS las sesiones de todas las fuentes (Kilo, OpenCode, Codex, Hermes).
+
+    Idempotente: ejecutarla multiples veces no duplica entradas.
+    Retorna cantidad de sesiones nuevas capturadas.
+    """
+    data = {}
+    if HISTORY_FILE.exists():
+        try:
+            with open(HISTORY_FILE, 'r') as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            pass
+
+    existing_keys = set(k for k in data.keys() if k != "historical_total")
+    new_count = 0
+
+    def _add_entry(sid, entry):
+        nonlocal new_count
+        if sid not in existing_keys and entry:
+            data[sid] = entry
+            existing_keys.add(sid)
+            new_count += 1
+
+    # --- Kilo ---
+    for sess in get_kilo_sessions():
+        sid = sess["id"]
+        if sid in existing_keys or not has_real_usage_sqlite(sid):
+            continue
+        stats = get_session_stats_sqlite(sid)
+        if stats["by_model"]:
+            _add_entry(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000))
+
+    # --- OpenCode SQLite ---
+    for sess in get_opencode_sessions():
+        if sess["source"] != "sqlite":
+            continue
+        sid = sess["id"]
+        if sid in existing_keys or not has_real_usage_sqlite(sid, OPENCODE_DB_PATH):
+            continue
+        stats = get_session_stats_sqlite(sid, OPENCODE_DB_PATH)
+        if stats["by_model"]:
+            _add_entry(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000))
+
+    # --- Codex ---
+    for sess_file in get_codex_sessions():
+        if not has_real_usage_codex(sess_file):
+            continue
+        stats = get_codex_session_stats(sess_file)
+        sid = "codex_" + (stats.get("session_id") or sess_file.stem)
+        if sid in existing_keys:
+            continue
+        normalized = normalize_model_name(stats["model"])
+        cost = calculate_cost(stats["model"], stats["input"], stats["output"], stats["cache"])
+        _add_entry(sid, {
+            "date": stats.get("date", ""),
+            "requests": stats["requests"],
+            "input": stats["input"],
+            "output": stats["output"],
+            "cost": cost,
+            "by_model": {normalized: {
+                "requests": stats["requests"], "input": stats["input"],
+                "output": stats["output"], "cache": stats["cache"], "cost": cost
+            }}
+        })
+
+    # --- Hermes ---
+    for sess in get_hermes_sessions():
+        sid = sess["id"]
+        if sid in existing_keys or not sess.get("by_model"):
+            continue
+        total_input = sum(m["input"] for m in sess["by_model"].values())
+        total_output = sum(m["output"] for m in sess["by_model"].values())
+        session_cost = 0
+        by_model_with_cost = {}
+        for model, mdata in sess["by_model"].items():
+            c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+            session_cost += c
+            by_model_with_cost[model] = {**mdata, "cost": c}
+        _add_entry(sid, {
+            "date": sess["date"],
+            "requests": sess["requests"],
+            "input": total_input,
+            "output": total_output,
+            "cost": session_cost,
+            "by_model": by_model_with_cost
+        })
+
+    if new_count > 0:
+        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(HISTORY_FILE, 'w') as f:
+            json.dump(data, f, indent=2)
+
+    return new_count
+
+
+def _build_session_entry(by_model, timestamp):
+    """Convierte estadisticas por modelo en una entrada de historial con costos."""
+    merged = merge_model_stats(by_model)
+    if not merged:
+        return None
+    session_cost = 0
+    by_model_with_cost = {}
+    for model, mdata in merged.items():
+        c = calculate_cost(model, mdata["input"], mdata["output"], mdata["cache"])
+        session_cost += c
+        by_model_with_cost[model] = {**mdata, "cost": c}
+    try:
+        date = datetime.datetime.fromtimestamp(timestamp).isoformat()
+    except Exception:
+        date = ""
+    return {
+        "date": date,
+        "requests": sum(m["requests"] for m in merged.values()),
+        "input": sum(m["input"] for m in merged.values()),
+        "output": sum(m["output"] for m in merged.values()),
+        "cost": session_cost,
+        "by_model": by_model_with_cost
+    }
+
+
 def main():
-    session = get_current_session()
-    if not session:
+    if len(sys.argv) > 1 and sys.argv[1] == "--capture-all":
+        new = capture_all_sessions()
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if new > 0:
+            print(f"[{now}] captured {new} new sessions")
+        return
+
+    session_info = get_current_session()
+    if not session_info:
         print("No active session found")
         return
     
-    stats = get_session_stats(session)
+    source, session_ref, time_updated = session_info
     
-    total_requests = sum(m["requests"] for m in stats["by_model"].values())
-    total_input = sum(m["input"] for m in stats["by_model"].values())
-    total_output = sum(m["output"] for m in stats["by_model"].values())
+    if source == "kilo":
+        stats = get_session_stats_sqlite(session_ref)
+        session_id = session_ref
+        session_date = datetime.datetime.fromtimestamp(time_updated / 1000).isoformat()
+    elif source == "opencode_sqlite":
+        stats = get_session_stats_sqlite(session_ref, OPENCODE_DB_PATH)
+        session_id = session_ref
+        session_date = datetime.datetime.fromtimestamp(time_updated / 1000).isoformat()
+    elif source == "codex":
+        codex_stats = get_codex_session_stats(session_ref)
+        session_id = codex_stats.get("session_id", session_ref.name)
+        session_date = codex_stats.get("date", "")
+        # Convertir a formato de stats compatible
+        model = codex_stats["model"]
+        stats = {
+            "total_messages": codex_stats["requests"],
+            "by_model": {
+                model: {
+                    "requests": codex_stats["requests"],
+                    "input": codex_stats["input"],
+                    "output": codex_stats["output"],
+                    "reasoning": codex_stats["reasoning"],
+                    "cache": codex_stats["cache"]
+                }
+            }
+        }
+    elif source == "hermes":
+        hermes_stats = get_hermes_session_stats(session_ref)
+        session_id = session_ref
+        session_date = hermes_stats.get("date", "")
+        stats = {
+            "total_messages": hermes_stats.get("requests", 0),
+            "by_model": hermes_stats.get("by_model", {}),
+        }
+    else:
+        # opencode_json
+        stats = get_session_stats_json(session_ref)
+        session_id = session_ref.name
+        session_date = datetime.datetime.fromtimestamp(session_ref.stat().st_mtime).isoformat()
+    
+    merged_by_model = merge_model_stats(stats["by_model"])
+    
+    total_requests = sum(m["requests"] for m in merged_by_model.values())
+    total_input = sum(m["input"] for m in merged_by_model.values())
+    total_output = sum(m["output"] for m in merged_by_model.values())
+    total_cache = sum(m["cache"] for m in merged_by_model.values())
     
     total_session_cost = 0
-    for model, data in stats["by_model"].items():
-        total_session_cost += calculate_cost(model, data["input"], data["output"])
-    
     by_model_with_cost = {}
-    for model, data in stats["by_model"].items():
-        model_cost = calculate_cost(model, data["input"], data["output"])
+    for model, data in merged_by_model.items():
+        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"])
+        total_session_cost += model_cost
         by_model_with_cost[model] = {
-            "requests": data["requests"], "input": data["input"], "output": data["output"], "cost": model_cost
+            "requests": data["requests"],
+            "input": data["input"],
+            "output": data["output"],
+            "cache": data["cache"],
+            "cost": model_cost
         }
     
-    session_date = datetime.datetime.fromtimestamp(session.stat().st_mtime).isoformat()
-    
-    # Save to history
-    total_historical_cost, total_sessions = update_history(
-        session.name, total_requests, total_input, total_output, 
+    # Guardar sesión actual en historial (para tracking)
+    update_history(
+        session_id, total_requests, total_input, total_output, 
         total_session_cost, by_model_with_cost, date=session_date
     )
     
-    print(f"📊 Current Session: {total_requests} req | In: {format_number(total_input)} | Out: {format_number(total_output)}")
+    # Recalcular TODO desde tokens (misma lógica que session-stats-history)
+    hist = recalculate_historical_cost(HISTORY_FILE)
+    total_historical_cost = hist["total_cost"]
+    total_sessions = hist["total_sessions"]
     
-    # Breakdown by model
-    for model, data in stats["by_model"].items():
+    source_label = {"kilo": "Kilo", "opencode_sqlite": "OpenCode", "opencode_json": "OpenCode", "codex": "Codex", "hermes": "Hermes"}.get(source, source)
+    title_info = ""
+    if source in ("kilo", "opencode_sqlite", "hermes") and stats.get("session_title"):
+        title_info = f" ({stats['session_title'][:50]})"
+    print(f"📊 Current Session [{source_label}]{title_info}: {total_requests} req | In: {format_number(total_input)} | Out: {format_number(total_output)}")
+    
+    for model, data in merged_by_model.items():
         short_model = model.replace("antigravity-", "").replace("-thinking-high", "")
-        model_cost = calculate_cost(model, data["input"], data["output"])
-        print(f"   └─ {short_model}: {data['requests']} req, in:{format_number(data['input'])}, out:{format_number(data['output'])}, cost:{format_cost(model_cost)}")
+        if "/" in short_model:
+            short_model = short_model.split("/", 1)[0]
+        short_model = short_model.replace("-thinking", "")
+        # Alias de visualización
+        short_model = short_model.replace("grok-code-fast-1-optimized-free", "grok-code")
+        short_model = short_model.replace("x-ai", "grok-4.1-fast")
+        short_model = short_model.replace("deepseek-v4-flash", "ds-v4-flash")
+        short_model = short_model.replace("deepseek-v4-pro", "ds-v4-pro")
+        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"])
+        total_input = data["input"] + data["cache"]
+        cache_info = f" (cache:{format_number(data['cache'])})" if data.get("cache", 0) > 0 else ""
+        print(f"   └─ {short_model}: {data['requests']} req, in:{format_number(total_input)}{cache_info}, out:{format_number(data['output'])}, cost:{format_cost(model_cost)}")
 
     print(f"\n💰 Session Cost: {format_cost(total_session_cost)} - Historical Total ({total_sessions} sessions): {format_cost(total_historical_cost)}")
 
