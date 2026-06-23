@@ -25,9 +25,9 @@
     "output": 0.28
   },
   "deepseek-v4-pro": {
-    "cache": 0.145,
-    "input": 1.74,
-    "output": 3.48
+    "cache": 0.0037,
+    "input": 0.435,
+    "output": 0.87
   },
   "gemini-3-flash": {
     "input": 0.5,
@@ -71,6 +71,11 @@
     "output": 2.56
   },
   "glm-5.1": {
+    "cache": 0.26,
+    "input": 1.4,
+    "output": 4.4
+  },
+  "glm-5.2": {
     "cache": 0.26,
     "input": 1.4,
     "output": 4.4
@@ -126,6 +131,16 @@
     "cache": 0.06,
     "input": 0.3,
     "output": 1.2
+  },
+  "minimax-m3": {
+    "cache": 0.06,
+    "input": 0.3,
+    "output": 1.2
+  },
+  "nex-agi/nex-n2": {
+    "cache": 0.025,
+    "input": 0.25,
+    "output": 1.0
   },
   "qwen3.6-plus": {
     "cache": 0.5,
