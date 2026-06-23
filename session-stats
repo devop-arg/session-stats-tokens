@@ -17,10 +17,10 @@ import datetime
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).parent))
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPT_DIR))
 from stats_common import MODEL_COSTS, MODEL_ALIASES, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats
 
-SCRIPT_DIR = Path(__file__).resolve().parent
 KILO_DB_PATH = Path.home() / ".local/share/kilo/kilo.db"
 OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
 
@@ -314,7 +314,7 @@ def merge_model_stats(by_model):
         merged[normalized]["cache"] += data.get("cache", 0)
     return merged
 
-HISTORY_FILE = Path(__file__).parent / "session_history.json"
+HISTORY_FILE = SCRIPT_DIR / "session_history.json"
 
 def update_history(session_id, requests, input_tokens, output_tokens, cost, by_model, date=None):
     """Updates the history and returns the grand total."""

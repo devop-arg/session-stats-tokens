@@ -17,6 +17,7 @@ import datetime
 from pathlib import Path
 from io import StringIO
 
+STATS_DIR = Path("/home/capw/scripts/session-stats")
 WIDTH = 78
 
 def fmt_num(n):
@@ -137,7 +138,7 @@ def collect_models(sessions):
     return grouped
 
 def main():
-    history_file = Path(__file__).parent / "session_history.json"
+    history_file = STATS_DIR / "session_history.json"
 
     if len(sys.argv) < 2:
         print("Uso: session-stats-period [dia|semana|mes|YYMM|list]")
@@ -243,6 +244,8 @@ def main():
             continue
         try:
             sdate = datetime.datetime.fromisoformat(date_str)
+            if sdate.tzinfo is not None:
+                sdate = sdate.replace(tzinfo=None)
         except Exception:
             continue
         if sdate >= threshold:

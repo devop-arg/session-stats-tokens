@@ -118,7 +118,7 @@ def load_full_data_by_month():
     Retorna dict {yymm: {"sessions": N, "requests": N, "input": N, "output": N, "cache": N, "by_model": {model: {requests, input, output, cache}}}}
     Tambien retorna "historical_adjustment" float que se suma al costo total.
     """
-    history_file = Path(__file__).parent / "session_history.json"
+    history_file = STATS_DIR / "session_history.json"
     data = {}
     if history_file.exists():
         try:
