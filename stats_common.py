@@ -224,6 +224,7 @@ def normalize_model_name(model):
     for prefix in [
         "antigravity-",
         "z-ai/",
+        "deepseek/",
         "google/",
         "anthropic/",
         "openai/",
@@ -257,6 +258,7 @@ def normalize_model_name(model):
         ":free",
         ":pro",
         ":lite",
+        ":discounted",
     ]
     for suffix in suffixes:
         model_lower = model_lower.replace(suffix, "")
