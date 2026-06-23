@@ -1,0 +1,496 @@
+#!/usr/bin/env python3
+"""session-stats-models — Gestor interactivo de modelos y precios para session-stats."""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+COSTS_FILE = SCRIPT_DIR / "model_costs.json"
+ALIASES_FILE = SCRIPT_DIR / "model_aliases.json"
+HISTORY_FILE = SCRIPT_DIR / "session_history.json"
+BACKUP_DIR = SCRIPT_DIR / "model_backups"
+
+
+def backup():
+    """Crea backup de los JSON actuales antes de modificar."""
+    BACKUP_DIR.mkdir(exist_ok=True)
+    ts = __import__('datetime').datetime.now().strftime("%Y%m%d_%H%M%S")
+    for f in [COSTS_FILE, ALIASES_FILE]:
+        if f.exists():
+            dest = BACKUP_DIR / f"{f.stem}_{ts}.json"
+            dest.write_text(f.read_text())
+
+
+def load_json(path, default=None):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except Exception:
+        return default if default is not None else {}
+
+
+def save_json(path, data):
+    with open(path, 'w') as f:
+        json.dump(data, f, indent=2, sort_keys=True)
+        f.write('\n')
+
+
+def get_used_models():
+    """Extrae modelos usados desde session_history.json."""
+    history = load_json(HISTORY_FILE, {})
+    models = set()
+    for key, entry in history.items():
+        if key == "historical_total":
+            continue
+        if isinstance(entry, dict):
+            # Cada sesión tiene 'by_model': {modelo: {requests, input, output, cost}}
+            by_model = entry.get("by_model", {})
+            if isinstance(by_model, dict):
+                models.update(by_model.keys())
+    return models
+
+
+def pad(s, width):
+    """Trunca a width, añadiendo '…' si necesario."""
+    s = str(s)
+    if len(s) > width:
+        return s[:width-1] + '…'
+    return s.ljust(width)
+
+
+def list_models(costs, aliases):
+    """Muestra tabla de modelos con precios."""
+    alias_count = {}
+    for alias, target in aliases.items():
+        alias_count[target] = alias_count.get(target, 0) + 1
+
+    items = sorted(costs.items())
+    print(f"\n{'':>4s} {'MODELO':<38s} {'IN':>8s} {'OUT':>8s} {'CACHE':>8s} {'ALIAS':>5s}")
+    print("─" * 80)
+    for i, (name, c) in enumerate(items, 1):
+        inp = f"${c['input']:.4f}"
+        out = f"${c['output']:.4f}"
+        cache = f"${c['cache']:.4f}" if c.get('cache') is not None else "—"
+        ac = alias_count.get(name, 0)
+        print(f" {i:3d} {pad(name, 38)} {inp:>8s} {out:>8s} {cache:>8s} {ac:>5d}")
+    print(f"\n  {len(items)} modelos, {len(aliases)} aliases")
+
+
+def get_price(prompt, current=None):
+    """Pide un precio en USD/1M tokens."""
+    hint = f" [{current}]" if current is not None else ""
+    while True:
+        raw = input(f"  {prompt}{hint}: ").strip()
+        if not raw and current is not None:
+            return current
+        if not raw:
+            print("  Requerido.")
+            continue
+        try:
+            v = float(raw)
+            if v < 0:
+                print("  No puede ser negativo.")
+                continue
+            return v
+        except ValueError:
+            print("  Número inválido.")
+
+
+def add_model(costs):
+    """Agrega un modelo nuevo."""
+    print("\n── AGREGAR MODELO ──")
+    while True:
+        name = input("  Nombre del modelo: ").strip().lower()
+        if not name:
+            print("  Requerido.")
+            continue
+        if name in costs:
+            print(f"  ⚠ Ya existe '{name}'. Usá 'editar' para modificarlo.")
+            return
+        break
+
+    inp = get_price("Precio input ($/1M)")
+    out = get_price("Precio output ($/1M)")
+    cache_raw = input("  Precio cache ($/1M) [opcional, Enter para omitir]: ").strip()
+    cache = None
+    if cache_raw:
+        try:
+            cache = float(cache_raw)
+            if cache < 0:
+                cache = None
+        except ValueError:
+            cache = None
+
+    entry = {"input": inp, "output": out}
+    if cache is not None:
+        entry["cache"] = cache
+
+    costs[name] = entry
+    save_json(COSTS_FILE, costs)
+    print(f"  ✓ '{name}' agregado: in=${inp:.4f} out=${out:.4f}" +
+          (f" cache=${cache:.4f}" if cache is not None else ""))
+
+
+def edit_model(costs, aliases):
+    """Edita un modelo existente."""
+    items = sorted(costs.items())
+    if not items:
+        print("  No hay modelos para editar.")
+        return
+
+    list_models(costs, aliases)
+    try:
+        idx = int(input("\n  Número de modelo a editar (0=cancelar): ").strip())
+    except ValueError:
+        print("  Número inválido.")
+        return
+    if idx < 1 or idx > len(items):
+        if idx != 0:
+            print("  Fuera de rango.")
+        return
+
+    name, current = items[idx-1]
+    print(f"\n  Editando: {name}")
+    print(f"  Actual: in=${current['input']:.4f} out=${current['output']:.4f}" +
+          (f" cache=${current['cache']:.4f}" if current.get('cache') is not None else ""))
+
+    inp = get_price("Precio input ($/1M)", current['input'])
+    out = get_price("Precio output ($/1M)", current['output'])
+    cache_raw = input(f"  Precio cache ($/1M) [{current.get('cache', '—')}, Enter=sin cambio, '-'=quitar]: ").strip()
+    cache = current.get('cache')
+    if cache_raw == '-':
+        cache = None
+    elif cache_raw:
+        try:
+            cache = float(cache_raw)
+            if cache < 0:
+                cache = None
+        except ValueError:
+            pass
+
+    entry = {"input": inp, "output": out}
+    if cache is not None:
+        entry["cache"] = cache
+
+    costs[name] = entry
+    save_json(COSTS_FILE, costs)
+    print(f"  ✓ '{name}' actualizado.")
+
+
+def delete_model(costs, aliases):
+    """Borra un modelo."""
+    items = sorted(costs.items())
+    if not items:
+        print("  No hay modelos.")
+        return
+
+    list_models(costs, aliases)
+    try:
+        idx = int(input("\n  Número de modelo a BORRAR (0=cancelar): ").strip())
+    except ValueError:
+        print("  Número inválido.")
+        return
+    if idx < 1 or idx > len(items):
+        if idx != 0:
+            print("  Fuera de rango.")
+        return
+
+    name = items[idx-1][0]
+    pointing = [k for k, v in aliases.items() if v == name]
+
+    print(f"\n  ⚠ Vas a borrar: {name}")
+    if pointing:
+        print(f"  ⚠ {len(pointing)} alias apuntan a este modelo:")
+        for a in pointing[:5]:
+            print(f"      {a}  →  {name}")
+        if len(pointing) > 5:
+            print(f"      ... y {len(pointing)-5} más")
+
+    confirm = input("  Escribí 'BORRAR' para confirmar: ").strip()
+    if confirm != "BORRAR":
+        print("  Cancelado.")
+        return
+
+    del costs[name]
+    # Limpiar aliases huérfanos
+    for alias in pointing:
+        del aliases[alias]
+    save_json(COSTS_FILE, costs)
+    save_json(ALIASES_FILE, aliases)
+    print(f"  ✓ '{name}' borrado" + (f" ({len(pointing)} aliases limpiados)" if pointing else ""))
+
+
+# ─── Aliases ───────────────────────────────────────────
+
+def list_aliases(aliases, costs):
+    """Muestra todos los aliases con su target."""
+    items = sorted(aliases.items())
+    print(f"\n{'':>4s} {'ALIAS':<45s} {'→ TARGET':<40s} {'EXISTE?':>8s}")
+    print("─" * 100)
+    orphans = 0
+    for i, (alias, target) in enumerate(items, 1):
+        exists = "✓" if target in costs else "✗ HUÉRFANO"
+        if target not in costs:
+            orphans += 1
+        print(f" {i:3d} {pad(alias, 45)} {pad(target, 40)} {exists:>10s}")
+    print(f"\n  {len(items)} aliases, {orphans} huérfanos")
+
+
+def add_alias(aliases, costs):
+    """Agrega un alias."""
+    print("\n── AGREGAR ALIAS ──")
+    alias = input("  Alias (nombre alternativo): ").strip().lower()
+    if not alias:
+        print("  Requerido.")
+        return
+    if alias in aliases:
+        print(f"  Ya existe '{alias}' → '{aliases[alias]}'.")
+        return
+
+    if alias in costs:
+        print(f"  '{alias}' ya es un modelo canónico. No puede ser alias de sí mismo.")
+        return
+
+    print(f"  Modelos disponibles ({len(costs)}):")
+    for i, name in enumerate(sorted(costs), 1):
+        print(f"    {i:3d} {name}")
+
+    try:
+        idx = int(input("  N° de modelo target (0=cancelar): ").strip())
+    except ValueError:
+        print("  Número inválido.")
+        return
+    if idx < 1 or idx > len(costs):
+        if idx != 0:
+            print("  Fuera de rango.")
+        return
+
+    target = sorted(costs)[idx-1]
+    aliases[alias] = target
+    save_json(ALIASES_FILE, aliases)
+    print(f"  ✓ '{alias}' → '{target}'")
+
+
+def remove_alias(aliases):
+    """Borra un alias."""
+    items = sorted(aliases.items())
+    if not items:
+        print("  No hay aliases.")
+        return
+
+    list_aliases(aliases, load_json(COSTS_FILE, {}))
+    try:
+        idx = int(input("\n  Número de alias a BORRAR (0=cancelar): ").strip())
+    except ValueError:
+        print("  Número inválido.")
+        return
+    if idx < 1 or idx > len(items):
+        if idx != 0:
+            print("  Fuera de rango.")
+        return
+
+    alias = items[idx-1][0]
+    del aliases[alias]
+    save_json(ALIASES_FILE, aliases)
+    print(f"  ✓ Alias '{alias}' borrado.")
+
+
+def alias_menu(costs, aliases):
+    """Submenú de gestión de aliases."""
+    while True:
+        print("\n── ALIASES ──")
+        print("  1. Listar aliases")
+        print("  2. Agregar alias")
+        print("  3. Borrar alias")
+        print("  4. Limpiar huérfanos (auto)")
+        print("  0. Volver")
+        opt = input("  > ").strip()
+
+        if opt == '1':
+            list_aliases(aliases, costs)
+        elif opt == '2':
+            add_alias(aliases, costs)
+        elif opt == '3':
+            remove_alias(aliases)
+        elif opt == '4':
+            cleaned = 0
+            for k in list(aliases):
+                if aliases[k] not in costs:
+                    del aliases[k]
+                    cleaned += 1
+            if cleaned:
+                save_json(ALIASES_FILE, aliases)
+            print(f"  ✓ {cleaned} aliases huérfanos limpiados.")
+        elif opt == '0':
+            break
+        else:
+            print("  Opción inválida.")
+
+
+# ─── Análisis ─────────────────────────────────────────
+
+def find_orphans(costs):
+    """Modelos en session_history.json sin precio en MODEL_COSTS."""
+    used = get_used_models()
+    sys.path.insert(0, str(SCRIPT_DIR))
+    from stats_common import normalize_model_name
+
+    orphans = {}
+    for model in sorted(used):
+        normalized = normalize_model_name(model)
+        if normalized == "unknown":
+            continue
+        if normalized not in costs:
+            orphans[model] = normalized
+
+    if not orphans:
+        print("\n  ✓ Todos los modelos en sesiones tienen precio.")
+        return
+
+    print(f"\n── MODELOS SIN PRECIO ({len(orphans)}) ──")
+    print(f"  {'MODELO EN SESIÓN':<45s} {'NORMALIZADO':<35s}")
+    print("─" * 82)
+    for raw, norm in sorted(orphans.items()):
+        print(f"  {pad(raw, 45)} {pad(norm, 35)}")
+
+    print("\n  ¿Agregar alguno? (número o 0 para volver)")
+    items = sorted(set(orphans.values()))
+    for i, name in enumerate(items, 1):
+        print(f"    {i:3d} {name}")
+    try:
+        idx = int(input("  > ").strip())
+    except ValueError:
+        return
+    if idx < 1 or idx > len(items):
+        return
+
+    name = items[idx-1]
+    print(f"\n  Agregando: {name}")
+    inp = get_price("Precio input ($/1M)")
+    out = get_price("Precio output ($/1M)")
+    cache_raw = input("  Precio cache ($/1M) [opcional]: ").strip()
+    entry = {"input": inp, "output": out}
+    if cache_raw:
+        try:
+            c = float(cache_raw)
+            if c >= 0:
+                entry["cache"] = c
+        except ValueError:
+            pass
+
+    costs[name] = entry
+    save_json(COSTS_FILE, costs)
+    print(f"  ✓ '{name}' agregado.")
+
+
+def find_unused(costs):
+    """Modelos con precio pero sin sesiones registradas."""
+    used_raw = get_used_models()
+    sys.path.insert(0, str(SCRIPT_DIR))
+    from stats_common import normalize_model_name
+
+    used_normalized = set()
+    for m in used_raw:
+        n = normalize_model_name(m)
+        if n != "unknown":
+            used_normalized.add(n)
+
+    unused = sorted(set(costs) - used_normalized)
+
+    if not unused:
+        print("\n  ✓ Todos los modelos tienen sesiones registradas.")
+        return
+
+    print(f"\n── MODELOS SIN USO ({len(unused)}) ──")
+    for i, name in enumerate(unused, 1):
+        c = costs[name]
+        cache = f" cache=${c['cache']:.4f}" if c.get('cache') is not None else ""
+        print(f"  {i:3d} {pad(name, 40)} in=${c['input']:<7.4f} out=${c['output']:<7.4f}{cache}")
+
+
+def search_models(costs, aliases):
+    """Busca modelos por substring."""
+    term = input("\n  Buscar: ").strip().lower()
+    if not term:
+        return
+
+    found = []
+    for name in costs:
+        if term in name:
+            found.append((name, costs[name], 'modelo'))
+    for alias, target in aliases.items():
+        if term in alias:
+            found.append((alias, {'input': costs[target]['input'],
+                                  'output': costs[target]['output'],
+                                  'cache': costs[target].get('cache')}, f'alias → {target}'))
+
+    if not found:
+        print("  Sin resultados.")
+        return
+
+    print(f"\n  Resultados ({len(found)}):")
+    print(f"  {'NOMBRE':<40s} {'IN':>8s} {'OUT':>8s} {'CACHE':>8s} {'TIPO'}")
+    print("─" * 80)
+    for name, c, kind in found:
+        inp = f"${c['input']:.4f}"
+        out = f"${c['output']:.4f}"
+        cache = f"${c['cache']:.4f}" if c.get('cache') is not None else "—"
+        print(f"  {pad(name, 40)} {inp:>8s} {out:>8s} {cache:>8s} {kind}")
+
+
+# ─── Main ──────────────────────────────────────────────
+
+def main():
+    costs = load_json(COSTS_FILE, {})
+    aliases = load_json(ALIASES_FILE, {})
+
+    while True:
+        print("\n┌──────────────────────────────────────────────────┐")
+        print(f"│        GESTOR DE MODELOS · session-stats         │")
+        print(f"├──────────────────────────────────────────────────┤")
+        print(f"│  1. Listar modelos ({len(costs)}){'':>29s}│")
+        print(f"│  2. Agregar modelo{'':>34s}│")
+        print(f"│  3. Editar modelo{'':>35s}│")
+        print(f"│  4. Borrar modelo{'':>35s}│")
+        print(f"│  5. Gestionar aliases ({len(aliases)}){'':>22s}│")
+        print(f"│  6. Buscar modelo{'':>35s}│")
+        print(f"│  7. Modelos sin precio (huérfanos){'':>17s}│")
+        print(f"│  8. Modelos sin uso{'':>33s}│")
+        print(f"│  0. Salir{'':>43s}│")
+        print(f"└──────────────────────────────────────────────────┘")
+        opt = input("  > ").strip()
+
+        if opt == '1':
+            list_models(costs, aliases)
+        elif opt == '2':
+            backup()
+            add_model(costs)
+        elif opt == '3':
+            backup()
+            edit_model(costs, aliases)
+        elif opt == '4':
+            backup()
+            delete_model(costs, aliases)
+            # Reload after potential alias cleanup
+            aliases = load_json(ALIASES_FILE, {})
+        elif opt == '5':
+            alias_menu(costs, aliases)
+            aliases = load_json(ALIASES_FILE, {})
+        elif opt == '6':
+            search_models(costs, aliases)
+        elif opt == '7':
+            find_orphans(costs)
+            costs = load_json(COSTS_FILE, {})
+        elif opt == '8':
+            find_unused(costs)
+        elif opt == '0':
+            print()
+            break
+        else:
+            print("  Opción inválida.")
+
+
+if __name__ == '__main__':
+    main()

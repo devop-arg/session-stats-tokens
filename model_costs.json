@@ -1,0 +1,149 @@
+{
+  "claude-haiku-4.5": {
+    "input": 1,
+    "output": 5
+  },
+  "claude-opus-4.5": {
+    "input": 5,
+    "output": 25
+  },
+  "claude-opus-4.6": {
+    "input": 5,
+    "output": 25
+  },
+  "claude-sonnet-4.5": {
+    "input": 3,
+    "output": 15
+  },
+  "codex-max": {
+    "input": 1.25,
+    "output": 10
+  },
+  "deepseek-v4-flash": {
+    "cache": 0.028,
+    "input": 0.14,
+    "output": 0.28
+  },
+  "deepseek-v4-pro": {
+    "cache": 0.145,
+    "input": 1.74,
+    "output": 3.48
+  },
+  "gemini-3-flash": {
+    "input": 0.5,
+    "output": 3
+  },
+  "gemini-3-pro": {
+    "input": 2,
+    "output": 12
+  },
+  "gemini-3.1-flash-image": {
+    "input": 0.5,
+    "output": 3.0
+  },
+  "gemini-3.1-flash-lite": {
+    "cache": 0.025,
+    "input": 0.25,
+    "output": 1.5
+  },
+  "gemini-3.1-pro": {
+    "cache": 0.2,
+    "input": 2,
+    "output": 12
+  },
+  "gemma-4-31b": {
+    "input": 0.15,
+    "output": 0.4
+  },
+  "glm-4.7": {
+    "cache": 0.195,
+    "input": 0.39,
+    "output": 1.75
+  },
+  "glm-4.7-flash": {
+    "cache": 0.01,
+    "input": 0.06,
+    "output": 0.4
+  },
+  "glm-5": {
+    "cache": 0.16,
+    "input": 0.8,
+    "output": 2.56
+  },
+  "glm-5.1": {
+    "cache": 0.26,
+    "input": 1.4,
+    "output": 4.4
+  },
+  "gpt-5-mini": {
+    "input": 0.25,
+    "output": 2
+  },
+  "gpt-5.1-codex-max": {
+    "input": 1.25,
+    "output": 10
+  },
+  "gpt-5.2": {
+    "input": 1.75,
+    "output": 14
+  },
+  "gpt-5.2-codex": {
+    "input": 1.75,
+    "output": 14
+  },
+  "gpt-5.3-codex": {
+    "input": 1.75,
+    "output": 14
+  },
+  "gpt-5.4": {
+    "input": 1.75,
+    "output": 14
+  },
+  "grok-code-fast-1-optimized-free": {
+    "cache": 0.02,
+    "input": 0.2,
+    "output": 1.5
+  },
+  "kimi-k2.5": {
+    "cache": 0.09,
+    "input": 0.5,
+    "output": 2.6
+  },
+  "mimo-v2-pro": {
+    "input": 1,
+    "output": 3
+  },
+  "minimax-m2.1": {
+    "input": 0.27,
+    "output": 0.95
+  },
+  "minimax-m2.5": {
+    "cache": 0.03,
+    "input": 0.3,
+    "output": 1.2
+  },
+  "minimax-m2.7": {
+    "cache": 0.06,
+    "input": 0.3,
+    "output": 1.2
+  },
+  "qwen3.6-plus": {
+    "cache": 0.5,
+    "input": 0.5,
+    "output": 3.0
+  },
+  "step-3.5-flash": {
+    "cache": 0.02,
+    "input": 0.1,
+    "output": 0.3
+  },
+  "trinity-large-preview": {
+    "input": 0.25,
+    "output": 1.0
+  },
+  "x-ai/grok-4.1-fast": {
+    "cache": 0.05,
+    "input": 0.2,
+    "output": 0.5
+  }
+}

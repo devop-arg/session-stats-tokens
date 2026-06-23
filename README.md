@@ -29,6 +29,7 @@ mkdir -p ~/.local/bin
 ln -sf "$(pwd)/session-stats" ~/.local/bin/session-stats
 ln -sf "$(pwd)/session-stats-history" ~/.local/bin/session-stats-history
 ln -sf "$(pwd)/session-stats-period" ~/.local/bin/session-stats-period
+ln -sf "$(pwd)/session-stats-models" ~/.local/bin/session-stats-models
 ```
 
 ## Usage
@@ -39,7 +40,7 @@ session-stats --capture-all # Persist ALL sessions from all sources
 session-stats-history       # Full historical summary
 session-stats-period day    # Today
 session-stats-period week   # Last 7 days
-session-stats-period month  # Last 30 days
+session-stats-models        # Interactive model/price manager
 ```
 
 ### Sample Output
@@ -67,8 +68,11 @@ Prevents data loss when chat sessions are deleted:
 | `session-stats` | Main script: current session + `--capture-all` |
 | `session-stats-history` | Full historical summary |
 | `session-stats-period` | Filter by day/week/month |
+| `session-stats-models` | Interactive model/price/alias manager |
 | `stats_common.py` | Shared module: model costs, DB readers, cost calculation |
 | `session_history.json` | Persistent history (auto-maintained, not tracked) |
+| `model_costs.json` | Model prices (managed by `session-stats-models`) |
+| `model_aliases.json` | Model name aliases (managed by `session-stats-models`) |
 
 ## Data Sources
 
@@ -82,27 +86,13 @@ Prevents data loss when chat sessions are deleted:
 
 ## Model Pricing
 
-Costs per 1M tokens (USD). Some models include cache pricing.
+Costs per 1M tokens (USD). Some models include cache pricing. Managed interactively via:
 
-| Model | Input | Output | Cache |
-|-------|-------|--------|-------|
-| Claude Opus 4.5/4.6 | $5.00 | $25.00 | — |
-| Claude Sonnet 4.5 | $3.00 | $15.00 | — |
-| Claude Haiku 4.5 | $1.00 | $5.00 | — |
-| Gemini 3 Pro | $2.00 | $12.00 | — |
-| Gemini 3 Flash | $0.50 | $3.00 | — |
-| GPT 5.2/5.3/5.4 Codex | $1.75 | $14.00 | — |
-| GPT 5 Mini | $0.25 | $2.00 | — |
-| GLM-4.7 | $0.39 | $1.75 | $0.19 |
-| GLM-5 | $0.80 | $2.56 | $0.16 |
-| Kimi K2.5 | $0.50 | $2.60 | $0.09 |
-| Minimax M2.1 | $0.27 | $0.95 | — |
-| Minimax M2.5 | $0.30 | $1.20 | $0.03 |
-| Grok 4.1 Fast | $0.20 | $0.50 | $0.05 |
-| DeepSeek V4 Pro | $0.53 | $2.19 | — |
-| DeepSeek V4 Flash | $0.14 | $0.60 | — |
+```bash
+session-stats-models
+```
 
-**Note:** Cache tokens are added to input for cost calculation.
+Features: add/edit/delete models, manage aliases, detect orphan models without pricing, list unused models. Prices stored in `model_costs.json`, aliases in `model_aliases.json`.
 
 ## Troubleshooting
 

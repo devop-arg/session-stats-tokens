@@ -17,3 +17,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Backups (automatic and manual)
+*.bak.*
+model_backups/
+__pycache__/

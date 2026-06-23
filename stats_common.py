@@ -18,9 +18,13 @@ OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
 KILOCODE_STATE_FILE = Path.home() / ".kilocode/cli/global/global-state.json"
 KILOCODE_TASKS_DIR = Path.home() / ".kilocode/cli/global/tasks"
 
+# Directorio del script (para JSON de modelos)
+SCRIPT_DIR = Path(__file__).resolve().parent
+MODEL_COSTS_FILE = SCRIPT_DIR / "model_costs.json"
+MODEL_ALIASES_FILE = SCRIPT_DIR / "model_aliases.json"
 
 
-# Costos por 1M tokens (USD)
+# Costos por 1M tokens (USD) — valores por defecto, pisados por JSON si existe
 MODEL_COSTS = {
     "glm-4.7": {"input": 0.39, "output": 1.75, "cache": 0.195},
     "glm-4.7-flash": {"input": 0.06, "output": 0.4, "cache": 0.01},
@@ -185,6 +189,25 @@ MODEL_ALIASES = {
     "deepseek-v4-pro-free": "deepseek-v4-pro",
     "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
 }
+
+
+def _load_model_overrides():
+    """Pisa MODEL_COSTS y MODEL_ALIASES desde JSON si los archivos existen."""
+    for var_name, file_path in [
+        ("MODEL_COSTS", MODEL_COSTS_FILE),
+        ("MODEL_ALIASES", MODEL_ALIASES_FILE),
+    ]:
+        try:
+            if file_path.exists():
+                with open(file_path) as fh:
+                    data = json.load(fh)
+                globals()[var_name].clear()
+                globals()[var_name].update(data)
+        except Exception:
+            pass
+
+
+_load_model_overrides()
 
 
 def normalize_model_name(model):
