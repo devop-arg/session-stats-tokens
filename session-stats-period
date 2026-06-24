@@ -16,6 +16,7 @@ import sys
 import datetime
 from pathlib import Path
 from io import StringIO
+from stats_common import normalize_model_name
 
 STATS_DIR = Path("/home/capw/scripts/session-stats")
 WIDTH = 78
@@ -65,16 +66,7 @@ def print_footer(out=None):
     else:
         out.write("└" + "─" * (WIDTH - 2) + "┘\n")
 
-def shorten_name(model):
-    short = model.replace("antigravity-", "").replace("-thinking-high", "").replace("claude-opus-4-5", "claude-opus-4.5")
-    if "/" in short:
-        short = short.split("/", 1)[0]
-    short = short.replace("-thinking", "")
-    short = short.replace("grok-code-fast-1-optimized-free", "grok-code")
-    short = short.replace("x-ai", "grok-4.1-fast")
-    short = short.replace("deepseek-v4-flash", "ds-v4-flash")
-    short = short.replace("deepseek-v4-pro", "ds-v4-pro")
-    return short
+
 
 def render_stats(label, total_sessions, total_requests, total_input, total_cache, total_output, total_cost, grouped):
     paid = []
@@ -127,7 +119,7 @@ def collect_models(sessions):
     grouped = {}
     for ses in sessions:
         for model, mdata in ses.get("by_model", {}).items():
-            key = shorten_name(model)
+            key = normalize_model_name(model)
             if key not in grouped:
                 grouped[key] = {"requests": 0, "input": 0, "output": 0, "cache": 0, "cost": 0.0}
             grouped[key]["requests"] += mdata.get("requests", 0)

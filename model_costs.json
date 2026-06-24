@@ -125,6 +125,11 @@
     "input": 2.5,
     "output": 15.0
   },
+  "gpt-5.4-mini": {
+    "cache": 0.075,
+    "input": 0.75,
+    "output": 4.5
+  },
   "grok-code-fast-1-optimized-free": {
     "cache": 0.02,
     "input": 0.2,
