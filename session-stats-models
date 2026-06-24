@@ -4,12 +4,13 @@
 import json
 import os
 import sys
+import sqlite3
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 COSTS_FILE = SCRIPT_DIR / "model_costs.json"
 ALIASES_FILE = SCRIPT_DIR / "model_aliases.json"
-HISTORY_FILE = SCRIPT_DIR / "session_history.json"
+DB_PATH = SCRIPT_DIR / "session_history.db"
 BACKUP_DIR = SCRIPT_DIR / "model_backups"
 PROTECTED_ALIASES = {"historical_adjustment"}
 
@@ -39,17 +40,13 @@ def save_json(path, data):
 
 
 def get_used_models():
-    """Extrae modelos usados desde session_history.json."""
-    history = load_json(HISTORY_FILE, {})
+    """Extrae modelos usados desde SQLite."""
     models = set()
-    for key, entry in history.items():
-        if key == "historical_total":
-            continue
-        if isinstance(entry, dict):
-            # Cada sesión tiene 'by_model': {modelo: {requests, input, output, cost}}
-            by_model = entry.get("by_model", {})
-            if isinstance(by_model, dict):
-                models.update(by_model.keys())
+    if DB_PATH.exists():
+        conn = sqlite3.connect(str(DB_PATH))
+        rows = conn.execute("SELECT DISTINCT model FROM model_usage").fetchall()
+        models = {r[0] for r in rows}
+        conn.close()
     return models
 
 
@@ -453,40 +450,40 @@ def search_models(costs, aliases):
 # ─── Recalcular histórico ──────────────────────────────
 
 def recalculate_history_costs():
-    """Recalcula costos de todas las sesiones en session_history.json usando precios actuales."""
-    if not HISTORY_FILE.exists():
+    """Recalcula costos de todas las sesiones en SQLite usando precios actuales."""
+    if not DB_PATH.exists():
         print("  No hay historial para recalcular.")
         return
 
-    sys.path.insert(0, str(SCRIPT_DIR))
+    import sys as _sys
+    _sys.path.insert(0, str(SCRIPT_DIR))
     from stats_common import normalize_model_name, calculate_cost
 
-    history = load_json(HISTORY_FILE, {})
-    session_keys = [k for k in history if k != "historical_total"]
+    conn = sqlite3.connect(str(DB_PATH))
+    mrows = conn.execute("SELECT id, session_id, model, input_tokens, output_tokens, cache_tokens, cost FROM model_usage").fetchall()
     updated = 0
 
-    for key in session_keys:
-        session = history[key]
-        by_model = session.get("by_model", {})
-        for model, mdata in by_model.items():
-            old_cost = mdata.get("cost", 0)
-            new_cost = calculate_cost(
-                model,
-                mdata.get("input", 0),
-                mdata.get("output", 0),
-                mdata.get("cache", 0),
-            )
-            if abs(new_cost - old_cost) > 0.0001:
-                mdata["cost"] = new_cost
-                updated += 1
+    for mr in mrows:
+        mu_id = mr[0]
+        model = mr[2]
+        inp = mr[3]
+        out = mr[4]
+        cache = mr[5]
+        old_cost = mr[6]
+        new_cost = calculate_cost(model, inp, out, cache)
+        if abs(new_cost - old_cost) > 0.0001:
+            conn.execute("UPDATE model_usage SET cost=? WHERE id=?", (new_cost, mu_id))
+            updated += 1
 
     if updated:
-        save_json(HISTORY_FILE, history)
-        print(f"  ✓ Recalculados {updated} costos en {len(session_keys)} sesiones.")
+        conn.commit()
+        conn.execute("UPDATE sessions SET cost = (SELECT COALESCE(SUM(cost), 0) FROM model_usage WHERE session_id = sessions.id)")
+        conn.commit()
+        print(f"  \u2713 Recalculados {updated} costos de modelo.")
     else:
-        print("  ✓ Sin cambios (todos los costos ya coinciden).")
+        print("  \u2713 Sin cambios (todos los costos ya coinciden).")
 
-    return history
+    conn.close()
 
 
 def ask_recalculate():

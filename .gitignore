@@ -1,6 +1,3 @@
-# Cache and data files (contain sensitive data)
-session_history.json
-
 # Node modules (not needed - uses built-in modules only)
 node_modules/
 
@@ -18,7 +15,7 @@ Thumbs.db
 # Logs
 *.log
 
-# Backups (automatic and manual)
+# Old backups (not tracked)
 *.bak.*
 model_backups/
 __pycache__/

@@ -8,7 +8,7 @@ Features:
 - Auto-detects the most recently active session across all tools.
 - Tracks input/output tokens per model.
 - Calculates estimated costs based on hardcoded prices.
-- Maintains a persistent history per session.
+- Maintains a persistent history per session in SQLite (session_history.db).
 """
 
 import json
@@ -19,7 +19,7 @@ import sys
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from stats_common import MODEL_COSTS, MODEL_ALIASES, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats
+from stats_common import MODEL_COSTS, MODEL_ALIASES, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, save_session, init_db, _parse_timestamp, _detect_source, DB_PATH
 
 KILO_DB_PATH = Path.home() / ".local/share/kilo/kilo.db"
 OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
@@ -314,42 +314,21 @@ def merge_model_stats(by_model):
         merged[normalized]["cache"] += data.get("cache", 0)
     return merged
 
-HISTORY_FILE = SCRIPT_DIR / "session_history.json"
-
 def update_history(session_id, requests, input_tokens, output_tokens, cost, by_model, date=None):
-    """Updates the history and returns the grand total."""
-    data = {}
-    if HISTORY_FILE.exists():
-        try:
-            with open(HISTORY_FILE, 'r') as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
-            pass
-    
-    if requests > 0 or session_id not in data:
-        data[session_id] = {
-            "date": date or datetime.datetime.now().isoformat(),
-            "requests": requests,
-            "input": input_tokens,
-            "output": output_tokens,
-            "cost": cost,
-            "by_model": by_model
-        }
-    
+    """Saves session to SQLite history (read-only from SQLite store)."""
+    ts = _parse_timestamp(date) if date else int(datetime.datetime.now().timestamp())
+    cache_tokens = sum(m.get("cache", 0) for m in by_model.values())
+    reasoning_tokens = sum(m.get("reasoning", 0) for m in by_model.values())
+    source = session_id.split("_")[0] if "_" in session_id else "unknown"
+    if source not in ("codex", "kilocode", "kilo", "hermes", "opencode"):
+        source = "unknown"
     try:
-        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(HISTORY_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
+        save_session(session_id, source, date or datetime.datetime.now().isoformat(),
+                     ts, requests, input_tokens, output_tokens,
+                     cache_tokens, reasoning_tokens, cost,
+                     by_model, DB_PATH)
     except Exception:
         pass
-
-    total_historical_cost = sum(item.get("cost", 0) for key, item in data.items() if key != "historical_total")
-    historical_total_cost = data.get("historical_total", {}).get("cost", 0)
-    total_historical_cost += historical_total_cost
-    base_sessions = data.get("historical_total", {}).get("sessions", 0)
-    total_sessions = base_sessions + len([k for k in data.keys() if k != "historical_total"])
-    
-    return total_historical_cost, total_sessions
 
 def capture_all_sessions():
     """Captura y persiste TODAS las sesiones de todas las fuentes (Kilo, OpenCode, Codex, Hermes).
@@ -357,23 +336,43 @@ def capture_all_sessions():
     Idempotente: ejecutarla multiples veces no duplica entradas.
     Retorna cantidad de sesiones nuevas capturadas.
     """
-    data = {}
-    if HISTORY_FILE.exists():
+    existing_keys = set()
+    if DB_PATH.exists():
         try:
-            with open(HISTORY_FILE, 'r') as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
+            conn = sqlite3.connect(str(DB_PATH))
+            rows = conn.execute("SELECT id FROM sessions").fetchall()
+            existing_keys = {r[0] for r in rows}
+            conn.close()
+        except Exception:
             pass
 
-    existing_keys = set(k for k in data.keys() if k != "historical_total")
     new_count = 0
 
-    def _add_entry(sid, entry):
+    def _save_if_new(sid, entry):
         nonlocal new_count
-        if sid not in existing_keys and entry:
-            data[sid] = entry
-            existing_keys.add(sid)
+        if sid in existing_keys or not entry:
+            return
+        existing_keys.add(sid)
+        by_model = entry.get("by_model", {})
+        if not by_model:
+            return
+        try:
+            ts = _parse_timestamp(entry.get("date", ""))
+            cache_tokens = sum(m.get("cache", 0) for m in by_model.values())
+            reasoning_tokens = sum(m.get("reasoning", 0) for m in by_model.values())
+            save_session(
+                sid, _detect_source(sid),
+                entry.get("date", ""), ts,
+                entry.get("requests", 0),
+                entry.get("input", 0),
+                entry.get("output", 0),
+                cache_tokens, reasoning_tokens,
+                entry.get("cost", 0.0),
+                by_model, DB_PATH
+            )
             new_count += 1
+        except Exception:
+            pass
 
     # --- Kilo ---
     for sess in get_kilo_sessions():
@@ -382,7 +381,7 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid)
         if stats["by_model"]:
-            _add_entry(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000))
+            _save_if_new(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000))
 
     # --- OpenCode SQLite ---
     for sess in get_opencode_sessions():
@@ -393,7 +392,7 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid, OPENCODE_DB_PATH)
         if stats["by_model"]:
-            _add_entry(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000))
+            _save_if_new(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000))
 
     # --- Codex ---
     for sess_file in get_codex_sessions():
@@ -405,7 +404,7 @@ def capture_all_sessions():
             continue
         normalized = normalize_model_name(stats["model"])
         cost = calculate_cost(stats["model"], stats["input"], stats["output"], stats["cache"])
-        _add_entry(sid, {
+        _save_if_new(sid, {
             "date": stats.get("date", ""),
             "requests": stats["requests"],
             "input": stats["input"],
@@ -430,7 +429,7 @@ def capture_all_sessions():
             c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
             session_cost += c
             by_model_with_cost[model] = {**mdata, "cost": c}
-        _add_entry(sid, {
+        _save_if_new(sid, {
             "date": sess["date"],
             "requests": sess["requests"],
             "input": total_input,
@@ -438,11 +437,6 @@ def capture_all_sessions():
             "cost": session_cost,
             "by_model": by_model_with_cost
         })
-
-    if new_count > 0:
-        HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        with open(HISTORY_FILE, 'w') as f:
-            json.dump(data, f, indent=2)
 
     return new_count
 
@@ -554,7 +548,7 @@ def main():
     )
     
     # Recalcular TODO desde tokens (misma lógica que session-stats-history)
-    hist = recalculate_historical_cost(HISTORY_FILE)
+    hist = recalculate_historical_cost()
     total_historical_cost = hist["total_cost"]
     total_sessions = hist["total_sessions"]
     

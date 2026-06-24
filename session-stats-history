@@ -19,11 +19,10 @@ from collections import defaultdict
 STATS_DIR = Path("/home/capw/scripts/session-stats")
 sys.path.insert(0, str(STATS_DIR))
 from stats_common import (
-    recalculate_historical_cost, normalize_model_name, calculate_cost,
+    normalize_model_name, calculate_cost,
     get_codex_sessions, has_real_usage_codex, get_codex_session_stats,
-    get_opencode_sqlite_sessions,
+    get_opencode_sqlite_sessions, get_hermes_sessions, get_hermes_session_stats,
 )
-from stats_common import OPENCODE_DB_PATH
 
 WIDTH = 84
 
@@ -113,27 +112,17 @@ def date_to_mmyy(date_str):
 
 
 def load_full_data_by_month():
-    """Replica la logica de recalculate_historical_cost pero agrupando por mes.
+    """Agrupa sesiones por mes desde SQLite + fuentes externas (Codex, OpenCode, Hermes).
 
     Retorna dict {yymm: {"sessions": N, "requests": N, "input": N, "output": N, "cache": N, "by_model": {model: {requests, input, output, cache}}}}
     Tambien retorna "historical_adjustment" float que se suma al costo total.
     """
-    history_file = STATS_DIR / "session_history.json"
-    data = {}
-    if history_file.exists():
-        try:
-            with open(history_file, "r") as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
-            pass
-
     monthly = defaultdict(lambda: {
         "sessions": 0, "requests": 0, "input": 0, "output": 0, "cache": 0,
         "by_model": defaultdict(lambda: {"requests": 0, "input": 0, "output": 0, "cache": 0})
     })
     historical_adjustment = 0.0
-
-    existing_keys = [k for k in data.keys() if k != "historical_total"]
+    existing_sids = set()
 
     def add_to_month(yymm, model, reqs, inp, out, cache):
         monthly[yymm]["requests"] += reqs
@@ -145,64 +134,80 @@ def load_full_data_by_month():
         monthly[yymm]["by_model"][model]["output"] += out
         monthly[yymm]["by_model"][model]["cache"] += cache
 
-    # 1. Historical total (sesiones pre-acumuladas con fecha 2025-01-01)
-    if "historical_total" in data:
-        ht = data["historical_total"]
-        ht_sessions = ht.get("sessions", 0)
-        ht_date = ht.get("date", "2025-01-01T00:00:00")
-        ht_mmyy = date_to_mmyy(ht_date) or "0125"
-        monthly[ht_mmyy]["sessions"] += ht_sessions
+    db_path = STATS_DIR / "session_history.db"
+    if db_path.exists():
+        conn = sqlite3.connect(str(db_path))
 
-        historical_models_cost = 0.0
-        for model, mdata in ht.get("by_model", {}).items():
-            normalized = normalize_model_name(model)
-            reqs = mdata.get("requests", 0)
-            inp = mdata.get("input", 0)
-            out = mdata.get("output", 0)
-            cache = mdata.get("cache", 0)
-            add_to_month(ht_mmyy, normalized, reqs, inp, out, cache)
-            historical_models_cost += calculate_cost(normalized, inp, out, cache)
+        # 1. Sessions from SQLite
+        srows = conn.execute("""SELECT id, source, date, requests, input_tokens,
+            output_tokens, cache_tokens, reasoning_tokens, cost
+            FROM sessions ORDER BY timestamp""").fetchall()
 
-        ht_cost = ht.get("cost", 0)
-        historical_adjustment = ht_cost - historical_models_cost
+        for srow in srows:
+            sid, source, date, reqs, inp, out, cache, reasoning, cost = srow
+            existing_sids.add(sid)
 
-    # 2. Sesiones individuales del JSON
-    for key in existing_keys:
-        session = data[key]
-        mmyy = date_to_mmyy(session.get("date", ""))
-        if not mmyy:
-            continue
-        monthly[mmyy]["sessions"] += 1
+            if sid == "historical_total":
+                ht_sessions = reasoning  # stored in reasoning_tokens during migration
+                ht_mmyy = date_to_mmyy(date) or "0125"
+                monthly[ht_mmyy]["sessions"] += ht_sessions
+                mrows = conn.execute(
+                    "SELECT model, requests, input_tokens, output_tokens, cache_tokens, cost FROM model_usage WHERE session_id=?", (sid,)
+                ).fetchall()
+                historical_models_cost = 0.0
+                for mr in mrows:
+                    model, m_req, m_in, m_out, m_cache, m_cost = mr
+                    normalized = normalize_model_name(model)
+                    add_to_month(ht_mmyy, normalized, m_req, m_in, m_out, m_cache)
+                    historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache)
+                historical_adjustment = cost - historical_models_cost
+                continue
 
-        by_model = session.get("by_model", {})
-        if by_model:
-            for model, mdata in by_model.items():
-                normalized = normalize_model_name(model)
-                add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
-        else:
-            reqs = session.get("requests", 0)
-            inp = session.get("input", 0)
-            out = session.get("output", 0)
-            cache = session.get("cache", 0)
+            if sid == "kilocode_legacy":
+                mmyy = date_to_mmyy(date) or "0125"
+                monthly[mmyy]["sessions"] += 1
+                mrows = conn.execute(
+                    "SELECT model, requests, input_tokens, output_tokens, cache_tokens FROM model_usage WHERE session_id=?", (sid,)
+                ).fetchall()
+                for mr in mrows:
+                    model, m_req, m_in, m_out, m_cache = mr
+                    normalized = normalize_model_name(model)
+                    add_to_month(mmyy, normalized, m_req, m_in, m_out, m_cache)
+                continue
+
+            if sid == "legacy_price_adjustment":
+                # Ajuste de precio legacy: sinonimo de costo, no cuenta como sesion ni aporta tokens
+                continue
+
+            mmyy = date_to_mmyy(date)
+            if not mmyy:
+                continue
+            monthly[mmyy]["sessions"] += 1
             monthly[mmyy]["requests"] += reqs
             monthly[mmyy]["input"] += inp
             monthly[mmyy]["output"] += out
             monthly[mmyy]["cache"] += cache
-            model_name = session.get("model", "unknown")
-            normalized = normalize_model_name(model_name)
-            add_to_month(mmyy, normalized, reqs, inp, out, cache)
 
-    # 3. Sesiones Codex que NO estan en el JSON
-    existing_codex_ids = {k.replace("codex_", "") for k in existing_keys if k.startswith("codex_")}
-    codex_total_sessions = 0
+            mrows = conn.execute(
+                "SELECT model, requests, input_tokens, output_tokens, cache_tokens FROM model_usage WHERE session_id=?", (sid,)
+            ).fetchall()
+            for mr in mrows:
+                model, m_req, m_in, m_out, m_cache = mr
+                normalized = normalize_model_name(model)
+                add_to_month(mmyy, normalized, m_req, m_in, m_out, m_cache)
+
+        conn.close()
+
+    # 2. Codex sessions not yet in SQLite
+    existing_codex_ids = {s.replace("codex_", "") for s in existing_sids if s.startswith("codex_")}
     for sess_file in get_codex_sessions():
         if not has_real_usage_codex(sess_file):
             continue
         stats = get_codex_session_stats(sess_file)
         sid = stats.get("session_id", "")
-        if sid and sid in existing_codex_ids:
+        cid = "codex_" + sid if sid else "codex_" + sess_file.stem
+        if cid in existing_sids:
             continue
-        codex_total_sessions += 1
         mmyy = date_to_mmyy(stats.get("date", ""))
         if not mmyy:
             continue
@@ -214,64 +219,50 @@ def load_full_data_by_month():
         normalized = normalize_model_name(stats["model"])
         add_to_month(mmyy, normalized, stats["requests"], stats["input"], stats["output"], stats["cache"])
 
-    # 4. Sesiones OpenCode SQLite que NO estan en el JSON (leo directo el DB para tener fechas)
+    # 3. OpenCode SQLite sessions not yet in SQLite
     opencode_sqlite = get_opencode_sqlite_sessions()
-    session_keys_set = set(existing_keys)
-    if OPENCODE_DB_PATH.exists():
-        try:
-            conn = sqlite3.connect(str(OPENCODE_DB_PATH))
-            cursor = conn.cursor()
-            cursor.execute('SELECT id, time_updated FROM session ORDER BY time_updated DESC')
-            for sid, time_upd in cursor.fetchall():
-                if sid in session_keys_set:
-                    continue
-                stats = opencode_sqlite.get(sid, {})
-                if not stats:
-                    continue
-                try:
-                    date_str = datetime.datetime.fromtimestamp(time_upd / 1000).isoformat()
-                except Exception:
-                    date_str = ""
-                # Override with real date
-                mmyy = date_to_mmyy(date_str)
-                if not mmyy:
-                    continue
-                monthly[mmyy]["sessions"] += 1
-                monthly[mmyy]["requests"] += stats.get("requests", 0)
-                monthly[mmyy]["input"] += stats.get("input", 0)
-                monthly[mmyy]["output"] += stats.get("output", 0)
-                monthly[mmyy]["cache"] += stats.get("cache", 0)
-                by_model = stats.get("by_model", {})
-                if by_model:
-                    for model, mdata in by_model.items():
-                        normalized = normalize_model_name(model)
-                        add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
-                else:
-                    normalized = normalize_model_name(stats.get("model", "unknown"))
-                    add_to_month(mmyy, normalized, stats.get("requests", 0), stats.get("input", 0), stats.get("output", 0), stats.get("cache", 0))
-            conn.close()
-        except Exception:
-            pass
-    else:
-        for sid, stats in opencode_sqlite.items():
-            if sid in session_keys_set:
-                continue
-            mmyy = date_to_mmyy(stats.get("date", ""))
-            if not mmyy:
-                continue
-            monthly[mmyy]["sessions"] += 1
-            monthly[mmyy]["requests"] += stats.get("requests", 0)
-            monthly[mmyy]["input"] += stats.get("input", 0)
-            monthly[mmyy]["output"] += stats.get("output", 0)
-            monthly[mmyy]["cache"] += stats.get("cache", 0)
-            by_model = stats.get("by_model", {})
-            if by_model:
-                for model, mdata in by_model.items():
-                    normalized = normalize_model_name(model)
-                    add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
-            else:
-                normalized = normalize_model_name(stats.get("model", "unknown"))
-                add_to_month(mmyy, normalized, stats.get("requests", 0), stats.get("input", 0), stats.get("output", 0), stats.get("cache", 0))
+    for sid, stats in opencode_sqlite.items():
+        if sid in existing_sids:
+            continue
+        date_str = stats.get("date", "")
+        mmyy = date_to_mmyy(date_str)
+        if not mmyy:
+            continue
+        monthly[mmyy]["sessions"] += 1
+        monthly[mmyy]["requests"] += stats.get("requests", 0)
+        monthly[mmyy]["input"] += stats.get("input", 0)
+        monthly[mmyy]["output"] += stats.get("output", 0)
+        monthly[mmyy]["cache"] += stats.get("cache", 0)
+        by_model = stats.get("by_model", {})
+        if by_model:
+            for model, mdata in by_model.items():
+                normalized = normalize_model_name(model)
+                add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
+        else:
+            normalized = normalize_model_name(stats.get("model", "unknown"))
+            add_to_month(mmyy, normalized, stats.get("requests", 0), stats.get("input", 0), stats.get("output", 0), stats.get("cache", 0))
+
+    # 4. Hermes sessions not yet in SQLite
+    for sess in get_hermes_sessions():
+        sid = sess["id"]
+        if sid in existing_sids:
+            continue
+        mmyy = date_to_mmyy(sess.get("date", ""))
+        if not mmyy:
+            continue
+        monthly[mmyy]["sessions"] += 1
+        monthly[mmyy]["requests"] += sess.get("requests", 0)
+        monthly[mmyy]["input"] += sess.get("input", 0)
+        monthly[mmyy]["output"] += sess.get("output", 0)
+        monthly[mmyy]["cache"] += sess.get("cache", 0)
+        by_model = sess.get("by_model", {})
+        if by_model:
+            for model, mdata in by_model.items():
+                normalized = normalize_model_name(model)
+                add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
+        else:
+            normalized = normalize_model_name(sess.get("model", "unknown"))
+            add_to_month(mmyy, normalized, sess.get("requests", 0), sess.get("input", 0), sess.get("output", 0), sess.get("cache", 0))
 
     return monthly, historical_adjustment
 

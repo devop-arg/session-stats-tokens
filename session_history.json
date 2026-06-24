@@ -1,0 +1,5356 @@
+{
+  "019d1d9d-6fa6-7543-a105-f64fa45922ac": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 15278336,
+        "cost": 49.7868165,
+        "input": 17246347,
+        "output": 190091,
+        "requests": 14
+      }
+    },
+    "cost": 32.84238125,
+    "date": "2026-03-24T02:12:30.264Z",
+    "input": 17246347,
+    "output": 190091,
+    "requests": 14
+  },
+  "019d30de-367c-7bd0-aaef-b73f5d418a9d": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 41728256,
+        "cost": 124.677289,
+        "input": 44305478,
+        "output": 232102,
+        "requests": 31
+      }
+    },
+    "cost": 80.7840145,
+    "date": "2026-03-27T19:56:02.568Z",
+    "input": 44305478,
+    "output": 232102,
+    "requests": 31
+  },
+  "20260415_211836_fc9936": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 3920078,
+        "cost": 0.43605077999999997,
+        "input": 535087,
+        "output": 33600,
+        "requests": 68
+      }
+    },
+    "cost": 0.43605077999999997,
+    "date": "2026-04-15T21:18:36.613362",
+    "input": 535087,
+    "output": 33600,
+    "requests": 68
+  },
+  "20260415_225626_2ce809": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 2419338,
+        "cost": 0.23724768000000002,
+        "input": 260110,
+        "output": 11712,
+        "requests": 46
+      }
+    },
+    "cost": 0.23724768000000002,
+    "date": "2026-04-15T22:56:26.450835",
+    "input": 260110,
+    "output": 11712,
+    "requests": 46
+  },
+  "20260415_235239_4e9bee": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 1323625,
+        "cost": 0.162387,
+        "input": 248013,
+        "output": 7138,
+        "requests": 49
+      }
+    },
+    "cost": 0.162387,
+    "date": "2026-04-15T23:52:39.375538",
+    "input": 248013,
+    "output": 7138,
+    "requests": 49
+  },
+  "20260416_090424_69bdc1": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 113471,
+        "cost": 0.00668445,
+        "input": 40315,
+        "output": 1593,
+        "requests": 8
+      }
+    },
+    "cost": 0.00668445,
+    "date": "2026-04-16T09:06:34.613147",
+    "input": 40315,
+    "output": 1593,
+    "requests": 8
+  },
+  "20260416_132732_36d27d": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 463812,
+        "cost": 0.03129576,
+        "input": 44662,
+        "output": 3319,
+        "requests": 27
+      }
+    },
+    "cost": 0.03129576,
+    "date": "2026-04-16T13:40:24.349049",
+    "input": 44662,
+    "output": 3319,
+    "requests": 27
+  },
+  "20260417_181702_ca1192": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 2727647,
+        "cost": 0.21108912000000002,
+        "input": 121897,
+        "output": 9051,
+        "requests": 47
+      }
+    },
+    "cost": 0.21108912000000002,
+    "date": "2026-04-17T18:17:20.423286",
+    "input": 121897,
+    "output": 9051,
+    "requests": 47
+  },
+  "20260425_093832_df13ff": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 1583052,
+        "cost": 0.13626072,
+        "input": 94052,
+        "output": 10885,
+        "requests": 38
+      }
+    },
+    "cache": 1583052,
+    "cost": 0.13626072,
+    "date": "2026-04-25T09:42:35.230006",
+    "input": 94052,
+    "output": 10885,
+    "requests": 38
+  },
+  "20260425_100446_81fe7d": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 202240,
+        "cost": 0.0050028600000000005,
+        "input": 27407,
+        "output": 1997,
+        "requests": 10
+      }
+    },
+    "cache": 202240,
+    "cost": 0.010058860000000001,
+    "date": "2026-04-25T10:05:25.801408",
+    "input": 27407,
+    "output": 1997,
+    "requests": 10
+  },
+  "20260425_100959_a392c0": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 143616,
+        "cost": 0.005290668000000001,
+        "input": 29927,
+        "output": 2393,
+        "requests": 8
+      }
+    },
+    "cache": 143616,
+    "cost": 0.008881068,
+    "date": "2026-04-25T10:11:18.592204",
+    "input": 29927,
+    "output": 2393,
+    "requests": 8
+  },
+  "20260521_183319_d9d5d5": {
+    "by_model": {
+      "deepseek-v4-pro": {
+        "cache": 3089792,
+        "cost": 0.059008180400000006,
+        "input": 59782,
+        "output": 24794,
+        "requests": 53
+      }
+    },
+    "cache": 3089792,
+    "cost": 0.6383236400000001,
+    "date": "2026-05-21T18:36:22.989390",
+    "input": 59782,
+    "output": 24794,
+    "requests": 53
+  },
+  "20260521_191211_0fe8b9": {
+    "by_model": {
+      "deepseek-v4-pro": {
+        "cache": 4109184,
+        "cost": 0.0774881508,
+        "input": 76908,
+        "output": 33137,
+        "requests": 62
+      }
+    },
+    "cost": 0.84496836,
+    "date": "2026-05-21T19:12:11.254044",
+    "input": 76908,
+    "output": 33137,
+    "requests": 62
+  },
+  "20260527_175559_4d1b46": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 9462912,
+        "cost": 0.192636036,
+        "input": 1114843,
+        "output": 29176,
+        "requests": 116
+      }
+    },
+    "cost": 0.42920883600000004,
+    "date": "2026-05-27T17:58:57.309711",
+    "input": 1114843,
+    "output": 29176,
+    "requests": 116
+  },
+  "20260527_191651_267e7a": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 0,
+        "cost": 0.00281694,
+        "input": 19909,
+        "output": 106,
+        "requests": 1
+      }
+    },
+    "cost": 0.00281694,
+    "date": "2026-05-27T19:16:51.677559",
+    "input": 19909,
+    "output": 106,
+    "requests": 1
+  },
+  "20260530_135615_ff752b": {
+    "by_model": {
+      "stepfun/step-3.7-flash": {
+        "cache": 128,
+        "cost": 0.0039074700000000006,
+        "input": 18839,
+        "output": 117,
+        "requests": 1
+      }
+    },
+    "cache": 128,
+    "cost": 0,
+    "date": "2026-05-30T13:56:17.815205",
+    "input": 18839,
+    "output": 117,
+    "requests": 1
+  },
+  "20260531_003812_1e435a": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 4227328,
+        "cost": 0.028995204000000004,
+        "input": 80875,
+        "output": 17824,
+        "requests": 60
+      }
+    },
+    "cache": 4227328,
+    "cost": 0.134678404,
+    "date": "2026-05-31T00:39:08.509258",
+    "input": 80875,
+    "output": 17824,
+    "requests": 60
+  },
+  "20260601_105715_14cd7e": {
+    "by_model": {
+      "stepfun/step-3.7-flash": {
+        "cache": 768,
+        "cost": 0.0037714700000000007,
+        "input": 18238,
+        "output": 81,
+        "requests": 1
+      }
+    },
+    "cache": 768,
+    "cost": 0,
+    "date": "2026-06-01T10:59:04.531576",
+    "input": 18238,
+    "output": 81,
+    "requests": 1
+  },
+  "20260603_121147_dd664d": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 2473099,
+        "cost": 1.4055594999999999,
+        "input": 155032,
+        "output": 30498,
+        "requests": 49
+      }
+    },
+    "cache": 2473099,
+    "cost": 1.4055594999999999,
+    "date": "2026-06-03T12:14:34.851946",
+    "input": 155032,
+    "output": 30498,
+    "requests": 49
+  },
+  "20260605_111941_bd046c": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 490880,
+        "cost": 0.00939846,
+        "input": 41809,
+        "output": 7402,
+        "requests": 15
+      }
+    },
+    "cache": 490880,
+    "cost": 0.021670460000000002,
+    "date": "2026-06-05T11:19:57.465152",
+    "input": 41809,
+    "output": 7402,
+    "requests": 15
+  },
+  "20260607_194643_802801": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 1711616,
+        "cost": 0.16505706,
+        "input": 120023,
+        "output": 21961,
+        "requests": 36
+      }
+    },
+    "cache": 1711616,
+    "cost": 0.05326916000000001,
+    "date": "2026-06-07T19:46:43.819771",
+    "input": 120023,
+    "output": 21961,
+    "requests": 36
+  },
+  "20260609_090153_263bb6": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 3083840,
+        "cost": 0.04099498,
+        "input": 172373,
+        "output": 27183,
+        "requests": 40
+      }
+    },
+    "cache": 3083840,
+    "cost": 0.11809098,
+    "date": "2026-06-09T09:11:30.818892",
+    "input": 172373,
+    "output": 27183,
+    "requests": 40
+  },
+  "20260609_093450_0c8bad": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 3174720,
+        "cost": 0.23528200000000002,
+        "input": 182434,
+        "output": 17616,
+        "requests": 68
+      }
+    },
+    "cache": 3174720,
+    "cost": 0.23528200000000002,
+    "date": "2026-06-09T09:34:50.869705",
+    "input": 182434,
+    "output": 17616,
+    "requests": 68
+  },
+  "20260609_120957_f3fd66": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 848576,
+        "cost": 0.077704,
+        "input": 64894,
+        "output": 4270,
+        "requests": 83
+      }
+    },
+    "cache": 848576,
+    "cost": 0.077704,
+    "date": "2026-06-09T12:09:57.509760",
+    "input": 64894,
+    "output": 4270,
+    "requests": 83
+  },
+  "20260609_121840_cd0108": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 2934464,
+        "cost": 0.125338,
+        "input": 72574,
+        "output": 17588,
+        "requests": 65
+      }
+    },
+    "cache": 2934464,
+    "cost": 0.125338,
+    "date": "2026-06-09T12:18:40.562328",
+    "input": 72574,
+    "output": 17588,
+    "requests": 65
+  },
+  "20260609_140956_07931e": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 2184768,
+        "cost": 0.155184,
+        "input": 109623,
+        "output": 15187,
+        "requests": 46
+      }
+    },
+    "cache": 2184768,
+    "cost": 0.155184,
+    "date": "2026-06-09T14:09:56.592782",
+    "input": 109623,
+    "output": 15187,
+    "requests": 46
+  },
+  "20260610_111202_8f0942": {
+    "by_model": {
+      "nvidia/nemotron-3-ultra-550b-a55b": {
+        "cache": 0,
+        "cost": 0.0103905,
+        "input": 20209,
+        "output": 130,
+        "requests": 1
+      }
+    },
+    "cache": 0,
+    "cost": 0,
+    "date": "2026-06-10T11:21:47.460379",
+    "input": 20209,
+    "output": 130,
+    "requests": 1
+  },
+  "codex_019c4287-385c-7b52-b451-1c1bf0ebf534": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 256896,
+        "cost": 0.6115263000000001,
+        "input": 297242,
+        "output": 3314,
+        "requests": 2
+      }
+    },
+    "cache": 256896,
+    "cost": 0.5665695000000001,
+    "date": "2026-02-09T13:11:23.996Z",
+    "input": 297242,
+    "output": 3314,
+    "requests": 2
+  },
+  "codex_019c7877-d70c-7272-94f4-0bb30e9d8c4d": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 308992,
+        "cost": 0.7162718499999999,
+        "input": 352375,
+        "output": 3253,
+        "requests": 1
+      }
+    },
+    "cache": 308992,
+    "cost": 0.66219825,
+    "date": "2026-02-20T00:34:05.709Z",
+    "input": 352375,
+    "output": 3253,
+    "requests": 1
+  },
+  "codex_019c787b-37c5-7260-b26d-bc279801c4f0": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 10216576,
+        "cost": 21.165656050000003,
+        "input": 10836019,
+        "output": 29623,
+        "requests": 18
+      }
+    },
+    "cache": 10216576,
+    "cost": 19.377755250000003,
+    "date": "2026-02-20T00:37:47.077Z",
+    "input": 10836019,
+    "output": 29623,
+    "requests": 18
+  },
+  "codex_019c789a-9254-7fb2-a4e1-58c52b1c04fd": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 7296,
+        "cost": 0.0165753,
+        "input": 8294,
+        "output": 56,
+        "requests": 1
+      }
+    },
+    "cache": 7296,
+    "cost": 0.0152985,
+    "date": "2026-02-20T01:12:01.876Z",
+    "input": 8294,
+    "output": 56,
+    "requests": 1
+  },
+  "codex_019c789d-eb30-7722-9ff2-99996ec0c86f": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 1396352,
+        "cost": 3.0273306,
+        "input": 1520028,
+        "output": 8780,
+        "requests": 4
+      }
+    },
+    "cache": 1396352,
+    "cost": 2.782969,
+    "date": "2026-02-20T01:15:41.232Z",
+    "input": 1520028,
+    "output": 8780,
+    "requests": 4
+  },
+  "codex_019c78ad-f35f-70a3-bea7-3b575e677fb6": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 4576000,
+        "cost": 9.9901935,
+        "input": 5017042,
+        "output": 29255,
+        "requests": 14
+      }
+    },
+    "cache": 4576000,
+    "cost": 9.1893935,
+    "date": "2026-02-20T01:33:11.903Z",
+    "input": 5017042,
+    "output": 29255,
+    "requests": 14
+  },
+  "codex_019c78fe-0a77-7032-a3eb-f5532439dc4d": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 476928,
+        "cost": 1.1595969,
+        "input": 590534,
+        "output": 3050,
+        "requests": 3
+      }
+    },
+    "cache": 476928,
+    "cost": 1.0761345,
+    "date": "2026-02-20T03:00:40.695Z",
+    "input": 590534,
+    "output": 3050,
+    "requests": 3
+  },
+  "codex_019c790f-9212-7370-a40a-18671d2b5d23": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 7296,
+        "cost": 0.019203800000000004,
+        "input": 8708,
+        "output": 192,
+        "requests": 1
+      }
+    },
+    "cache": 7296,
+    "cost": 0.017927000000000002,
+    "date": "2026-02-20T03:19:49.522Z",
+    "input": 8708,
+    "output": 192,
+    "requests": 1
+  },
+  "codex_019c7911-0934-7cf3-8b59-0efb92354039": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 4255360,
+        "cost": 8.91751,
+        "input": 4552352,
+        "output": 14729,
+        "requests": 6
+      }
+    },
+    "cache": 4255360,
+    "cost": 8.172822,
+    "date": "2026-02-20T03:21:25.557Z",
+    "input": 4552352,
+    "output": 14729,
+    "requests": 6
+  },
+  "codex_019c791f-70a2-7453-850a-c6987f853096": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 6680192,
+        "cost": 14.11949035,
+        "input": 7204349,
+        "output": 24489,
+        "requests": 12
+      }
+    },
+    "cache": 6680192,
+    "cost": 12.950456749999999,
+    "date": "2026-02-20T03:37:09.538Z",
+    "input": 7204349,
+    "output": 24489,
+    "requests": 12
+  },
+  "codex_019c7b15-0505-71a1-8482-1c67afc45f3c": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 1192704,
+        "cost": 2.5858077,
+        "input": 1300870,
+        "output": 7183,
+        "requests": 1
+      }
+    },
+    "cache": 1192704,
+    "cost": 2.3770845,
+    "date": "2026-02-20T12:45:01.062Z",
+    "input": 1300870,
+    "output": 7183,
+    "requests": 1
+  },
+  "codex_019c7b2a-484c-7b20-9fb0-63ab371943bc": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 258048,
+        "cost": 0.5869829000000001,
+        "input": 297446,
+        "output": 1521,
+        "requests": 1
+      }
+    },
+    "cache": 258048,
+    "cost": 0.5418245,
+    "date": "2026-02-20T13:08:14.541Z",
+    "input": 297446,
+    "output": 1521,
+    "requests": 1
+  },
+  "codex_019c7b77-aeae-7553-9eb1-9a945bbd381c": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 7415552,
+        "cost": 15.531476099999997,
+        "input": 7869990,
+        "output": 32948,
+        "requests": 7
+      }
+    },
+    "cache": 7415552,
+    "cost": 14.233754499999998,
+    "date": "2026-02-20T14:32:47.022Z",
+    "input": 7869990,
+    "output": 32948,
+    "requests": 7
+  },
+  "codex_019c82aa-3d8d-7171-82ad-c4fec6897b0f": {
+    "by_model": {
+      "gpt-5.3-codex": {
+        "cache": 176896,
+        "cost": 0.42019005000000004,
+        "input": 200243,
+        "output": 2772,
+        "requests": 2
+      }
+    },
+    "cache": 176896,
+    "cost": 0.38923325000000003,
+    "date": "2026-02-22T00:05:20.909Z",
+    "input": 200243,
+    "output": 2772,
+    "requests": 2
+  },
+  "codex_019cd022-95c5-7a90-9c24-4a888c7e13bb": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 5753728,
+        "cost": 17.721327,
+        "input": 6198260,
+        "output": 52483,
+        "requests": 23
+      }
+    },
+    "cache": 5753728,
+    "cost": 11.581717000000001,
+    "date": "2026-03-09T01:07:33.446Z",
+    "input": 6198260,
+    "output": 52483,
+    "requests": 23
+  },
+  "codex_019cfee2-96bc-72e2-8e64-1fdca09731fc": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 13634688,
+        "cost": 42.030994500000006,
+        "input": 14954529,
+        "output": 82400,
+        "requests": 7
+      }
+    },
+    "cache": 13634688,
+    "cost": 27.32402575,
+    "date": "2026-03-18T02:59:48.590Z",
+    "input": 14954529,
+    "output": 82400,
+    "requests": 7
+  },
+  "codex_019d00a9-9ff5-7690-892b-79739b368381": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 38787712,
+        "cost": 131.2001705,
+        "input": 46814707,
+        "output": 297765,
+        "requests": 65
+      }
+    },
+    "cache": 38787712,
+    "cost": 86.09444725,
+    "date": "2026-03-18T11:16:49.790Z",
+    "input": 46814707,
+    "output": 297765,
+    "requests": 65
+  },
+  "codex_019d020d-d014-7bf3-a160-f40add44c16d": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 1047936,
+        "cost": 3.5363315,
+        "input": 1247441,
+        "output": 10383,
+        "requests": 4
+      }
+    },
+    "cache": 1047936,
+    "cost": 2.32838375,
+    "date": "2026-03-18T17:45:52.932Z",
+    "input": 1247441,
+    "output": 10383,
+    "requests": 4
+  },
+  "codex_019d1d9d-6fa6-7543-a105-f64fa45922ac": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 15510144,
+        "cost": 50.5908585,
+        "input": 17532429,
+        "output": 192150,
+        "requests": 15
+      }
+    },
+    "cache": 15510144,
+    "cost": 33.37185075,
+    "date": "2026-03-24T02:12:30.264Z",
+    "input": 17532429,
+    "output": 192150,
+    "requests": 15
+  },
+  "codex_019d30de-367c-7bd0-aaef-b73f5d418a9d": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 41728256,
+        "cost": 124.677289,
+        "input": 44305478,
+        "output": 232102,
+        "requests": 31
+      }
+    },
+    "cache": 41728256,
+    "cost": 80.7840145,
+    "date": "2026-03-27T19:56:02.568Z",
+    "input": 44305478,
+    "output": 232102,
+    "requests": 31
+  },
+  "historical_total": {
+    "by_model": {
+      "claude-haiku-4.5": {
+        "cost": 0.3043,
+        "input": 247600,
+        "output": 11300,
+        "requests": 32
+      },
+      "claude-opus-4.5": {
+        "cost": 538.01,
+        "input": 98100000,
+        "output": 1900000,
+        "requests": 3896
+      },
+      "claude-opus-4.6": {
+        "cost": 24.27,
+        "input": 4100000,
+        "output": 146700,
+        "requests": 220
+      },
+      "claude-sonnet-4.5": {
+        "cost": 4.18,
+        "input": 1000000,
+        "output": 70700,
+        "requests": 110
+      },
+      "gemini-3-flash": {
+        "cost": 4.67,
+        "input": 8300000,
+        "output": 169800,
+        "requests": 661
+      },
+      "gemini-3-pro": {
+        "cost": 1.57,
+        "input": 592600,
+        "output": 32000,
+        "requests": 78
+      },
+      "glm-4.7-free": {
+        "cost": 1.14,
+        "input": 2400000,
+        "output": 44700,
+        "requests": 176
+      },
+      "gpt-5-mini": {
+        "cost": 0.0477,
+        "input": 134700,
+        "output": 7000,
+        "requests": 12
+      },
+      "gpt-5.1-codex-max": {
+        "cost": 0.315,
+        "input": 130600,
+        "output": 15200,
+        "requests": 32
+      },
+      "gpt-5.2": {
+        "cost": 0.6194,
+        "input": 150000,
+        "output": 25500,
+        "requests": 75
+      },
+      "gpt-5.2-codex": {
+        "cost": 5.67,
+        "input": 2200000,
+        "output": 128600,
+        "requests": 220
+      },
+      "grok-code": {
+        "cost": 0.0353,
+        "input": 150300,
+        "output": 3500,
+        "requests": 36
+      },
+      "kimi-k2.5": {
+        "cost": 12.35,
+        "input": 19700000,
+        "output": 172300,
+        "requests": 534
+      },
+      "minimax-m2.1": {
+        "cost": 0.009748,
+        "input": 18100,
+        "output": 5100,
+        "requests": 21
+      },
+      "step-3.5-flash": {
+        "cost": 0.1201,
+        "input": 1200000,
+        "output": 14300,
+        "requests": 30
+      },
+      "trinity-large-preview": {
+        "cost": 0.1034,
+        "input": 406400,
+        "output": 1815,
+        "requests": 22
+      }
+    },
+    "cost": 593.32,
+    "date": "2025-12-01T00:00:00.000000",
+    "input": 138927700,
+    "output": 2693052,
+    "requests": 6156,
+    "sessions": 100
+  },
+  "kilocode_legacy": {
+    "by_model": {
+      "gemini-3-flash": {
+        "cache": 12148,
+        "cost": 0.0246065,
+        "input": 44749,
+        "output": 744,
+        "requests": 5
+      },
+      "glm-5": {
+        "cache": 256,
+        "cost": 0.01242912,
+        "input": 14698,
+        "output": 246,
+        "requests": 2
+      }
+    },
+    "cost": 0.03156902,
+    "date": "2025-12-29T00:00:00",
+    "input": 59447,
+    "output": 990,
+    "requests": 7
+  },
+  "manual_dsv4pro_20260620": {
+    "by_model": {
+      "deepseek-v4-pro": {
+        "cache": 175750000,
+        "cost": 83.45078499999998,
+        "input": 9250000,
+        "output": 2673000,
+        "requests": 3250
+      }
+    },
+    "cache": 175750000,
+    "cost": 7.0,
+    "date": "2026-06-20T00:00:00",
+    "input": 9250000,
+    "output": 2673000,
+    "requests": 3250
+  },
+  "manual_glm52_20260620": {
+    "by_model": {
+      "glm-5.2": {
+        "cache": 1700483,
+        "cost": 3.6403713799999995,
+        "input": 2058119,
+        "output": 72018,
+        "requests": 38
+      }
+    },
+    "cache": 1700483,
+    "cost": 1.2592,
+    "date": "2026-06-20T00:00:00",
+    "input": 2058119,
+    "output": 72018,
+    "requests": 38
+  },
+  "ses_10a3e2cdaffeMIUp7C2TXUdN6h": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 148096,
+        "cost": 0.009185888,
+        "input": 54076,
+        "output": 4182,
+        "requests": 7
+      }
+    },
+    "cost": 0.009185888,
+    "date": "2026-06-23T15:34:45.771000",
+    "input": 54076,
+    "output": 4182,
+    "requests": 7
+  },
+  "ses_10a3ede2cffeffHR9GsOMve0RF": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 7168,
+        "cost": 0.0014406840000000002,
+        "input": 9001,
+        "output": 568,
+        "requests": 3
+      }
+    },
+    "cost": 0.0014406840000000002,
+    "date": "2026-06-23T15:32:21.772000",
+    "input": 9001,
+    "output": 568,
+    "requests": 3
+  },
+  "ses_10a3eede0ffeUiS4LMG28PHKKm": {
+    "date": "2026-06-23T16:36:37.773000",
+    "requests": 110,
+    "input": 351575,
+    "output": 31840,
+    "cost": 0.08477186,
+    "by_model": {
+      "deepseek-v4-flash": {
+        "requests": 110,
+        "input": 351575,
+        "output": 31840,
+        "cache": 8878720,
+        "cost": 0.08477186
+      }
+    }
+  },
+  "ses_10b19f35bfferU1rp9XD4vj6gA": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 69376,
+        "cost": 0.006172968000000001,
+        "input": 37522,
+        "output": 2542,
+        "reasoning": 253,
+        "requests": 5
+      }
+    },
+    "cost": 0.007907368000000001,
+    "date": "2026-06-23T11:33:39.599000",
+    "input": 37522,
+    "output": 2542,
+    "requests": 5
+  },
+  "ses_10b56f988ffeza2YRdX3TDec0n": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 161408,
+        "cost": 0.009161564,
+        "input": 54229,
+        "output": 3876,
+        "requests": 6
+      }
+    },
+    "cache": 161408,
+    "cost": 0.013196764,
+    "date": "2026-06-23T10:27:58.979000",
+    "input": 54229,
+    "output": 3876,
+    "requests": 6
+  },
+  "ses_10b570f6bffe9TVw4xnKyZ7QAa": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 9656064,
+        "cost": 0.13401957200000003,
+        "input": 673307,
+        "output": 38530,
+        "requests": 141
+      },
+      "deepseek-v4-pro": {
+        "cache": 13726080,
+        "cost": 0.226165881,
+        "input": 316345,
+        "output": 43413,
+        "requests": 204
+      },
+      "gpt-5.4": {
+        "cache": 512512,
+        "cost": 0.43560049999999995,
+        "input": 85339,
+        "output": 6275,
+        "requests": 13
+      },
+      "mimo-v2.5": {
+        "cache": 5837696,
+        "cost": 0.075972888,
+        "input": 376148,
+        "output": 20711,
+        "requests": 130
+      },
+      "mimo-v2.5-pro": {
+        "cache": 29888,
+        "cost": 0.0372195656,
+        "input": 79176,
+        "output": 3066,
+        "requests": 3
+      }
+    },
+    "cost": 0.9089784066,
+    "date": "2026-06-23T15:29:43.293000",
+    "input": 1530315,
+    "output": 111995,
+    "requests": 491
+  },
+  "ses_10b659898ffed1LoAxP85s2Gzg": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 35584,
+        "cost": 0.005067232,
+        "input": 32546,
+        "output": 1443,
+        "requests": 3
+      }
+    },
+    "cache": 35584,
+    "cost": 0.005956832,
+    "date": "2026-06-23T10:11:05.169000",
+    "input": 32546,
+    "output": 1443,
+    "requests": 3
+  },
+  "ses_10b6d71aeffeSmzF3DKVHAmWQn": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 64256,
+        "cost": 0.0039789280000000005,
+        "input": 23016,
+        "output": 2014,
+        "requests": 4
+      }
+    },
+    "cache": 64256,
+    "cost": 0.0055853280000000005,
+    "date": "2026-06-23T10:02:12.056000",
+    "input": 23016,
+    "output": 2014,
+    "requests": 4
+  },
+  "ses_10b6d8988ffenW4REfwIDpfXos": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 2974848,
+        "cost": 0.021584044000000004,
+        "input": 62503,
+        "output": 13961,
+        "requests": 50
+      }
+    },
+    "cache": 2974848,
+    "cost": 0.09595524400000001,
+    "date": "2026-06-23T10:20:21.925000",
+    "input": 62503,
+    "output": 13961,
+    "requests": 50
+  },
+  "ses_10b86084effeNhyT48jIW2j1ZC": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      },
+      "minimax-m3": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cache": 0,
+    "cost": 0.0,
+    "date": "2026-06-23T09:37:13.505000",
+    "input": 0,
+    "output": 0,
+    "requests": 2
+  },
+  "ses_110c5d3a4ffec7odua2YaHM0CQ": {
+    "by_model": {
+      "glm-5.1": {
+        "cache": 621184,
+        "cost": 0.4785818399999999,
+        "input": 198026,
+        "output": 9054,
+        "requests": 20
+      },
+      "gpt-5.4": {
+        "cache": 9733632,
+        "cost": 4.3012955,
+        "input": 440285,
+        "output": 51145,
+        "requests": 150
+      },
+      "minimax-m3": {
+        "cache": 1379259,
+        "cost": 0.17374224,
+        "input": 232149,
+        "output": 17785,
+        "requests": 32
+      }
+    },
+    "cache": 11734075,
+    "cost": 2.04468657,
+    "date": "2026-06-22T13:21:11.690000",
+    "input": 870460,
+    "output": 77984,
+    "requests": 202
+  },
+  "ses_11f035c10ffezs03GEnQBQetRV": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 1784807,
+        "cost": 0.14180352000000002,
+        "input": 74881,
+        "output": 10209,
+        "requests": 43
+      }
+    },
+    "cache": 1784807,
+    "cost": 0.02991642,
+    "date": "2026-06-19T15:00:17.499000",
+    "input": 74881,
+    "output": 10209,
+    "requests": 43
+  },
+  "ses_1238a0b02ffePMkEwfFNXJpXAi": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 6951833,
+        "cost": 0.77560698,
+        "input": 1098554,
+        "output": 24109,
+        "requests": 54
+      },
+      "nex-agi/nex-n2": {
+        "cache": 0,
+        "cost": 1.4556855,
+        "input": 5809754,
+        "output": 3247,
+        "requests": 32
+      },
+      "zai-org/glm-5.2": {
+        "cache": 1229568,
+        "cost": 6.11863508,
+        "input": 3981235,
+        "output": 51186,
+        "requests": 62
+      }
+    },
+    "cache": 8181401,
+    "cost": 3.83226817,
+    "date": "2026-06-19T10:45:43.553000",
+    "input": 10889543,
+    "output": 78542,
+    "requests": 148
+  },
+  "ses_1241dd3d5ffeaeVF7ErYnzSyWy": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 409600,
+        "cost": 0.35331,
+        "input": 45482,
+        "output": 9147,
+        "requests": 15
+      }
+    },
+    "cache": 409600,
+    "cost": 0.2076515,
+    "date": "2026-06-18T16:02:50.742000",
+    "input": 45482,
+    "output": 9147,
+    "requests": 15
+  },
+  "ses_12421f9d9ffeL2gSwT6YUIMhzM": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 637440,
+        "cost": 0.31438750000000004,
+        "input": 50617,
+        "output": 1899,
+        "requests": 13
+      },
+      "minimax-m3": {
+        "cache": 368895,
+        "cost": 0.038183999999999996,
+        "input": 45217,
+        "output": 2071,
+        "requests": 15
+      }
+    },
+    "cache": 1006335,
+    "cost": 0.12934179,
+    "date": "2026-06-18T17:37:12.183000",
+    "input": 95834,
+    "output": 3970,
+    "requests": 28
+  },
+  "ses_125709a8bffeeQzUIvh6BFsQ6l": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 4681984,
+        "cost": 0.50874294,
+        "input": 508253,
+        "output": 62790,
+        "requests": 82
+      }
+    },
+    "cache": 4681984,
+    "cost": 0.19687881,
+    "date": "2026-06-18T14:55:40.957000",
+    "input": 508253,
+    "output": 62790,
+    "requests": 82
+  },
+  "ses_129672795ffeOYMkTSpdiabXOx": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 843776,
+        "cost": 0.5833265,
+        "input": 96003,
+        "output": 8825,
+        "requests": 25
+      }
+    },
+    "cache": 843776,
+    "cost": 0.29155525,
+    "date": "2026-06-17T14:34:13.864000",
+    "input": 96003,
+    "output": 8825,
+    "requests": 25
+  },
+  "ses_129adc120ffesl0A3lv3TN4hPs": {
+    "by_model": {
+      "claude-haiku-4-5": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      },
+      "deepseek-v4-flash": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      },
+      "minimax-m3": {
+        "cache": 1500435,
+        "cost": 0.1527954,
+        "input": 141927,
+        "output": 16826,
+        "requests": 44
+      }
+    },
+    "cache": 1500435,
+    "cost": 0.05430499,
+    "date": "2026-06-17T14:04:20.763000",
+    "input": 141927,
+    "output": 16826,
+    "requests": 46
+  },
+  "ses_129bd5753ffeMj3ilkd4QiROoM": {
+    "by_model": {
+      "glm-5.1": {
+        "cache": 58368,
+        "cost": 0.03598348,
+        "input": 12999,
+        "output": 593,
+        "requests": 4
+      },
+      "minimax-m3": {
+        "cache": 108987,
+        "cost": 0.019983420000000002,
+        "input": 35258,
+        "output": 2389,
+        "requests": 4
+      }
+    },
+    "cache": 167355,
+    "cost": 0.04777269,
+    "date": "2026-06-17T13:01:19.768000",
+    "input": 48257,
+    "output": 2982,
+    "requests": 8
+  },
+  "ses_129f44a59ffekNYKlZHx1g20P2": {
+    "by_model": {
+      "stepfun/step-3.7-flash": {
+        "cache": 95488,
+        "cost": 0.019238270000000002,
+        "input": 66623,
+        "output": 1821,
+        "requests": 8
+      }
+    },
+    "cache": 95488,
+    "cost": 0,
+    "date": "2026-06-17T11:47:44.129000",
+    "input": 66623,
+    "output": 1821,
+    "requests": 8
+  },
+  "ses_12a5953d9ffe0Cl89Cmsh9hyod": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 12265779,
+        "cost": 0.95844864,
+        "input": 480729,
+        "output": 65236,
+        "requests": 142
+      }
+    },
+    "cache": 12265779,
+    "cost": 0.19177103,
+    "date": "2026-06-17T11:56:06.976000",
+    "input": 480729,
+    "output": 65236,
+    "requests": 142
+  },
+  "ses_12f52a127ffe4IH8VEtWASq3Od": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 11942626,
+        "cost": 1.32804096,
+        "input": 1320546,
+        "output": 179433,
+        "requests": 170
+      }
+    },
+    "cache": 11942626,
+    "cost": 0.52700877,
+    "date": "2026-06-16T14:50:33.778000",
+    "input": 1320546,
+    "output": 179433,
+    "requests": 170
+  },
+  "ses_13d7ad3e8ffegP9f0L7qDxga8t": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 28341155,
+        "cost": 2.5551486,
+        "input": 2149431,
+        "output": 174875,
+        "requests": 185
+      }
+    },
+    "cache": 28341155,
+    "cost": 0.7464776200000001,
+    "date": "2026-06-15T17:57:47.476000",
+    "input": 2149431,
+    "output": 174875,
+    "requests": 185
+  },
+  "ses_1426ce230ffe0afRVhfK1avCS3": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 1371806,
+        "cost": 0.12494016,
+        "input": 120434,
+        "output": 5418,
+        "requests": 30
+      }
+    },
+    "cache": 1371806,
+    "cost": 0.03766428,
+    "date": "2026-06-12T17:50:24.791000",
+    "input": 120434,
+    "output": 5418,
+    "requests": 30
+  },
+  "ses_143e1bfa5ffeEbTModzfszh7Ev": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 1146047,
+        "cost": 0.18625782,
+        "input": 302778,
+        "output": 22218,
+        "requests": 28
+      }
+    },
+    "cache": 1146047,
+    "cost": 0.10285716,
+    "date": "2026-06-12T15:11:51.783000",
+    "input": 302778,
+    "output": 22218,
+    "requests": 28
+  },
+  "ses_144173bdafferAR45cBHNZZUcV": {
+    "by_model": {
+      "nex-agi/nex-n2": {
+        "cache": 0,
+        "cost": 0.2330875,
+        "input": 925126,
+        "output": 1806,
+        "requests": 8
+      }
+    },
+    "cache": 0,
+    "cost": 0,
+    "date": "2026-06-12T10:15:11.552000",
+    "input": 925126,
+    "output": 1806,
+    "requests": 8
+  },
+  "ses_1441bf7f5ffe6FQwNLiAenXpWG": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 351168,
+        "cost": 0.038685479999999994,
+        "input": 48470,
+        "output": 2562,
+        "requests": 11
+      }
+    },
+    "cache": 351168,
+    "cost": 0.015520800000000001,
+    "date": "2026-06-12T09:54:38.961000",
+    "input": 48470,
+    "output": 2562,
+    "requests": 11
+  },
+  "ses_147cd3bb2ffe5WJ1pv7LSKiSia": {
+    "by_model": {
+      "nex-agi/nex-n2": {
+        "cache": 0,
+        "cost": 0.32982725,
+        "input": 1299677,
+        "output": 4908,
+        "requests": 19
+      }
+    },
+    "cache": 0,
+    "cost": 0,
+    "date": "2026-06-11T16:50:05.622000",
+    "input": 1299677,
+    "output": 4908,
+    "requests": 19
+  },
+  "ses_14847d0faffe1cCeNO1CqCl4Or": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 261454205,
+        "cost": 18.953518499999998,
+        "input": 8336546,
+        "output": 637752,
+        "requests": 1835
+      }
+    },
+    "cache": 261454205,
+    "cost": 2.8567318200000003,
+    "date": "2026-06-12T14:20:21.043000",
+    "input": 8336546,
+    "output": 637752,
+    "requests": 1835
+  },
+  "ses_1486f7216ffe7mMs2NwIGtlyCP": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 5146437,
+        "cost": 0.39595121999999994,
+        "input": 216186,
+        "output": 18591,
+        "requests": 63
+      }
+    },
+    "cache": 5146437,
+    "cost": 0.07603167,
+    "date": "2026-06-11T14:06:34.791000",
+    "input": 216186,
+    "output": 18591,
+    "requests": 63
+  },
+  "ses_148abb9bdffeXY7EdUeyabuTuX": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 6267307,
+        "cost": 0.58735242,
+        "input": 576580,
+        "output": 31950,
+        "requests": 96
+      }
+    },
+    "cache": 6267307,
+    "cost": 0.1860291,
+    "date": "2026-06-11T13:28:32.485000",
+    "input": 576580,
+    "output": 31950,
+    "requests": 96
+  },
+  "ses_148b36ca7ffeX6XxGnl7cJR3oE": {
+    "by_model": {
+      "nex-agi/nex-n2": {
+        "cache": 0,
+        "cost": 0.10287625,
+        "input": 404805,
+        "output": 1675,
+        "requests": 14
+      }
+    },
+    "cache": 0,
+    "cost": 0,
+    "date": "2026-06-11T12:34:07.970000",
+    "input": 404805,
+    "output": 1675,
+    "requests": 14
+  },
+  "ses_148c960f0ffeCeYkEUrHsXtOWP": {
+    "by_model": {
+      "nex-agi/nex-n2": {
+        "cache": 0,
+        "cost": 0.64051725,
+        "input": 2466813,
+        "output": 23814,
+        "requests": 36
+      }
+    },
+    "cache": 0,
+    "cost": 0,
+    "date": "2026-06-11T13:29:40.090000",
+    "input": 2466813,
+    "output": 23814,
+    "requests": 36
+  },
+  "ses_1497e8863ffeCvl7BJgO6BYRu4": {
+    "by_model": {
+      "nex-agi/nex-n2": {
+        "cache": 0,
+        "cost": 4.8911127500000005,
+        "input": 19427323,
+        "output": 34282,
+        "requests": 147
+      }
+    },
+    "cache": 0,
+    "cost": 0,
+    "date": "2026-06-11T11:24:16.889000",
+    "input": 19427323,
+    "output": 34282,
+    "requests": 147
+  },
+  "ses_14e24ddcefferZbwRMzlk0KuPm": {
+    "by_model": {
+      "nex-agi/nex-n2": {
+        "cache": 0,
+        "cost": 14.893782,
+        "input": 59105388,
+        "output": 117435,
+        "requests": 441
+      }
+    },
+    "cache": 0,
+    "cost": 0,
+    "date": "2026-06-10T23:31:06.920000",
+    "input": 59105388,
+    "output": 117435,
+    "requests": 441
+  },
+  "ses_14e30540dffeEx6z7YysQQETeE": {
+    "by_model": {
+      "nex-agi/nex-n2": {
+        "cache": 0,
+        "cost": 0.06246575,
+        "input": 247315,
+        "output": 637,
+        "requests": 9
+      }
+    },
+    "cache": 0,
+    "cost": 0,
+    "date": "2026-06-10T10:56:11.947000",
+    "input": 247315,
+    "output": 637,
+    "requests": 9
+  },
+  "ses_15310d148ffeGuR7XXcvYMlW9W": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 6602176,
+        "cost": 0.371049,
+        "input": 275886,
+        "output": 31721,
+        "requests": 87
+      }
+    },
+    "cache": 6602176,
+    "cost": 0.371049,
+    "date": "2026-06-09T14:57:42.453000",
+    "input": 275886,
+    "output": 31721,
+    "requests": 87
+  },
+  "ses_153245e10ffeHntsF7hWAyiwXy": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 41216,
+        "cost": 0.023592000000000002,
+        "input": 22245,
+        "output": 449,
+        "requests": 3
+      }
+    },
+    "cache": 41216,
+    "cost": 0.023592000000000002,
+    "date": "2026-06-09T11:49:13.620000",
+    "input": 22245,
+    "output": 449,
+    "requests": 3
+  },
+  "ses_153bd7f6effeDvHaXinFwEwQQt": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 10359040,
+        "cost": 0.269771,
+        "input": 169046,
+        "output": 33575,
+        "requests": 95
+      }
+    },
+    "cache": 10359040,
+    "cost": 0.269771,
+    "date": "2026-06-09T09:43:21.678000",
+    "input": 169046,
+    "output": 33575,
+    "requests": 95
+  },
+  "ses_167bbd75affeUCuW7ORx83sImc": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 4792320,
+        "cost": 0.05860366000000001,
+        "input": 290683,
+        "output": 12611,
+        "requests": 45
+      },
+      "minimax-m3": {
+        "cache": 22823180,
+        "cost": 1.8146148,
+        "input": 1049784,
+        "output": 108574,
+        "requests": 285
+      },
+      "nemotron-3-ultra": {
+        "cache": 0,
+        "cost": 1.5123908,
+        "input": 3001576,
+        "output": 5274,
+        "requests": 21
+      }
+    },
+    "cache": 27615500,
+    "cost": 0.56499864,
+    "date": "2026-06-07T19:44:04.654000",
+    "input": 4342043,
+    "output": 126459,
+    "requests": 351
+  },
+  "ses_17ba9d17affeZkJU7rmdEBfyLN": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 20918,
+        "cost": 0.00820278,
+        "input": 16483,
+        "output": 1669,
+        "requests": 2
+      }
+    },
+    "cache": 20918,
+    "cost": 0.006035960000000001,
+    "date": "2026-06-01T15:02:12.205000",
+    "input": 16483,
+    "output": 1669,
+    "requests": 2
+  },
+  "ses_17c679e28ffeRSNzLOK9srcK2u": {
+    "by_model": {
+      "minimax-m3": {
+        "cache": 11208228,
+        "cost": 0.9552493799999999,
+        "input": 653155,
+        "output": 72341,
+        "requests": 105
+      }
+    },
+    "cache": 11208228,
+    "cost": 0.24507580000000004,
+    "date": "2026-06-01T13:02:02.507000",
+    "input": 653155,
+    "output": 72341,
+    "requests": 105
+  },
+  "ses_18bb115d6ffeS2zgnN5ogsTLhc": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 816768,
+        "cost": 0.016212304,
+        "input": 92066,
+        "output": 3117,
+        "requests": 14
+      }
+    },
+    "cache": 816768,
+    "cost": 0.036631504,
+    "date": "2026-05-29T12:17:28.607000",
+    "input": 92066,
+    "output": 3117,
+    "requests": 14
+  },
+  "ses_18bb12a7affeYx5ARfWb69jhTw": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cache": 0,
+    "cost": 0.0,
+    "date": "2026-05-29T12:16:24.441000",
+    "input": 0,
+    "output": 0,
+    "requests": 1
+  },
+  "ses_226db855affeV3BX4NNzBmTs3c": {
+    "by_model": {
+      "deepseek-v4-pro": {
+        "cache": 477568,
+        "cost": 0.022207216600000003,
+        "input": 41187,
+        "output": 2901,
+        "requests": 15
+      }
+    },
+    "cost": 0.15100822,
+    "date": "2026-04-29T09:11:58.379000",
+    "input": 41187,
+    "output": 2901,
+    "requests": 15
+  },
+  "ses_237cea204ffebDoTBW6BXfvZIP": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cache": 0,
+    "cost": 0.0,
+    "date": "2026-04-26T02:09:35.955000",
+    "input": 0,
+    "output": 0,
+    "requests": 1
+  },
+  "ses_2391dfeb4ffeoDSpl6HPs0y1HL": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 23808,
+        "cost": 0.0430645,
+        "input": 9295,
+        "output": 925,
+        "requests": 4
+      }
+    },
+    "cost": 0.02921625,
+    "date": "2026-04-25T20:03:47.812000",
+    "input": 9295,
+    "output": 925,
+    "requests": 4
+  },
+  "ses_23e17f156ffefPHcjeDEbJuZlg": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 2036538,
+        "cost": 0.09688965,
+        "input": 616043,
+        "output": 11208,
+        "requests": 54
+      },
+      "ling-2.6-1t": {
+        "cache": 1604491,
+        "cost": 0.051524215,
+        "input": 226883,
+        "output": 16705,
+        "requests": 57
+      }
+    },
+    "cost": 0.09688965,
+    "date": "2026-04-24T21:55:04.248000",
+    "input": 842926,
+    "output": 27913,
+    "requests": 111
+  },
+  "ses_23f72f22cffeGxjXUWIQrz1xun": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 0,
+        "cost": 0.017270820000000003,
+        "input": 119481,
+        "output": 1941,
+        "requests": 4
+      },
+      "deepseek-v4-pro": {
+        "cache": 20087936,
+        "cost": 0.38148103819999996,
+        "input": 592645,
+        "output": 56730,
+        "requests": 200
+      },
+      "gpt-5.4": {
+        "cache": 147463168,
+        "cost": 63.707872,
+        "input": 7075128,
+        "output": 610284,
+        "requests": 1089
+      }
+    },
+    "cost": 25.08409424,
+    "date": "2026-04-26T23:31:27.885000",
+    "input": 7787254,
+    "output": 668955,
+    "requests": 1293
+  },
+  "ses_24017eca5ffeOkNgNlRXQXuamb": {
+    "by_model": {
+      "deepseek-v4-flash": {
+        "cache": 416896,
+        "cost": 0.008783668,
+        "input": 49595,
+        "output": 2106,
+        "requests": 12
+      }
+    },
+    "cost": 0.019206068,
+    "date": "2026-04-24T11:33:30.800000",
+    "input": 49595,
+    "output": 2106,
+    "requests": 12
+  },
+  "ses_2407c8531ffej8KQNx35qqlAOo": {
+    "by_model": {
+      "ling-2.6-1t": {
+        "cache": 0,
+        "cost": 0.0012266,
+        "input": 16213,
+        "output": 17,
+        "requests": 1
+      }
+    },
+    "cost": 0,
+    "date": "2026-04-24T09:42:42.405000",
+    "input": 16213,
+    "output": 17,
+    "requests": 1
+  },
+  "ses_2441df2f8ffeCbrH7WzTsWGQA7": {
+    "by_model": {
+      "claude-sonnet-4.6": {
+        "cache": 1852977,
+        "cost": 1.4582181,
+        "input": 35,
+        "output": 60148,
+        "requests": 27
+      },
+      "gemma-4-31b": {
+        "cache": 0,
+        "cost": 0.06359314999999999,
+        "input": 423125,
+        "output": 311,
+        "requests": 4
+      },
+      "gpt-5.4": {
+        "cache": 10375168,
+        "cost": 4.463737,
+        "input": 355128,
+        "output": 65475,
+        "requests": 137
+      },
+      "minimax-m2.7": {
+        "cache": 209696,
+        "cost": 0.02078766,
+        "input": 20585,
+        "output": 1692,
+        "requests": 11
+      }
+    },
+    "cost": 2.52482981,
+    "date": "2026-04-23T19:52:06.198000",
+    "input": 798873,
+    "output": 127626,
+    "requests": 179
+  },
+  "ses_2455a524cffeEuB18V0Z7Qw3Np": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 13440,
+        "cost": 0.00613,
+        "input": 214,
+        "output": 149,
+        "requests": 2
+      }
+    },
+    "cost": 0.0024604999999999996,
+    "date": "2026-04-23T11:02:23.363000",
+    "input": 214,
+    "output": 149,
+    "requests": 2
+  },
+  "ses_2456a1a22ffeIIbwzTRNlsckbz": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 373632,
+        "cost": 0.348348,
+        "input": 36294,
+        "output": 10947,
+        "requests": 16
+      }
+    },
+    "cost": 0.2167725,
+    "date": "2026-04-23T10:58:58.103000",
+    "input": 36294,
+    "output": 10947,
+    "requests": 16
+  },
+  "ses_24fc1bfd1ffe79Vgpd2S59Lj5W": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 1023232,
+        "cost": 0.7331755,
+        "input": 135291,
+        "output": 9276,
+        "requests": 15
+      }
+    },
+    "cache": 1023232,
+    "cost": 0.36662324999999996,
+    "date": "2026-04-21T10:52:46.019000",
+    "input": 135291,
+    "output": 9276,
+    "requests": 15
+  },
+  "ses_254fb2c06ffeZ7hjywAFGcu4Z4": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 8324224,
+        "cost": 3.181876,
+        "input": 289494,
+        "output": 25139,
+        "requests": 81
+      }
+    },
+    "cost": 0.8585605000000001,
+    "date": "2026-04-20T11:32:00.729000",
+    "input": 289494,
+    "output": 25139,
+    "requests": 81
+  },
+  "ses_259a1686cffepjsPr4nWXOsqqs": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 7176192,
+        "cost": 2.4679330000000004,
+        "input": 149518,
+        "output": 20006,
+        "requests": 64
+      },
+      "minimax-m2.5": {
+        "cache": 934208,
+        "cost": 0.07678734,
+        "input": 154881,
+        "output": 1914,
+        "requests": 7
+      },
+      "minimax-m2.7": {
+        "cache": 249511,
+        "cost": 0.03995226,
+        "input": 78156,
+        "output": 1279,
+        "requests": 6
+      }
+    },
+    "cost": 0.6584800999999999,
+    "date": "2026-04-19T13:07:40.416000",
+    "input": 382555,
+    "output": 23199,
+    "requests": 77
+  },
+  "ses_25e0efd7affedEJUY7QZi6PwZp": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 515203,
+        "cost": 3.2324564999999996,
+        "input": 509246,
+        "output": 17145,
+        "requests": 23
+      },
+      "claude-sonnet-4.6": {
+        "cache": 553367,
+        "cost": 0.4664631,
+        "input": 54271,
+        "output": 9176,
+        "requests": 14
+      },
+      "gpt-5.4": {
+        "cache": 15150336,
+        "cost": 6.397174,
+        "input": 551926,
+        "output": 81985,
+        "requests": 115
+      }
+    },
+    "cost": 5.3889685,
+    "date": "2026-04-18T17:57:53.711000",
+    "input": 1115443,
+    "output": 108306,
+    "requests": 152
+  },
+  "ses_262eed1eeffemL13zJSaD4Dqbh": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 0,
+        "cost": 0.6506685,
+        "input": 2130375,
+        "output": 9630,
+        "requests": 56
+      }
+    },
+    "cost": 0.6506685,
+    "date": "2026-04-17T17:27:04.828000",
+    "input": 2130375,
+    "output": 9630,
+    "requests": 56
+  },
+  "ses_263527fe2ffePHFSNQBnaFPkQg": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cache": 0,
+    "cost": 0.0,
+    "date": "2026-04-17T15:21:55.726000",
+    "input": 0,
+    "output": 0,
+    "requests": 1
+  },
+  "ses_26696e780ffe1cAsH0ueInmlyi": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 1988480,
+        "cost": 0.79803,
+        "input": 88630,
+        "output": 5289,
+        "requests": 29
+      }
+    },
+    "cost": 0.2291485,
+    "date": "2026-04-17T00:15:53.815000",
+    "input": 88630,
+    "output": 5289,
+    "requests": 29
+  },
+  "ses_2674ef17effeR8cFwqPkdeyfJ3": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 4572800,
+        "cost": 1.9903075,
+        "input": 259289,
+        "output": 13259,
+        "requests": 54
+      }
+    },
+    "cost": 0.6393817500000001,
+    "date": "2026-04-16T21:38:07.332000",
+    "input": 259289,
+    "output": 13259,
+    "requests": 54
+  },
+  "ses_268767501ffe2nHSlC7YXE6lig": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 884192,
+        "cost": 0.09852732,
+        "input": 132426,
+        "output": 4790,
+        "requests": 18
+      }
+    },
+    "cost": 0.09852732,
+    "date": "2026-04-16T15:30:04.027000",
+    "input": 132426,
+    "output": 4790,
+    "requests": 18
+  },
+  "ses_269b10129ffewPD692p2TnnMNK": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 6824320,
+        "cost": 3.0201450000000003,
+        "input": 377318,
+        "output": 24718,
+        "requests": 74
+      }
+    },
+    "cost": 1.0063585000000002,
+    "date": "2026-04-16T11:48:38.083000",
+    "input": 377318,
+    "output": 24718,
+    "requests": 74
+  },
+  "ses_269c00825ffe5538gjYhOhoAM1": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 253954,
+        "cost": 0.03791874,
+        "input": 65845,
+        "output": 2440,
+        "requests": 14
+      }
+    },
+    "cost": 0.03791874,
+    "date": "2026-04-16T09:34:46.119000",
+    "input": 65845,
+    "output": 2440,
+    "requests": 14
+  },
+  "ses_26cbcd635ffe3lfmr7iPYPHUfL": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 811238,
+        "cost": 0.09363558,
+        "input": 111299,
+        "output": 9643,
+        "requests": 19
+      }
+    },
+    "cost": 0.09363558,
+    "date": "2026-04-15T19:39:36.474000",
+    "input": 111299,
+    "output": 9643,
+    "requests": 19
+  },
+  "ses_26d025c12ffeTEC3uHb1PoCGyC": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 133469,
+        "cost": 0.043874640000000006,
+        "input": 106155,
+        "output": 3350,
+        "requests": 7
+      }
+    },
+    "cost": 0.043874640000000006,
+    "date": "2026-04-15T18:21:38.718000",
+    "input": 106155,
+    "output": 3350,
+    "requests": 7
+  },
+  "ses_26da84ce8ffe2jIEicDMtAe1Gz": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 17462,
+        "cost": 0.01027452,
+        "input": 30356,
+        "output": 100,
+        "requests": 3
+      }
+    },
+    "cost": 0.01027452,
+    "date": "2026-04-15T15:23:03.141000",
+    "input": 30356,
+    "output": 100,
+    "requests": 3
+  },
+  "ses_26dd81bf0ffezLMOmEru7U3vFY": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 108625,
+        "cost": 0.00966535,
+        "input": 63737,
+        "output": 262,
+        "requests": 8
+      }
+    },
+    "cost": 0.00966535,
+    "date": "2026-04-15T14:36:10.533000",
+    "input": 63737,
+    "output": 262,
+    "requests": 8
+  },
+  "ses_26e0a4791ffe5qBIF0ZNqx8RMR": {
+    "by_model": {
+      "glm-5.1": {
+        "cache": 1835264,
+        "cost": 0.9132454400000001,
+        "input": 256782,
+        "output": 17405,
+        "requests": 47
+      }
+    },
+    "cost": 0.9132454400000001,
+    "date": "2026-04-15T13:58:57.932000",
+    "input": 256782,
+    "output": 17405,
+    "requests": 47
+  },
+  "ses_26edbc8f4ffe4fEUAhi4HXgP3T": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 13280,
+        "cost": 0.015223,
+        "input": 13986,
+        "output": 530,
+        "requests": 3
+      }
+    },
+    "cost": 0.015223,
+    "date": "2026-04-15T09:36:21.035000",
+    "input": 13986,
+    "output": 530,
+    "requests": 3
+  },
+  "ses_26efb50e6ffejXxRU8C7gX0mDi": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 0,
+        "cost": 0.0084465,
+        "input": 16797,
+        "output": 16,
+        "requests": 1
+      },
+      "step-3.5-flash": {
+        "cache": 0,
+        "cost": 0.0017671000000000002,
+        "input": 16978,
+        "output": 231,
+        "requests": 1
+      }
+    },
+    "cost": 0.0102136,
+    "date": "2026-04-15T09:08:06.638000",
+    "input": 33775,
+    "output": 247,
+    "requests": 2
+  },
+  "ses_270f9ebeaffeLnNbcL5TAPl6kB": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 618000,
+        "cost": 0.0552,
+        "input": 104772,
+        "output": 4357,
+        "requests": 29
+      }
+    },
+    "cost": 0.0552,
+    "date": "2026-04-15T00:01:25.934000",
+    "input": 104772,
+    "output": 4357,
+    "requests": 29
+  },
+  "ses_272acbb0dffemxZJHBRChzDPbN": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 98112,
+        "cost": 0.019566359999999998,
+        "input": 45606,
+        "output": 2451,
+        "requests": 8
+      },
+      "qwen3.6-plus": {
+        "cache": 265971,
+        "cost": 0.175043,
+        "input": 46111,
+        "output": 6334,
+        "requests": 14
+      }
+    },
+    "cost": 0.19460936,
+    "date": "2026-04-15T09:43:12.179000",
+    "input": 91717,
+    "output": 8785,
+    "requests": 22
+  },
+  "ses_272c98ef1ffeQ534K0z9E5udY4": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 435494,
+        "cost": 0.018004999999999997,
+        "input": 118404,
+        "output": 611,
+        "requests": 19
+      },
+      "glm-5": {
+        "cache": 0,
+        "cost": 0.27030528000000004,
+        "input": 336048,
+        "output": 573,
+        "requests": 10
+      }
+    },
+    "cost": 0.28831028000000003,
+    "date": "2026-04-14T15:35:47.188000",
+    "input": 454452,
+    "output": 1184,
+    "requests": 29
+  },
+  "ses_27313928effe3YN57zroQOItZu": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 159923,
+        "cost": 0.12735950000000001,
+        "input": 79370,
+        "output": 2571,
+        "requests": 8
+      }
+    },
+    "cache": 159923,
+    "cost": 0.12735950000000001,
+    "date": "2026-04-14T13:57:55.144000",
+    "input": 79370,
+    "output": 2571,
+    "requests": 8
+  },
+  "ses_2733ae782ffeBMmiFvpHQDYDTM": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 1137497,
+        "cost": 0.6870755,
+        "input": 197984,
+        "output": 6445,
+        "requests": 12
+      }
+    },
+    "cache": 1137497,
+    "cost": 0.6870755,
+    "date": "2026-04-14T13:17:13.655000",
+    "input": 197984,
+    "output": 6445,
+    "requests": 12
+  },
+  "ses_2736ac6f8ffewNo0haOc48k43H": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 0,
+        "cost": 0.005385,
+        "input": 9186,
+        "output": 264,
+        "requests": 2
+      }
+    },
+    "cost": 0.005385,
+    "date": "2026-04-14T12:21:31.732000",
+    "input": 9186,
+    "output": 264,
+    "requests": 2
+  },
+  "ses_2738a0de2ffeQ3egodOKB5KEBu": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 22064,
+        "cost": 0.0270105,
+        "input": 12745,
+        "output": 3202,
+        "requests": 4
+      }
+    },
+    "cache": 22064,
+    "cost": 0.0270105,
+    "date": "2026-04-14T11:48:22.114000",
+    "input": 12745,
+    "output": 3202,
+    "requests": 4
+  },
+  "ses_273eedc3affe737KzKW4oGp74c": {
+    "by_model": {
+      "glm-5": {
+        "cache": 0,
+        "cost": 0.240828,
+        "input": 294203,
+        "output": 2135,
+        "requests": 11
+      }
+    },
+    "cache": 0,
+    "cost": 0.240828,
+    "date": "2026-04-14T10:02:37.359000",
+    "input": 294203,
+    "output": 2135,
+    "requests": 11
+  },
+  "ses_2741a2b69ffeBY4MQD11jpKWbD": {
+    "by_model": {
+      "deepseek-ai/deepseek-v3.2": {
+        "cache": 0,
+        "cost": 0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      },
+      "glm-5": {
+        "cache": 0,
+        "cost": 1.5979062400000001,
+        "input": 1915978,
+        "output": 25439,
+        "requests": 39
+      },
+      "qwen3.6-plus": {
+        "cache": 7787712,
+        "cost": 4.81989,
+        "input": 1359930,
+        "output": 82023,
+        "requests": 146
+      }
+    },
+    "cost": 6.41779624,
+    "date": "2026-04-14T14:44:40.981000",
+    "input": 3275908,
+    "output": 107462,
+    "requests": 186
+  },
+  "ses_2773324beffeJeQcyvWk5aCZQa": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.2519437,
+        "input": 479125,
+        "output": 4762,
+        "requests": 24
+      }
+    },
+    "cost": 0.2519437,
+    "date": "2026-04-13T18:57:28.767000",
+    "input": 479125,
+    "output": 4762,
+    "requests": 24
+  },
+  "ses_278a0e674ffeOK71bSKsR81KEh": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 0,
+        "cost": 0.4139451,
+        "input": 1349137,
+        "output": 7670,
+        "requests": 25
+      }
+    },
+    "cost": 0.37155349,
+    "date": "2026-04-13T12:31:19.547000",
+    "input": 1349137,
+    "output": 7670,
+    "requests": 25
+  },
+  "ses_278b181abfferFfC3sqJ1pefB0": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 0,
+        "cost": 0.0028668,
+        "input": 3956,
+        "output": 1400,
+        "requests": 1
+      }
+    },
+    "cost": 0.0028668,
+    "date": "2026-04-13T11:46:50.274000",
+    "input": 3956,
+    "output": 1400,
+    "requests": 1
+  },
+  "ses_278b417dbffeOgSRJJzvD5D7Po": {
+    "by_model": {
+      "glm-5.1": {
+        "cache": 0,
+        "cost": 0.0388132,
+        "input": 24782,
+        "output": 936,
+        "requests": 2
+      }
+    },
+    "cost": 0.0388132,
+    "date": "2026-04-13T11:44:19.102000",
+    "input": 24782,
+    "output": 936,
+    "requests": 2
+  },
+  "ses_278f04340ffeKR6kFDx5amm8Mj": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 1207245,
+        "cost": 0.06009435,
+        "input": 391269,
+        "output": 3510,
+        "requests": 41
+      }
+    },
+    "cost": 0.06009435,
+    "date": "2026-04-13T11:08:38.274000",
+    "input": 391269,
+    "output": 3510,
+    "requests": 41
+  },
+  "ses_279100116ffeyF4gG78D8J3uBt": {
+    "by_model": {
+      "deepseek/deepseek-v3.2": {
+        "cache": 12224,
+        "cost": 0.005109160000000001,
+        "input": 12593,
+        "output": 647,
+        "requests": 2
+      }
+    },
+    "cost": 0,
+    "date": "2026-04-13T10:03:59.978000",
+    "input": 12593,
+    "output": 647,
+    "requests": 2
+  },
+  "ses_279206c31ffeQEujkeNiBCvgD3": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 0,
+        "cost": 0.0018158,
+        "input": 11788,
+        "output": 119,
+        "requests": 1
+      }
+    },
+    "cost": 0.0018158,
+    "date": "2026-04-13T09:46:31.584000",
+    "input": 11788,
+    "output": 119,
+    "requests": 1
+  },
+  "ses_279382f4dffefv72emfwuE1xoU": {
+    "by_model": {
+      "gemma-4-26b-a4b-it": {
+        "cache": 10180,
+        "cost": 0.00198285,
+        "input": 13171,
+        "output": 12,
+        "requests": 2
+      },
+      "gemma-4-31b": {
+        "cache": 50982,
+        "cost": 0.007593299999999999,
+        "input": 49654,
+        "output": 363,
+        "requests": 6
+      }
+    },
+    "cost": 0.007593299999999999,
+    "date": "2026-04-13T09:34:09.969000",
+    "input": 62825,
+    "output": 375,
+    "requests": 8
+  },
+  "ses_27ae00fe6ffeyFaaiYunRDqN9B": {
+    "by_model": {
+      "gemma-4-26b-a4b-it": {
+        "cache": 0,
+        "cost": 0.00175185,
+        "input": 11675,
+        "output": 1,
+        "requests": 2
+      },
+      "gemma-4-26b-it": {
+        "cache": 0,
+        "cost": 0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cost": 0,
+    "date": "2026-04-13T01:38:24.799000",
+    "input": 11675,
+    "output": 1,
+    "requests": 3
+  },
+  "ses_27af18611ffeIJdOZDe5gpTQ5h": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 247321,
+        "cost": 0.00569535,
+        "input": 34297,
+        "output": 1377,
+        "requests": 14
+      }
+    },
+    "cost": 0.00569535,
+    "date": "2026-04-13T01:26:07.691000",
+    "input": 34297,
+    "output": 1377,
+    "requests": 14
+  },
+  "ses_27b7a7415ffeLBJASjZsC2Wv9x": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.5323111,
+        "input": 998499,
+        "output": 12716,
+        "requests": 42
+      },
+      "qwen3.6-plus": {
+        "cache": 2828442,
+        "cost": 1.5360695,
+        "input": 148591,
+        "output": 15851,
+        "requests": 63
+      }
+    },
+    "cost": 2.0683806000000002,
+    "date": "2026-04-12T23:21:21.770000",
+    "input": 1147090,
+    "output": 28567,
+    "requests": 105
+  },
+  "ses_27ba9d1dfffezL9DS4XlaaPC70": {
+    "by_model": {
+      "glm-5": {
+        "cache": 0,
+        "cost": 0.15436416,
+        "input": 191416,
+        "output": 481,
+        "requests": 12
+      },
+      "minimax-m2.7": {
+        "cache": 0,
+        "cost": 0.0388146,
+        "input": 126486,
+        "output": 724,
+        "requests": 7
+      },
+      "qwen3.6-plus": {
+        "cache": 1215386,
+        "cost": 0.725508,
+        "input": 166696,
+        "output": 11489,
+        "requests": 47
+      }
+    },
+    "cost": 0.9147111800000001,
+    "date": "2026-04-12T22:36:50.809000",
+    "input": 484598,
+    "output": 12694,
+    "requests": 66
+  },
+  "ses_27bee802fffeFvvomRBm7dxTp6": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 11137,
+        "cost": 0.020896,
+        "input": 14767,
+        "output": 2648,
+        "requests": 3
+      }
+    },
+    "cost": 0.020896,
+    "date": "2026-04-12T20:41:33.040000",
+    "input": 14767,
+    "output": 2648,
+    "requests": 3
+  },
+  "ses_27c01ea58ffe4P3PPIyCex8uHO": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 5920529,
+        "cost": 3.3895090000000003,
+        "input": 533043,
+        "output": 54241,
+        "requests": 161
+      }
+    },
+    "cost": 3.3895090000000003,
+    "date": "2026-04-12T21:48:33.140000",
+    "input": 533043,
+    "output": 54241,
+    "requests": 161
+  },
+  "ses_27c0cf8aeffeBOwdVKZ4GA1rfb": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 2159792,
+        "cost": 0.15718835999999997,
+        "input": 241246,
+        "output": 16684,
+        "requests": 83
+      }
+    },
+    "cost": 0.15718835999999997,
+    "date": "2026-04-12T21:43:07.418000",
+    "input": 241246,
+    "output": 16684,
+    "requests": 83
+  },
+  "ses_27d674c63ffepw2ETe6A3giUeA": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 63776,
+        "cost": 0.00890508,
+        "input": 17554,
+        "output": 1438,
+        "requests": 5
+      }
+    },
+    "cost": 0.00890508,
+    "date": "2026-04-12T13:51:21.201000",
+    "input": 17554,
+    "output": 1438,
+    "requests": 5
+  },
+  "ses_27e144454ffe45HDrb81pTzNFm": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.27979600000000004,
+        "input": 539182,
+        "output": 3925,
+        "requests": 17
+      },
+      "qwen3.6-plus": {
+        "cache": 274866,
+        "cost": 0.2000885,
+        "input": 117181,
+        "output": 1355,
+        "requests": 7
+      }
+    },
+    "cost": 0.47988450000000005,
+    "date": "2026-04-12T13:18:50.615000",
+    "input": 656363,
+    "output": 5280,
+    "requests": 24
+  },
+  "ses_2817bb01fffeqteStY3kj1LPq7": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.1800005,
+        "input": 336731,
+        "output": 4475,
+        "requests": 17
+      }
+    },
+    "cost": 0.1800005,
+    "date": "2026-04-11T19:23:49.371000",
+    "input": 336731,
+    "output": 4475,
+    "requests": 17
+  },
+  "ses_28181f615ffe80bARkyJezZQR6": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 259286,
+        "cost": 0.030017250000000002,
+        "input": 194507,
+        "output": 2103,
+        "requests": 14
+      }
+    },
+    "cost": 0.030017250000000002,
+    "date": "2026-04-11T18:45:17.516000",
+    "input": 194507,
+    "output": 2103,
+    "requests": 14
+  },
+  "ses_281ad54d8fferIEbp023vZ63cU": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 2599886,
+        "cost": 0.13441664999999997,
+        "input": 835511,
+        "output": 22725,
+        "requests": 60
+      },
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.6790712,
+        "input": 1304754,
+        "output": 10267,
+        "requests": 43
+      }
+    },
+    "cost": 0.81348785,
+    "date": "2026-04-11T18:28:56.713000",
+    "input": 2140265,
+    "output": 32992,
+    "requests": 103
+  },
+  "ses_281fa1e9bffet2Zc5Np4kQXlvZ": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.032003500000000004,
+        "input": 60289,
+        "output": 715,
+        "requests": 5
+      }
+    },
+    "cost": 0.032003500000000004,
+    "date": "2026-04-11T16:30:28.606000",
+    "input": 60289,
+    "output": 715,
+    "requests": 5
+  },
+  "ses_281ff55bfffe4a1IIegWQ00VYS": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.5186104,
+        "input": 994066,
+        "output": 8299,
+        "requests": 37
+      }
+    },
+    "cost": 0.5186104,
+    "date": "2026-04-11T16:47:44.239000",
+    "input": 994066,
+    "output": 8299,
+    "requests": 37
+  },
+  "ses_28209e8c2ffeJ22rN1syDV0W2Q": {
+    "by_model": {
+      "glm4.7": {
+        "cache": 14825,
+        "cost": 0.020719275000000002,
+        "input": 42685,
+        "output": 675,
+        "requests": 4
+      },
+      "step-3.5-flash": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cost": 0.0,
+    "date": "2026-04-11T16:14:23.748000",
+    "input": 42685,
+    "output": 675,
+    "requests": 5
+  },
+  "ses_2820e0e86ffeb3WV6UP7W6uCMa": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 64066,
+        "cost": 0.009769549999999998,
+        "input": 58653,
+        "output": 2429,
+        "requests": 6
+      }
+    },
+    "cost": 0.009769549999999998,
+    "date": "2026-04-11T16:11:25.755000",
+    "input": 58653,
+    "output": 2429,
+    "requests": 6
+  },
+  "ses_28210b8f6ffeczDp5y60n9YMna": {
+    "by_model": {
+      "glm5": {
+        "cache": 0,
+        "cost": 0.0202184,
+        "input": 23913,
+        "output": 425,
+        "requests": 2
+      }
+    },
+    "cost": 0,
+    "date": "2026-04-11T16:07:29.607000",
+    "input": 23913,
+    "output": 425,
+    "requests": 2
+  },
+  "ses_28216119fffeFVklggdPOboQ1u": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 31902,
+        "cost": 0.0038709499999999997,
+        "input": 22289,
+        "output": 1319,
+        "requests": 4
+      }
+    },
+    "cost": 0.0038709499999999997,
+    "date": "2026-04-11T16:03:34.894000",
+    "input": 22289,
+    "output": 1319,
+    "requests": 4
+  },
+  "ses_2823bff94ffecmT0y0WCeOn6V1": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 15248,
+        "cost": 0.00419364,
+        "input": 11738,
+        "output": 179,
+        "requests": 2
+      }
+    },
+    "cost": 0.00419364,
+    "date": "2026-04-11T15:18:16.748000",
+    "input": 11738,
+    "output": 179,
+    "requests": 2
+  },
+  "ses_2824b2449ffefHDxN5HFIhuzS3": {
+    "by_model": {
+      "glm5": {
+        "cache": 0,
+        "cost": 0.010486559999999999,
+        "input": 12721,
+        "output": 121,
+        "requests": 1
+      }
+    },
+    "cost": 0,
+    "date": "2026-04-11T15:02:15.592000",
+    "input": 12721,
+    "output": 121,
+    "requests": 1
+  },
+  "ses_2828e6242ffeVNNvmX35OaHQ1B": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 249163,
+        "cost": 0.0392693,
+        "input": 246238,
+        "output": 5834,
+        "requests": 20
+      },
+      "minimax-m2.5": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cost": 0.0392693,
+    "date": "2026-04-11T14:40:57.332000",
+    "input": 246238,
+    "output": 5834,
+    "requests": 21
+  },
+  "ses_2829b492fffeFBM2ByytE3HFRR": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 335097,
+        "cost": 0.20585699999999998,
+        "input": 58899,
+        "output": 2953,
+        "requests": 14
+      }
+    },
+    "cost": 0.044050679999999995,
+    "date": "2026-04-11T13:36:12.623000",
+    "input": 58899,
+    "output": 2953,
+    "requests": 14
+  },
+  "ses_2829edbc6ffe36Kd7ZhiJEbqdP": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 296470,
+        "cost": 0.180015,
+        "input": 31280,
+        "output": 5380,
+        "requests": 16
+      }
+    },
+    "cost": 0.037282800000000005,
+    "date": "2026-04-11T13:45:33.412000",
+    "input": 31280,
+    "output": 5380,
+    "requests": 16
+  },
+  "ses_282cede42ffegOcelAmkXC4Isu": {
+    "by_model": {
+      "gpt-5-mini": {
+        "cache": 39808,
+        "cost": 0.020454,
+        "input": 6328,
+        "output": 9436,
+        "requests": 4
+      },
+      "gpt-5.4": {
+        "cache": 454656,
+        "cost": 0.539439,
+        "input": 58098,
+        "output": 18702,
+        "requests": 15
+      }
+    },
+    "cost": 0.38395349999999995,
+    "date": "2026-04-11T12:52:31.925000",
+    "input": 64426,
+    "output": 28138,
+    "requests": 19
+  },
+  "ses_2881ad414ffeloicaWldyId9Rf": {
+    "by_model": {
+      "qwen3.6-plus": {
+        "cache": 460860,
+        "cost": 0.2850105,
+        "input": 83895,
+        "output": 4211,
+        "requests": 20
+      }
+    },
+    "cost": 0.2850105,
+    "date": "2026-04-11T14:52:00.862000",
+    "input": 83895,
+    "output": 4211,
+    "requests": 20
+  },
+  "ses_28825596affeHK6TLRd01sNrpP": {
+    "by_model": {
+      "qwen3.6-plus-preview": {
+        "cache": 577694,
+        "cost": 0.32976900000000003,
+        "input": 61096,
+        "output": 3458,
+        "requests": 23
+      }
+    },
+    "cost": 0.05584536,
+    "date": "2026-04-10T11:55:40.823000",
+    "input": 61096,
+    "output": 3458,
+    "requests": 23
+  },
+  "ses_288b8299cffeav3KdH5oDe5jvs": {
+    "by_model": {
+      "glm-5.1": {
+        "cache": 0,
+        "cost": 0.7941648,
+        "input": 561088,
+        "output": 1964,
+        "requests": 21
+      }
+    },
+    "cache": 0,
+    "cost": 0.7941648,
+    "date": "2026-04-10T09:07:43.806000",
+    "input": 561088,
+    "output": 1964,
+    "requests": 21
+  },
+  "ses_288d524fcffeuNqJbIytV2eyGl": {
+    "by_model": {
+      "gemini-3.1-flash": {
+        "cache": 0,
+        "cost": 0.038445,
+        "input": 143250,
+        "output": 1755,
+        "requests": 1
+      },
+      "glm-5": {
+        "cache": 0,
+        "cost": 0.32897408000000006,
+        "input": 400328,
+        "output": 3403,
+        "requests": 16
+      },
+      "gpt-5.4": {
+        "cache": 14472064,
+        "cost": 10.1063785,
+        "input": 965193,
+        "output": 271692,
+        "requests": 184
+      },
+      "minimax-m2.5": {
+        "cache": 1019392,
+        "cost": 0.07664135999999999,
+        "input": 145688,
+        "output": 1961,
+        "requests": 18
+      },
+      "qwen3.6-plus": {
+        "cache": 6813654,
+        "cost": 3.732715,
+        "input": 519230,
+        "output": 22091,
+        "requests": 77
+      }
+    },
+    "cost": 6.43164775,
+    "date": "2026-04-11T13:28:11.370000",
+    "input": 2173689,
+    "output": 300902,
+    "requests": 296
+  },
+  "ses_28d5358f8ffeeocvqAwPzfz51W": {
+    "by_model": {
+      "gemma-4-31b": {
+        "cache": 109399,
+        "cost": 0.023762899999999997,
+        "input": 153222,
+        "output": 1949,
+        "requests": 4
+      },
+      "glm-5": {
+        "cache": 0,
+        "cost": 0.11746432,
+        "input": 136936,
+        "output": 3092,
+        "requests": 6
+      },
+      "gpt-5.4": {
+        "cache": 2121984,
+        "cost": 2.603691,
+        "input": 457554,
+        "output": 61954,
+        "requests": 44
+      }
+    },
+    "cost": 1.80930272,
+    "date": "2026-04-11T15:58:09.214000",
+    "input": 747712,
+    "output": 66995,
+    "requests": 54
+  },
+  "ses_294d62ae9ffeKNU4wR53gttNuY": {
+    "by_model": {
+      "glm-5": {
+        "cache": 0,
+        "cost": 0.46823424,
+        "input": 572320,
+        "output": 4054,
+        "requests": 26
+      }
+    },
+    "cost": 0.46823424,
+    "date": "2026-04-08T00:45:51.274000",
+    "input": 572320,
+    "output": 4054,
+    "requests": 26
+  },
+  "ses_297131eb7ffe6M99IWM4wpbwM4": {
+    "by_model": {
+      "glm-5": {
+        "cache": 0,
+        "cost": 0.7012787200000001,
+        "input": 868336,
+        "output": 2582,
+        "requests": 15
+      }
+    },
+    "cost": 0.7012787200000001,
+    "date": "2026-04-07T14:15:38.264000",
+    "input": 868336,
+    "output": 2582,
+    "requests": 15
+  },
+  "ses_29755375effevYuPgMhKMqcFPZ": {
+    "by_model": {
+      "glm-5": {
+        "cache": 0,
+        "cost": 0.05822928,
+        "input": 70393,
+        "output": 748,
+        "requests": 6
+      }
+    },
+    "cost": 0.05822928,
+    "date": "2026-04-07T12:59:03.868000",
+    "input": 70393,
+    "output": 748,
+    "requests": 6
+  },
+  "ses_29785e8deffe2vOK3sOUunLf7j": {
+    "by_model": {
+      "minimax-m2.7": {
+        "cache": 0,
+        "cost": 0.2671149,
+        "input": 867867,
+        "output": 5629,
+        "requests": 35
+      }
+    },
+    "cost": 0.23967164000000005,
+    "date": "2026-04-07T12:41:51.897000",
+    "input": 867867,
+    "output": 5629,
+    "requests": 35
+  },
+  "ses_297ad152effeEjrdk3n3NFuXHx": {
+    "by_model": {
+      "free": {
+        "cache": 0,
+        "cost": 0,
+        "input": 12757,
+        "output": 2,
+        "requests": 1
+      }
+    },
+    "cost": 0,
+    "date": "2026-04-07T11:22:42.695000",
+    "input": 12757,
+    "output": 2,
+    "requests": 1
+  },
+  "ses_297ad7fbbffe4GNkEp27qhhgAa": {
+    "by_model": {
+      "kilo-auto/balanced": {
+        "cache": 2304,
+        "cost": 0,
+        "input": 10484,
+        "output": 19,
+        "requests": 1
+      }
+    },
+    "cost": 0,
+    "date": "2026-04-07T11:22:13.948000",
+    "input": 10484,
+    "output": 19,
+    "requests": 1
+  },
+  "ses_297ae686cffewjjN13UP8HVyX3": {
+    "by_model": {
+      "kilo-auto/free": {
+        "cache": 2336,
+        "cost": 0,
+        "input": 10503,
+        "output": 23,
+        "requests": 1
+      }
+    },
+    "cost": 0,
+    "date": "2026-04-07T11:21:13.651000",
+    "input": 10503,
+    "output": 23,
+    "requests": 1
+  },
+  "ses_297baa42affeWr9lv49Lczlpz2": {
+    "by_model": {
+      "arcee-ai/trinity-large-thinking": {
+        "cache": 316240,
+        "cost": 0.129568,
+        "input": 426000,
+        "output": 23068,
+        "requests": 28
+      },
+      "qwen3.6-plus-preview": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cost": 0.129568,
+    "date": "2026-04-07T11:25:29.947000",
+    "input": 426000,
+    "output": 23068,
+    "requests": 29
+  },
+  "ses_297f091e3ffeKegjxDpzRQtpnC": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 2755456,
+        "cost": 1.9661490000000001,
+        "input": 127586,
+        "output": 63888,
+        "requests": 48
+      }
+    },
+    "cost": 1.1177075,
+    "date": "2026-04-07T11:18:44.670000",
+    "input": 127586,
+    "output": 63888,
+    "requests": 48
+  },
+  "ses_29c7ef002ffeSU2GG7G67yBFxK": {
+    "by_model": {
+      "qwen3.6-plus-preview": {
+        "cache": 0,
+        "cost": 0.07252900000000001,
+        "input": 131084,
+        "output": 2329,
+        "requests": 7
+      }
+    },
+    "cost": 0.058023200000000004,
+    "date": "2026-04-06T13:37:38.485000",
+    "input": 131084,
+    "output": 2329,
+    "requests": 7
+  },
+  "ses_2ab33c887ffec9oCYm8UmIFe3h": {
+    "by_model": {
+      "qwen3.6-plus-preview": {
+        "cache": 0,
+        "cost": 0.3542925,
+        "input": 678963,
+        "output": 4937,
+        "requests": 23
+      }
+    },
+    "cost": 0.283434,
+    "date": "2026-04-03T16:35:36.062000",
+    "input": 678963,
+    "output": 4937,
+    "requests": 23
+  },
+  "ses_2ac04eec9ffeOclRwjK1o6x5lo": {
+    "by_model": {
+      "qwen3.6-plus-preview": {
+        "cache": 0,
+        "cost": 0.6843575,
+        "input": 1272943,
+        "output": 15962,
+        "requests": 40
+      }
+    },
+    "cost": 0.547486,
+    "date": "2026-04-03T13:07:51.588000",
+    "input": 1272943,
+    "output": 15962,
+    "requests": 40
+  },
+  "ses_2b6fdf4f6ffeBnFwtUs5sah5Vu": {
+    "by_model": {
+      "qwen3.6-plus-preview": {
+        "cache": 0,
+        "cost": 2.888863,
+        "input": 5351750,
+        "output": 70996,
+        "requests": 88
+      }
+    },
+    "cost": 2.3110904000000003,
+    "date": "2026-04-01T11:31:34.310000",
+    "input": 5351750,
+    "output": 70996,
+    "requests": 88
+  },
+  "ses_2be353fc6ffenTW3yBv2PEsqfS": {
+    "by_model": {
+      "qwen3.6-plus-preview": {
+        "cache": 0,
+        "cost": 1.0458545000000001,
+        "input": 2031457,
+        "output": 10042,
+        "requests": 50
+      }
+    },
+    "cost": 0.8366836000000001,
+    "date": "2026-03-31T00:03:39.094000",
+    "input": 2031457,
+    "output": 10042,
+    "requests": 50
+  },
+  "ses_2befd9e4effeEnrYBdvWWPZaRE": {
+    "by_model": {
+      "qwen3.6-plus-preview": {
+        "cache": 0,
+        "cost": 1.7200905,
+        "input": 3328113,
+        "output": 18678,
+        "requests": 61
+      }
+    },
+    "cost": 1.3760724000000002,
+    "date": "2026-03-30T20:50:55.162000",
+    "input": 3328113,
+    "output": 18678,
+    "requests": 61
+  },
+  "ses_2c171cd7fffezRC0UOJRWiqM1T": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 1585024,
+        "cost": 0.291014,
+        "input": 219575,
+        "output": 23813,
+        "requests": 52
+      }
+    },
+    "cost": 0.291014,
+    "date": "2026-03-30T09:25:14.058000",
+    "input": 219575,
+    "output": 23813,
+    "requests": 52
+  },
+  "ses_2d0d1f9acffe4w0ZrnEYdbvMtf": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 375936,
+        "cost": 0.109834,
+        "input": 92701,
+        "output": 5711,
+        "requests": 22
+      }
+    },
+    "cost": 0.109834,
+    "date": "2026-03-27T09:12:43.522000",
+    "input": 92701,
+    "output": 5711,
+    "requests": 22
+  },
+  "ses_2d620f59bffe1PD6l2vgMltOx6": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 2340992,
+        "cost": 1.381493,
+        "input": 91530,
+        "output": 37828,
+        "requests": 46
+      },
+      "mimo-v2-pro": {
+        "cache": 3648,
+        "cost": 0.026057,
+        "input": 25484,
+        "output": 191,
+        "requests": 4
+      }
+    },
+    "cost": 0.7158265,
+    "date": "2026-03-26T08:43:34.436000",
+    "input": 117014,
+    "output": 38019,
+    "requests": 50
+  },
+  "ses_2db481b4fffeIlRdqs6OJWX0Fo": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 14663488,
+        "cost": 1.0470899999999999,
+        "input": 925680,
+        "output": 40470,
+        "requests": 181
+      }
+    },
+    "cost": 1.0470899999999999,
+    "date": "2026-03-25T12:21:43.530000",
+    "input": 925680,
+    "output": 40470,
+    "requests": 181
+  },
+  "ses_2df0cde70ffeLDihRY8ER9YAa4": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 27769472,
+        "cost": 11.092543,
+        "input": 1088798,
+        "output": 95212,
+        "requests": 221
+      },
+      "mimo-v2-pro": {
+        "cache": 46289024,
+        "cost": 2.492457,
+        "input": 1904733,
+        "output": 195908,
+        "requests": 546
+      }
+    },
+    "cost": 5.7308215,
+    "date": "2026-03-25T16:16:46.660000",
+    "input": 2993531,
+    "output": 291120,
+    "requests": 767
+  },
+  "ses_2e2f23178ffe9TVPKnBusiMhTF": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 16708352,
+        "cost": 1.4323029999999999,
+        "input": 1245340,
+        "output": 62321,
+        "requests": 175
+      }
+    },
+    "cost": 1.4323029999999999,
+    "date": "2026-03-23T22:32:11.574000",
+    "input": 1245340,
+    "output": 62321,
+    "requests": 175
+  },
+  "ses_2e3626804ffeSZHaxG0a9HgODB": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 1715776,
+        "cost": 0.207234,
+        "input": 155919,
+        "output": 17105,
+        "requests": 49
+      }
+    },
+    "cost": 0.207234,
+    "date": "2026-03-23T18:44:00.739000",
+    "input": 155919,
+    "output": 17105,
+    "requests": 49
+  },
+  "ses_2e365795cffeNfcoBFWRNqbDaj": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 193024,
+        "cost": 0.254142,
+        "input": 230814,
+        "output": 7776,
+        "reasoning": 1421,
+        "requests": 13
+      }
+    },
+    "cost": 0.254142,
+    "date": "2026-04-15T14:15:07.507000",
+    "input": 230814,
+    "output": 7776,
+    "requests": 13
+  },
+  "ses_2e42ae96cffeUtBNDED7Qmp2dq": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 115136,
+        "cost": 0.042115,
+        "input": 35365,
+        "output": 2250,
+        "reasoning": 319,
+        "requests": 6
+      }
+    },
+    "cost": 0.042115,
+    "date": "2026-03-23T14:54:58.918000",
+    "input": 35365,
+    "output": 2250,
+    "requests": 6
+  },
+  "ses_2e4e4b2d8ffe1wo16K1L3pzvVW": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 49404608,
+        "cost": 3.948131,
+        "input": 3248801,
+        "output": 233110,
+        "requests": 640
+      }
+    },
+    "cost": 3.948131,
+    "date": "2026-03-23T18:26:41.416000",
+    "input": 3248801,
+    "output": 233110,
+    "requests": 640
+  },
+  "ses_2e4fb749dffePXzpBj0uhEK2Po": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 1052096,
+        "cost": 0.11218600000000001,
+        "input": 97525,
+        "output": 4887,
+        "requests": 44
+      },
+      "minimax-m2.5": {
+        "cache": 295136,
+        "cost": 0.07185378,
+        "input": 201939,
+        "output": 2015,
+        "requests": 14
+      }
+    },
+    "cost": 0.18403978000000001,
+    "date": "2026-03-23T11:24:54.424690",
+    "input": 299464,
+    "output": 6902,
+    "requests": 58
+  },
+  "ses_2e7ddf2a5ffeY7qsjNZt5Oxsij": {
+    "by_model": {
+      "mimo-v2-pro": {
+        "cache": 752768,
+        "cost": 0.163637,
+        "input": 148283,
+        "output": 5118,
+        "requests": 27
+      }
+    },
+    "cost": 0.163637,
+    "date": "2026-03-22T21:48:51.998582",
+    "input": 148283,
+    "output": 5118,
+    "requests": 27
+  },
+  "ses_2e80904afffepFOjfgNrW2TrM4": {
+    "by_model": {
+      "mimo-v2": {
+        "cache": 2581568,
+        "cost": 0.383357,
+        "input": 287582,
+        "output": 31925,
+        "requests": 56
+      }
+    },
+    "cost": 0,
+    "date": "2026-03-22T21:33:17.191943",
+    "input": 287582,
+    "output": 31925,
+    "requests": 56
+  },
+  "ses_2fa191343ffeHbAWIMZQNI9gik": {
+    "by_model": {
+      "mimo-v2": {
+        "cache": 12733824,
+        "cost": 0.483531,
+        "input": 393513,
+        "output": 30006,
+        "requests": 78
+      },
+      "mimo-v2-omni": {
+        "cache": 6487680,
+        "cost": 0.04481494,
+        "input": 135233,
+        "output": 22926,
+        "requests": 102
+      }
+    },
+    "cost": 0,
+    "date": "2026-03-19T11:51:56.720606",
+    "input": 528746,
+    "output": 52932,
+    "requests": 180
+  },
+  "ses_2fc175ccdffe2L7q9q0WKEwJQm": {
+    "by_model": {
+      "mimo-v2-omni": {
+        "cache": 834536,
+        "cost": 0.009792148,
+        "input": 39101,
+        "output": 6480,
+        "requests": 31
+      }
+    },
+    "cost": 0,
+    "date": "2026-03-18T23:27:30.928036",
+    "input": 39101,
+    "output": 6480,
+    "requests": 31
+  },
+  "ses_2fdfe3ab7ffeKQeML327t7KxcH": {
+    "by_model": {
+      "step-3.5-flash": {
+        "cache": 0,
+        "cost": 0.0013498000000000002,
+        "input": 13003,
+        "output": 165,
+        "requests": 1
+      },
+      "trinity": {
+        "cache": 0,
+        "cost": 0.00313025,
+        "input": 12469,
+        "output": 13,
+        "requests": 1
+      }
+    },
+    "cost": 0.00448005,
+    "date": "2026-03-18T14:33:13.172412",
+    "input": 25472,
+    "output": 178,
+    "requests": 2
+  },
+  "ses_3042af216ffe5VhFBhWKN0jCZ6": {
+    "by_model": {
+      "openrouter/hunter-alpha": {
+        "cache": 2065344,
+        "cost": 0.24077099999999999,
+        "input": 198480,
+        "output": 14097,
+        "requests": 23
+      }
+    },
+    "cost": 0,
+    "date": "2026-03-17T10:11:29.930730",
+    "input": 198480,
+    "output": 14097,
+    "requests": 23
+  },
+  "ses_307596555ffehnKNsL3CElhpDS": {
+    "by_model": {
+      "openrouter/healer-alpha": {
+        "cache": 1061210,
+        "cost": 0.156676,
+        "input": 144931,
+        "output": 3915,
+        "requests": 30
+      }
+    },
+    "cost": 0,
+    "date": "2026-03-16T18:59:47.078826",
+    "input": 144931,
+    "output": 3915,
+    "requests": 30
+  },
+  "ses_32776b68fffeRu20CnmMrOnsWJ": {
+    "by_model": {
+      "gpt-5.4": {
+        "cache": 6750592,
+        "cost": 2.9338604999999998,
+        "input": 325103,
+        "output": 28897,
+        "requests": 68
+      },
+      "minimax-m2.5": {
+        "cache": 3105043,
+        "cost": 0.14380568999999999,
+        "input": 136324,
+        "output": 8131,
+        "requests": 42
+      },
+      "openrouter/healer-alpha": {
+        "cache": 5057304,
+        "cost": 1.764767,
+        "input": 1600283,
+        "output": 54828,
+        "requests": 90
+      },
+      "openrouter/hunter-alpha": {
+        "cache": 15146880,
+        "cost": 3.740059,
+        "input": 3474994,
+        "output": 88355,
+        "requests": 179
+      }
+    },
+    "cost": 0.14380568999999999,
+    "date": "2026-03-17T16:26:02.280758",
+    "input": 5536704,
+    "output": 180211,
+    "requests": 379
+  },
+  "ses_3452eba23ffeywZZXK1wKr0s6h": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 215543,
+        "cost": 1.4642965,
+        "input": 261315,
+        "output": 1998,
+        "requests": 6
+      },
+      "claude-sonnet-4.6": {
+        "cache": 10858398,
+        "cost": 5.422808399999999,
+        "input": 514443,
+        "output": 41464,
+        "requests": 169
+      },
+      "minimax-m2.5": {
+        "cache": 18134186,
+        "cost": 1.40191638,
+        "input": 2474532,
+        "output": 96276,
+        "requests": 360
+      }
+    },
+    "cost": 4.92373038,
+    "date": "2026-03-06T15:00:03.944800",
+    "input": 3250290,
+    "output": 139738,
+    "requests": 535
+  },
+  "ses_3470b78a8ffeEEIxJ2PUfzfdMg": {
+    "by_model": {
+      "gemini-3-flash": {
+        "cache": 0,
+        "cost": 0.014484499999999999,
+        "input": 28627,
+        "output": 57,
+        "requests": 2
+      }
+    },
+    "cost": 0.014484499999999999,
+    "date": "2026-03-04T10:06:02.740159",
+    "input": 28627,
+    "output": 57,
+    "requests": 2
+  },
+  "ses_3472eb924ffeVLOGHdXs8Bj3Zp": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 539186,
+        "cost": 0.06843168,
+        "input": 140023,
+        "output": 8541,
+        "requests": 19
+      }
+    },
+    "cost": 0.06843168,
+    "date": "2026-03-04T10:01:02.556071",
+    "input": 140023,
+    "output": 8541,
+    "requests": 19
+  },
+  "ses_3495a549dffeevm0GpV2krV56d": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 126486,
+        "cost": 0.01619838,
+        "input": 35162,
+        "output": 1546,
+        "requests": 9
+      }
+    },
+    "cost": 0.01619838,
+    "date": "2026-03-04T10:20:32.949119",
+    "input": 35162,
+    "output": 1546,
+    "requests": 9
+  },
+  "ses_34c7f9767ffeNDjV9rdZW7tqjQ": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 905565,
+        "cost": 13.2360175,
+        "input": 2454847,
+        "output": 20360,
+        "requests": 49
+      },
+      "kimi-k2.5": {
+        "cache": 1752576,
+        "cost": 0.33872983999999995,
+        "input": 259530,
+        "output": 19705,
+        "requests": 42
+      },
+      "minimax-m2.5": {
+        "cache": 1974100,
+        "cost": 0.1985661,
+        "input": 423693,
+        "output": 10196,
+        "requests": 28
+      },
+      "trinity-large-preview": {
+        "cache": 0,
+        "cost": 0.17882875,
+        "input": 709395,
+        "output": 1480,
+        "requests": 26
+      }
+    },
+    "cost": 13.49935969,
+    "date": "2026-03-04T18:13:17.321384",
+    "input": 3847465,
+    "output": 51741,
+    "requests": 145
+  },
+  "ses_350246d24ffe0JYHjLHDIAYgWh": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 2294083,
+        "cost": 20.2315215,
+        "input": 3457931,
+        "output": 71793,
+        "requests": 68
+      },
+      "kimi-k2.5": {
+        "cache": 65792,
+        "cost": 0.06297218,
+        "input": 103421,
+        "output": 2054,
+        "requests": 4
+      }
+    },
+    "cost": 19.14745218,
+    "date": "2026-03-02T16:31:33.245873",
+    "input": 3561352,
+    "output": 73847,
+    "requests": 72
+  },
+  "ses_35163aab6ffel3hoN2Rnq8hYw4": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 3500544,
+        "cost": 0.5062633599999999,
+        "input": 226876,
+        "output": 29914,
+        "requests": 89
+      }
+    },
+    "cost": 0.5062633599999999,
+    "date": "2026-03-02T11:20:24.479472",
+    "input": 226876,
+    "output": 29914,
+    "requests": 89
+  },
+  "ses_351bc491dffexw75zyevyiM0aF": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 248181,
+        "cost": 0.02499783,
+        "input": 50076,
+        "output": 2108,
+        "requests": 14
+      }
+    },
+    "cache": 248181,
+    "cost": 0.02499783,
+    "date": "2026-03-02T08:43:45.880000",
+    "input": 50076,
+    "output": 2108,
+    "requests": 14
+  },
+  "ses_359f8d862ffetXNB6nYKomGioJ": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 927674,
+        "cost": 2.434972,
+        "input": 331347,
+        "output": 12576,
+        "requests": 17
+      },
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.009395,
+        "input": 11250,
+        "output": 1450,
+        "requests": 1
+      },
+      "minimax-m2.5": {
+        "cache": 2125069,
+        "cost": 0.18395906999999997,
+        "input": 342686,
+        "output": 14501,
+        "requests": 70
+      }
+    },
+    "cost": 2.16448907,
+    "date": "2026-03-02T09:37:28.031930",
+    "input": 685283,
+    "output": 28527,
+    "requests": 88
+  },
+  "ses_365eaa611ffeG6JjvXtrd9zv0p": {
+    "by_model": {
+      "claude-sonnet-4.6": {
+        "cache": 133899,
+        "cost": 0.7984077,
+        "input": 228991,
+        "output": 4751,
+        "requests": 8
+      }
+    },
+    "cache": 133899,
+    "cost": 0.7582380000000001,
+    "date": "2026-02-26T10:15:15.903000",
+    "input": 228991,
+    "output": 4751,
+    "requests": 8
+  },
+  "ses_3663e4f54ffe1pXo0sZPitUi09": {
+    "by_model": {
+      "claude-sonnet-4.6": {
+        "cache": 2723839,
+        "cost": 3.9727467,
+        "input": 867440,
+        "output": 36885,
+        "requests": 72
+      },
+      "minimax-m2.5": {
+        "cache": 1148118,
+        "cost": 0.16342073999999998,
+        "input": 403416,
+        "output": 6627,
+        "requests": 39
+      }
+    },
+    "cost": 3.3190157399999998,
+    "date": "2026-02-26T15:27:05.988662",
+    "input": 1270856,
+    "output": 43512,
+    "requests": 111
+  },
+  "ses_369a7d427ffeINdYJNN0pkp2Ez": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 275372,
+        "cost": 0.01307856,
+        "input": 3410,
+        "output": 3162,
+        "requests": 18
+      }
+    },
+    "cost": 0.01307856,
+    "date": "2026-02-25T16:52:59.127554",
+    "input": 3410,
+    "output": 3162,
+    "requests": 18
+  },
+  "ses_369ac193effeObLD0KjSQTyLsE": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 41057,
+        "cost": 0.00170271,
+        "input": 474,
+        "output": 274,
+        "requests": 4
+      }
+    },
+    "cache": 41057,
+    "cost": 0.00170271,
+    "date": "2026-02-25T16:44:10.430000",
+    "input": 474,
+    "output": 274,
+    "requests": 4
+  },
+  "ses_36a9632a8ffeyvD69iiJ3gHD7C": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 2093044,
+        "cost": 12.581821999999999,
+        "input": 2220965,
+        "output": 17219,
+        "requests": 28
+      },
+      "claude-sonnet-4.6": {
+        "cache": 36557842,
+        "cost": 12.2961366,
+        "input": 357143,
+        "output": 17157,
+        "requests": 611
+      },
+      "glm-5": {
+        "cache": 62784,
+        "cost": 0.4827211200000001,
+        "input": 580883,
+        "output": 3113,
+        "requests": 10
+      },
+      "kimi-k2.5": {
+        "cache": 115712,
+        "cost": 0.029584279999999998,
+        "input": 20364,
+        "output": 3457,
+        "requests": 8
+      },
+      "minimax-m2.5": {
+        "cache": 510,
+        "cost": 9.69e-05,
+        "input": 84,
+        "output": 47,
+        "requests": 1
+      }
+    },
+    "cost": 13.376486300000002,
+    "date": "2026-02-25T16:03:37.485805",
+    "input": 3179439,
+    "output": 40993,
+    "requests": 658
+  },
+  "ses_36b656f9fffejYnncCgPJsCSum": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 2147398,
+        "cost": 0.13590623999999998,
+        "input": 221025,
+        "output": 4314,
+        "requests": 35
+      }
+    },
+    "cost": 0.13590623999999998,
+    "date": "2026-02-25T08:52:59.219304",
+    "input": 221025,
+    "output": 4314,
+    "requests": 35
+  },
+  "ses_370750bffffeWh8IxBA4kISUjg": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 2696510,
+        "cost": 0.428958,
+        "input": 1112077,
+        "output": 12033,
+        "requests": 78
+      }
+    },
+    "cost": 0.428958,
+    "date": "2026-02-24T10:45:31.595292",
+    "input": 1112077,
+    "output": 12033,
+    "requests": 78
+  },
+  "ses_3752a2baeffealPLpgvRJZmYRV": {
+    "by_model": {
+      "gemini-3.1-pro": {
+        "cache": 5547825,
+        "cost": 3.7615350000000003,
+        "input": 1163391,
+        "output": 27099,
+        "requests": 67
+      },
+      "glm-5": {
+        "cache": 86144,
+        "cost": 0.4649894400000001,
+        "input": 536456,
+        "output": 8610,
+        "requests": 24
+      }
+    },
+    "cost": 4.22652444,
+    "date": "2026-02-23T14:56:43.054986",
+    "input": 1699847,
+    "output": 35709,
+    "requests": 91
+  },
+  "ses_375894597ffeRraHo86AErvyD0": {
+    "by_model": {
+      "glm-5": {
+        "cache": 103232,
+        "cost": 0.1435208,
+        "input": 138745,
+        "output": 6253,
+        "requests": 9
+      }
+    },
+    "cost": 0.1435208,
+    "date": "2026-02-23T09:32:21.120458",
+    "input": 138745,
+    "output": 6253,
+    "requests": 9
+  },
+  "ses_37907ab58ffe511A13na70PcJM": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 17371,
+        "cost": 0.01256133,
+        "input": 34486,
+        "output": 1412,
+        "reasoning": 0,
+        "requests": 4
+      }
+    },
+    "cost": 0.01256133,
+    "date": "2026-02-22T19:58:05.917000",
+    "input": 34486,
+    "output": 1412,
+    "requests": 4
+  },
+  "ses_37d01d9d6ffeFbgOu6xJewOC3g": {
+    "by_model": {
+      "gemini-3-flash": {
+        "cache": 0,
+        "cost": 0.007168,
+        "input": 14084,
+        "output": 42,
+        "requests": 1
+      }
+    },
+    "cost": 0.007168,
+    "date": "2026-02-21T22:37:04.317153",
+    "input": 14084,
+    "output": 42,
+    "requests": 1
+  },
+  "ses_37d5beaf1ffeYVgg6hGrOcuTf2": {
+    "by_model": {
+      "glm-5": {
+        "cache": 81408,
+        "cost": 0.1408056,
+        "input": 158071,
+        "output": 517,
+        "requests": 6
+      },
+      "minimax-m2.5": {
+        "cache": 468516,
+        "cost": 0.03761658,
+        "input": 37685,
+        "output": 10213,
+        "requests": 17
+      }
+    },
+    "cost": 0.17842217999999999,
+    "date": "2026-02-21T21:31:37.999979",
+    "input": 195756,
+    "output": 10730,
+    "requests": 23
+  },
+  "ses_38488f7e9ffeHtjojSOA0oWQF2": {
+    "by_model": {
+      "glm-5": {
+        "cache": 1847872,
+        "cost": 2.33983616,
+        "input": 2473128,
+        "output": 25654,
+        "reasoning": 639,
+        "requests": 73
+      }
+    },
+    "cost": 2.33983616,
+    "date": "2026-02-20T14:07:12.575000",
+    "input": 2473128,
+    "output": 25654,
+    "requests": 73
+  },
+  "ses_384b3b86dffecf8Wo4jNYIi8cf": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 38398,
+        "cost": 0.00546174,
+        "input": 12530,
+        "output": 459,
+        "reasoning": 0,
+        "requests": 4
+      }
+    },
+    "cost": 0.00546174,
+    "date": "2026-02-20T10:50:34.330000",
+    "input": 12530,
+    "output": 459,
+    "requests": 4
+  },
+  "ses_384c1ecefffeAfSlfmH98Fzy7W": {
+    "by_model": {
+      "antigravity-claude-sonnet-4-6": {
+        "cache": 470911,
+        "cost": 0.3501693,
+        "input": 58242,
+        "output": 2278,
+        "requests": 13
+      },
+      "gemini-3-flash": {
+        "cache": 40836,
+        "cost": 0.069146,
+        "input": 127972,
+        "output": 1720,
+        "requests": 5
+      }
+    },
+    "cost": 0.278042,
+    "date": "2026-02-20T10:34:18.840188",
+    "input": 186214,
+    "output": 3998,
+    "requests": 18
+  },
+  "ses_384cb8cb9ffepoxd48YmZ1FPON": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 17806,
+        "cost": 0.241138,
+        "input": 44042,
+        "output": 481,
+        "requests": 3
+      }
+    },
+    "cost": 0.232235,
+    "date": "2026-02-20T10:19:28.762018",
+    "input": 44042,
+    "output": 481,
+    "requests": 3
+  },
+  "ses_384cef45effeIp654Q4TbI7WCY": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 8903,
+        "cost": 0.11145649999999999,
+        "input": 16501,
+        "output": 980,
+        "requests": 3
+      }
+    },
+    "cost": 0.10700499999999999,
+    "date": "2026-02-20T10:15:53.154228",
+    "input": 16501,
+    "output": 980,
+    "requests": 3
+  },
+  "ses_385094a90ffeH5x2A0lJSHf6xH": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 2425180,
+        "cost": 10.386475,
+        "input": 1594247,
+        "output": 48106,
+        "requests": 78
+      },
+      "gemini-3-flash": {
+        "cache": 1707686,
+        "cost": 0.257082,
+        "input": 451260,
+        "output": 10484,
+        "requests": 32
+      },
+      "glm-5": {
+        "cache": 371072,
+        "cost": 0.6713104000000001,
+        "input": 728018,
+        "output": 11533,
+        "requests": 18
+      },
+      "gpt-5.2-codex": {
+        "cache": 146048,
+        "cost": 0.10730825,
+        "input": 44471,
+        "output": 2106,
+        "requests": 11
+      },
+      "kimi-k2.5": {
+        "cache": 618496,
+        "cost": 0.12996754,
+        "input": 108129,
+        "output": 7784,
+        "requests": 21
+      }
+    },
+    "cost": 10.33955319,
+    "date": "2026-02-20T10:22:28.445503",
+    "input": 2926125,
+    "output": 80013,
+    "requests": 160
+  },
+  "ses_386be4e52ffeT2KhjJTsk4ItgB": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 24844,
+        "cost": 0.654012,
+        "input": 118243,
+        "output": 2015,
+        "requests": 5
+      }
+    },
+    "cost": 0.64159,
+    "date": "2026-02-20T01:15:08.751337",
+    "input": 118243,
+    "output": 2015,
+    "requests": 5
+  },
+  "ses_386e120f7ffetMGGssjBz20UBY": {
+    "by_model": {
+      "big-pickle": {
+        "cache": 12437,
+        "cost": 0,
+        "input": 84,
+        "output": 41,
+        "requests": 1
+      }
+    },
+    "cost": 0,
+    "date": "2026-02-20T00:36:32.356431",
+    "input": 84,
+    "output": 41,
+    "requests": 1
+  },
+  "ses_386ff67d6ffeCbuYwELTFQTKny": {
+    "by_model": {
+      "gemini-3.1-pro-preview": {
+        "cache": 771170,
+        "cost": 0.47140400000000005,
+        "input": 144761,
+        "output": 2304,
+        "requests": 42
+      }
+    },
+    "cost": 0.47140400000000005,
+    "date": "2026-02-20T00:13:19.663904",
+    "input": 144761,
+    "output": 2304,
+    "requests": 42
+  },
+  "ses_387038b70ffezpW8qv0ikMX3CG": {
+    "by_model": {
+      "gemini-3.1-pro": {
+        "cache": 12195,
+        "cost": 0.030527,
+        "input": 13744,
+        "output": 50,
+        "requests": 2
+      },
+      "gemini-3.1-pro-preview": {
+        "cache": 187147,
+        "cost": 0.1666794,
+        "input": 58367,
+        "output": 1043,
+        "requests": 14
+      }
+    },
+    "cost": 0.1972064,
+    "date": "2026-02-20T00:02:12.242829",
+    "input": 72111,
+    "output": 1093,
+    "requests": 16
+  },
+  "ses_387413ea5ffe1beqYum4C47tDO": {
+    "by_model": {
+      "gemini-3.1-pro": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 2
+      }
+    },
+    "cost": 0.0,
+    "date": "2026-02-19T22:51:51.058069",
+    "input": 0,
+    "output": 0,
+    "requests": 2
+  },
+  "ses_38758ca32ffeeDkxa43kcLbgkH": {
+    "by_model": {
+      "gemini-3.1-pro": {
+        "cache": 2542609,
+        "cost": 1.3936518,
+        "input": 382187,
+        "output": 10063,
+        "requests": 71
+      }
+    },
+    "cost": 1.3936518,
+    "date": "2026-02-19T22:49:59.239257",
+    "input": 382187,
+    "output": 10063,
+    "requests": 71
+  },
+  "ses_3875d5ef7ffe005OIoOLYSRr92": {
+    "by_model": {
+      "gemini-3-flash": {
+        "cache": 0,
+        "cost": 0.0065005,
+        "input": 12917,
+        "output": 14,
+        "requests": 1
+      }
+    },
+    "cost": 0.0065005,
+    "date": "2026-02-19T22:20:50.088413",
+    "input": 12917,
+    "output": 14,
+    "requests": 1
+  },
+  "ses_387905e90ffeQA7zCQbL4K64j4": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 171925,
+        "cost": 0.2781825,
+        "input": 27709,
+        "output": 2147,
+        "requests": 10
+      }
+    },
+    "cost": 0.19222,
+    "date": "2026-02-19T21:26:50.494825",
+    "input": 27709,
+    "output": 2147,
+    "requests": 10
+  },
+  "ses_387a292adffelR1LhQkklYE3hb": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 389175,
+        "cost": 1.4802925,
+        "input": 196026,
+        "output": 12223,
+        "requests": 23
+      },
+      "gemini-3-flash": {
+        "cache": 349697,
+        "cost": 0.15506050000000002,
+        "input": 268031,
+        "output": 7015,
+        "requests": 24
+      }
+    },
+    "cost": 1.4407655000000001,
+    "date": "2026-02-19T21:22:28.403391",
+    "input": 464057,
+    "output": 19238,
+    "requests": 47
+  },
+  "ses_387ef3910ffeZcnIPkfiLmQBaQ": {
+    "by_model": {
+      "glm-5": {
+        "cache": 178048,
+        "cost": 0.13134752,
+        "input": 117346,
+        "output": 3509,
+        "requests": 17
+      }
+    },
+    "cost": 0.13134752,
+    "date": "2026-02-19T20:21:45.121427",
+    "input": 117346,
+    "output": 3509,
+    "requests": 17
+  },
+  "ses_38eecf8e9ffeO9OP3PWNUQYoBJ": {
+    "by_model": {
+      "glm-5": {
+        "cache": 2811776,
+        "cost": 1.3821500800000002,
+        "input": 1075134,
+        "output": 28187,
+        "requests": 96
+      }
+    },
+    "cost": 1.3821500800000002,
+    "date": "2026-02-18T15:10:46.849420",
+    "input": 1075134,
+    "output": 28187,
+    "requests": 96
+  },
+  "ses_391710650ffeasBdINgHduxM1H": {
+    "by_model": {
+      "giga-potato": {
+        "cache": 13368,
+        "cost": 0,
+        "input": 38408,
+        "output": 1394,
+        "requests": 4
+      },
+      "glm-5": {
+        "cache": 1057536,
+        "cost": 0.25911888,
+        "input": 86209,
+        "output": 8182,
+        "requests": 35
+      }
+    },
+    "cost": 0.25911888,
+    "date": "2026-02-17T23:52:50.463173",
+    "input": 124617,
+    "output": 9576,
+    "requests": 39
+  },
+  "ses_391cc4287ffeHE8BzjqOcfUn8a": {
+    "by_model": {
+      "giga-potato": {
+        "cache": 12400,
+        "cost": 0,
+        "input": 12158,
+        "output": 184,
+        "requests": 3
+      }
+    },
+    "cost": 0,
+    "date": "2026-02-17T21:44:01.129679",
+    "input": 12158,
+    "output": 184,
+    "requests": 3
+  },
+  "ses_391cdae34ffeX4dXzRCwwrRpj7": {
+    "by_model": {
+      "step-3.5-flash": {
+        "cache": 0,
+        "cost": 0.0012574,
+        "input": 11695,
+        "output": 293,
+        "requests": 2
+      }
+    },
+    "cost": 0.0012574,
+    "date": "2026-02-17T21:42:07.181920",
+    "input": 11695,
+    "output": 293,
+    "requests": 2
+  },
+  "ses_3923223acffe7M3k4H2s6ZXisU": {
+    "by_model": {
+      "step-3.5-flash": {
+        "cache": 0,
+        "cost": 0.2343283,
+        "input": 2259457,
+        "output": 27942,
+        "requests": 66
+      }
+    },
+    "cost": 0.2343283,
+    "date": "2026-02-17T21:10:02.156760",
+    "input": 2259457,
+    "output": 27942,
+    "requests": 66
+  },
+  "ses_3923b2c2bffeTalaAjnZ052JK0": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.0,
+        "input": 0,
+        "output": 0,
+        "requests": 1
+      }
+    },
+    "cache": 0,
+    "cost": 0.0,
+    "date": "2026-02-17T19:42:21.853000",
+    "input": 0,
+    "output": 0,
+    "requests": 1
+  },
+  "ses_3923c9d12ffe3I9U2q6eRpsDBE": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.0033445,
+        "input": 5467,
+        "output": 235,
+        "requests": 2
+      }
+    },
+    "cost": 0.0033445,
+    "date": "2026-02-17T19:41:04.975796",
+    "input": 5467,
+    "output": 235,
+    "requests": 2
+  },
+  "ses_3923cd5afffeiQrYRsSyeK21ED": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 925440,
+        "cost": 0.143385,
+        "input": 86058,
+        "output": 6564,
+        "requests": 32
+      }
+    },
+    "cache": 925440,
+    "cost": 0.143385,
+    "date": "2026-02-17T19:48:04.036000",
+    "input": 86058,
+    "output": 6564,
+    "requests": 32
+  },
+  "ses_392d56644ffe5hZ0mug2IKPWp9": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 28377088,
+        "cost": 3.00433832,
+        "input": 482024,
+        "output": 80534,
+        "requests": 320
+      }
+    },
+    "cost": 3.00433832,
+    "date": "2026-02-17T19:11:11.831132",
+    "input": 482024,
+    "output": 80534,
+    "requests": 320
+  },
+  "ses_393035305ffeqV9S6xDQ2Rwle0": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 6318848,
+        "cost": 0.75772472,
+        "input": 211584,
+        "output": 32014,
+        "requests": 91
+      }
+    },
+    "cost": 0.75772472,
+    "date": "2026-02-17T16:41:15.163118",
+    "input": 211584,
+    "output": 32014,
+    "requests": 91
+  },
+  "ses_3936cf744ffexX9ptZMqNXPDIY": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 225280,
+        "cost": 0.053091900000000004,
+        "input": 34631,
+        "output": 5962,
+        "requests": 14
+      }
+    },
+    "cost": 0.053091900000000004,
+    "date": "2026-02-17T14:27:40.447952",
+    "input": 34631,
+    "output": 5962,
+    "requests": 14
+  },
+  "ses_393a8a869ffeXV3IHME05GNuDl": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 3959808,
+        "cost": 0.57087282,
+        "input": 282335,
+        "output": 28201,
+        "requests": 99
+      }
+    },
+    "cost": 0.57087282,
+    "date": "2026-02-17T16:01:29.319220",
+    "input": 282335,
+    "output": 28201,
+    "requests": 99
+  },
+  "ses_395e2d20cffepUlPdSQWfwuImL": {
+    "by_model": {
+      "glm-5": {
+        "cache": 7148480,
+        "cost": 1.4392292800000002,
+        "input": 259939,
+        "output": 34188,
+        "requests": 120
+      }
+    },
+    "cost": 1.4392292800000002,
+    "date": "2026-02-17T03:37:47.266750",
+    "input": 259939,
+    "output": 34188,
+    "requests": 120
+  },
+  "ses_39cb95b4cffeCeQTBo9xZtemgL": {
+    "by_model": {
+      "glm-5": {
+        "cache": 7312640,
+        "cost": 1.8917340800000002,
+        "input": 841682,
+        "output": 18893,
+        "requests": 129
+      }
+    },
+    "cost": 1.8917340800000002,
+    "date": "2026-02-16T01:05:15.158431",
+    "input": 841682,
+    "output": 18893,
+    "requests": 129
+  },
+  "ses_39e0451d1ffec4aWz5oQ2fFpqy": {
+    "by_model": {
+      "glm-5": {
+        "cache": 2949120,
+        "cost": 0.91897344,
+        "input": 455296,
+        "output": 32374,
+        "requests": 78
+      },
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 1.3482076,
+        "input": 2613028,
+        "output": 16036,
+        "requests": 76
+      }
+    },
+    "cost": 2.26718104,
+    "date": "2026-02-15T18:16:43.414105",
+    "input": 3068324,
+    "output": 48410,
+    "requests": 154
+  },
+  "ses_3a0f43ef6ffeDboaZpp0nfKlI6": {
+    "by_model": {
+      "glm-5": {
+        "cache": 2662848,
+        "cost": 0.74638976,
+        "input": 327256,
+        "output": 22863,
+        "requests": 59
+      }
+    },
+    "cost": 0.74638976,
+    "date": "2026-02-15T01:17:08.165248",
+    "input": 327256,
+    "output": 22863,
+    "requests": 59
+  },
+  "ses_3a3441275ffe7yTipPd7cdGiLT": {
+    "by_model": {
+      "glm-5": {
+        "cache": 1810176,
+        "cost": 0.39693712000000003,
+        "input": 91365,
+        "output": 13366,
+        "requests": 54
+      }
+    },
+    "cost": 0.39693712000000003,
+    "date": "2026-02-14T12:59:09.380457",
+    "input": 91365,
+    "output": 13366,
+    "requests": 54
+  },
+  "ses_3a7f41b27ffe2H0Bvr9Takr6XJ": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 4.942415400000001,
+        "input": 9654970,
+        "output": 44204,
+        "requests": 115
+      }
+    },
+    "cost": 4.942415400000001,
+    "date": "2026-02-13T23:18:32.166613",
+    "input": 9654970,
+    "output": 44204,
+    "requests": 115
+  },
+  "ses_3a80321b7ffelUYygEWvJ0rYaS": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 47226,
+        "cost": 0.700298,
+        "input": 106617,
+        "output": 5744,
+        "requests": 6
+      }
+    },
+    "cost": 0.676685,
+    "date": "2026-02-13T14:14:04.471673",
+    "input": 106617,
+    "output": 5744,
+    "requests": 6
+  },
+  "ses_3a8032aeeffeSxuQNtmXngNAxA": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 71738,
+        "cost": 0.8475990000000001,
+        "input": 122106,
+        "output": 8048,
+        "requests": 6
+      }
+    },
+    "cost": 0.8117300000000001,
+    "date": "2026-02-13T14:14:48.635813",
+    "input": 122106,
+    "output": 8048,
+    "requests": 6
+  },
+  "ses_3a8033ba7ffeuhycZv4eD2eikD": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 31484,
+        "cost": 2.0194669999999997,
+        "input": 380320,
+        "output": 4085,
+        "requests": 5
+      }
+    },
+    "cost": 2.0037249999999998,
+    "date": "2026-02-13T14:13:12.363687",
+    "input": 380320,
+    "output": 4085,
+    "requests": 5
+  },
+  "ses_3a8037055ffelaoYwlhSPzx67Q": {
+    "by_model": {
+      "claude-opus-4.6": {
+        "cache": 1200512,
+        "cost": 6.491026,
+        "input": 1026719,
+        "output": 30287,
+        "requests": 33
+      }
+    },
+    "cost": 5.89077,
+    "date": "2026-02-13T15:05:30.372990",
+    "input": 1026719,
+    "output": 30287,
+    "requests": 33
+  },
+  "ses_3a8de051fffeoQs360R6scDD7N": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 3173377,
+        "cost": 0.23638190999999997,
+        "input": 393706,
+        "output": 19224,
+        "requests": 66
+      }
+    },
+    "cost": 0.23638190999999997,
+    "date": "2026-02-13T11:55:33.257776",
+    "input": 393706,
+    "output": 19224,
+    "requests": 66
+  },
+  "ses_3a92d4c84ffeg3g89GXYv2vf2C": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 2659367,
+        "cost": 0.14591031,
+        "input": 159115,
+        "output": 15329,
+        "requests": 82
+      }
+    },
+    "cost": 0.14591031,
+    "date": "2026-02-13T10:10:24.374211",
+    "input": 159115,
+    "output": 15329,
+    "requests": 82
+  },
+  "ses_3ab65e77effeI4Cp3gvsdRJ7Xe": {
+    "by_model": {
+      "glm-5": {
+        "cache": 29184,
+        "cost": 0.146664,
+        "input": 166946,
+        "output": 3296,
+        "requests": 8
+      }
+    },
+    "cost": 0.146664,
+    "date": "2026-02-12T22:31:44.435951",
+    "input": 166946,
+    "output": 3296,
+    "requests": 8
+  },
+  "ses_3abfc1467ffeCvsR7D7ch2MUUn": {
+    "by_model": {
+      "glm-5": {
+        "cache": 448,
+        "cost": 0.010327359999999999,
+        "input": 12714,
+        "output": 33,
+        "requests": 1
+      }
+    },
+    "cost": 0.010327359999999999,
+    "date": "2026-02-12T19:41:09.095856",
+    "input": 12714,
+    "output": 33,
+    "requests": 1
+  },
+  "ses_3ac09a706ffeqZiOn3mfayi4qX": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 139292,
+        "cost": 0.03692616,
+        "input": 94582,
+        "output": 3644,
+        "requests": 9
+      }
+    },
+    "cost": 0.03692616,
+    "date": "2026-02-12T19:39:41.857610",
+    "input": 94582,
+    "output": 3644,
+    "requests": 9
+  },
+  "ses_3ac135083ffe8eFlt4KLk5K9ez": {
+    "by_model": {
+      "minimax-m2.5": {
+        "cache": 405222,
+        "cost": 0.03611736,
+        "input": 70261,
+        "output": 2402,
+        "requests": 20
+      }
+    },
+    "cost": 0.03611736,
+    "date": "2026-02-12T19:24:31.945870",
+    "input": 70261,
+    "output": 2402,
+    "requests": 20
+  },
+  "ses_3ac351271ffe2zqa8YNf9lZeF7": {
+    "by_model": {
+      "minimax-m2.5-free": {
+        "cache": 884116,
+        "cost": 0.046058879999999996,
+        "input": 51890,
+        "output": 3307,
+        "requests": 20
+      },
+      "x-ai/grok-4.1-fast": {
+        "cache": 1049453,
+        "cost": 0.15584445000000002,
+        "input": 492209,
+        "output": 9860,
+        "requests": 14
+      }
+    },
+    "cost": 0.12052375000000001,
+    "date": "2026-02-12T19:00:39.984628",
+    "input": 544099,
+    "output": 13167,
+    "requests": 34
+  },
+  "ses_3ac4e17d4ffehCUAtAZIXaUYyC": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 0,
+        "cost": 0.5755452,
+        "input": 1108596,
+        "output": 8172,
+        "requests": 39
+      },
+      "minimax-m2.5": {
+        "cache": 1666098,
+        "cost": 0.09344574,
+        "input": 112716,
+        "output": 8040,
+        "requests": 38
+      }
+    },
+    "cost": 0.66899094,
+    "date": "2026-02-12T19:14:45.462557",
+    "input": 1221312,
+    "output": 16212,
+    "requests": 77
+  },
+  "ses_3ac686602ffeDrTWEULr54R9TN": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cache": 606720,
+        "cost": 0.8359575,
+        "input": 1530819,
+        "output": 6132,
+        "requests": 28
+      },
+      "minimax-m2.5": {
+        "cache": 6647777,
+        "cost": 0.30888110999999996,
+        "input": 285510,
+        "output": 19829,
+        "requests": 145
+      }
+    },
+    "cost": 1.1448386099999999,
+    "date": "2026-02-12T18:36:25.680069",
+    "input": 1816329,
+    "output": 25961,
+    "requests": 173
+  },
+  "ses_3ac7e01f2ffemHt3uHSr3w971c": {
+    "by_model": {
+      "glm-5": {
+        "cost": 0.29737344,
+        "input": 325432,
+        "output": 14464,
+        "requests": 55
+      }
+    },
+    "cost": 0.29737344,
+    "date": "2026-02-12T17:41:05.826031",
+    "input": 325432,
+    "output": 14464,
+    "requests": 55
+  },
+  "ses_3ac935e65ffeSHXliayfnp7Ygo": {
+    "by_model": {
+      "minimax-m2.5-free": {
+        "cost": 0.017016899999999998,
+        "input": 34635,
+        "output": 5522,
+        "requests": 25
+      }
+    },
+    "cost": 0.01459735,
+    "date": "2026-02-12T17:07:15.258837",
+    "input": 34635,
+    "output": 5522,
+    "requests": 25
+  },
+  "ses_3ad1ddf56ffeO1VOZJB2fUnE2V": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cost": 2.3124066,
+        "input": 4461944,
+        "output": 31321,
+        "requests": 98
+      }
+    },
+    "cost": 2.7711294,
+    "date": "2026-02-12T17:10:35.218807",
+    "input": 4461944,
+    "output": 31321,
+    "requests": 98
+  },
+  "ses_3ad6577f2ffeipOSIGbwgPSr1j": {
+    "by_model": {
+      "glm-5": {
+        "cost": 0.27768896,
+        "input": 329316,
+        "output": 5561,
+        "requests": 30
+      }
+    },
+    "cost": 0.27768896,
+    "date": "2026-02-12T17:12:21.362667",
+    "input": 329316,
+    "output": 5561,
+    "requests": 30
+  },
+  "ses_3ad8584e8ffe6BWmnA2RMrfys9": {
+    "by_model": {
+      "kimi-k2.5": {
+        "cost": 1.4705744,
+        "input": 2869316,
+        "output": 13814,
+        "requests": 44
+      },
+      "step-3.5-flash": {
+        "cost": 0.04924250000000001,
+        "input": 475847,
+        "output": 5526,
+        "requests": 16
+      }
+    },
+    "cost": 1.8122741,
+    "date": "2026-02-12T17:13:24.573393",
+    "input": 3345163,
+    "output": 19340,
+    "requests": 60
+  },
+  "ses_3add2ade7ffe6oNWWqm1HCbR6I": {
+    "by_model": {
+      "minimax-m2.1": {
+        "cost": 0.019628689999999997,
+        "input": 29502,
+        "output": 12277,
+        "requests": 48
+      },
+      "step-3.5-flash": {
+        "cost": 0.17966210000000002,
+        "input": 1730492,
+        "output": 22043,
+        "requests": 28
+      },
+      "trinity-large-preview": {
+        "cost": 0.0034732499999999998,
+        "input": 13833,
+        "output": 15,
+        "requests": 1
+      }
+    },
+    "cost": 0.20276404000000003,
+    "date": "2026-02-12T17:15:50.133459",
+    "input": 1773827,
+    "output": 34335,
+    "requests": 77
+  },
+  "ses_3bd18083dffe3HCsOsfyUmRl2e": {
+    "by_model": {
+      "claude-opus-4.5": {
+        "cache": 1503636,
+        "cost": 4.717648,
+        "input": 659941,
+        "output": 26645,
+        "requests": 27
+      },
+      "glm-5": {
+        "cache": 448,
+        "cost": 0.06803727999999999,
+        "input": 81325,
+        "output": 1135,
+        "requests": 2
+      },
+      "mimo-v2-pro": {
+        "cache": 281280,
+        "cost": 0.191084,
+        "input": 174371,
+        "output": 5571,
+        "requests": 13
+      }
+    },
+    "cache": 1785364,
+    "cost": 4.22495128,
+    "date": "2026-02-17T19:39:05.244000",
+    "input": 915637,
+    "output": 33351,
+    "requests": 42
+  },
+  "codex_019ef976-90e7-7022-a516-2f57497e2cc6": {
+    "date": "2026-06-24T11:49:17.671Z",
+    "requests": 1,
+    "input": 33477,
+    "output": 266,
+    "cost": 0,
+    "by_model": {
+      "gpt-5.4-mini": {
+        "requests": 1,
+        "input": 33477,
+        "output": 266,
+        "cache": 4480,
+        "cost": 0
+      }
+    }
+  },
+  "019ef976-90e7-7022-a516-2f57497e2cc6": {
+    "date": "2026-06-24T11:49:17.671Z",
+    "requests": 1,
+    "input": 33477,
+    "output": 266,
+    "cost": 0.026640749999999998,
+    "by_model": {
+      "gpt-5.4-mini": {
+        "requests": 1,
+        "input": 33477,
+        "output": 266,
+        "cache": 4480,
+        "cost": 0.026640749999999998
+      }
+    }
+  },
+  "ses_1063cb82cffeixupYfR77M2Tm4": {
+    "date": "2026-06-24T10:13:16.398000",
+    "requests": 4,
+    "input": 36209,
+    "output": 706,
+    "cost": 0.005318012,
+    "by_model": {
+      "deepseek-v4-flash": {
+        "requests": 4,
+        "input": 36209,
+        "output": 706,
+        "cache": 17024,
+        "cost": 0.005318012
+      }
+    }
+  },
+  "ses_1063ccf27ffe7sqW1D3byjHMN1": {
+    "date": "2026-06-24T13:03:14.887000",
+    "requests": 246,
+    "input": 881072,
+    "output": 100148,
+    "cost": 2.4764942480000003,
+    "by_model": {
+      "deepseek-v4-flash": {
+        "requests": 203,
+        "input": 571975,
+        "output": 84370,
+        "cache": 15268608,
+        "cost": 0.149505924
+      },
+      "gpt-5.5": {
+        "requests": 40,
+        "input": 236524,
+        "output": 15405,
+        "cache": 1343488,
+        "cost": 2.316514
+      },
+      "mimo-v2.5": {
+        "requests": 3,
+        "input": 72573,
+        "output": 373,
+        "cache": 69888,
+        "cost": 0.010474324000000002
+      }
+    }
+  },
+  "ses_10635b018ffeyUgiH4FNcwFaG7": {
+    "date": "2026-06-24T10:21:59.957000",
+    "requests": 6,
+    "input": 75958,
+    "output": 6808,
+    "cost": 0.013187784000000001,
+    "by_model": {
+      "deepseek-v4-flash": {
+        "requests": 6,
+        "input": 75958,
+        "output": 6808,
+        "reasoning": 146,
+        "cache": 215808,
+        "cost": 0.013187784000000001
+      }
+    }
+  },
+  "legacy_price_adjustment": {
+    "cost": 357.491592,
+    "input": 0,
+    "output": 0,
+    "cache": 0,
+    "requests": 0,
+    "date": "2025-11-01",
+    "by_model": {
+      "opus-4.5": {
+        "cost": 357.491592,
+        "input": 0,
+        "output": 0,
+        "cache": 0,
+        "requests": 0
+      }
+    }
+  }
+}

@@ -765,65 +765,123 @@ def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0):
     return input_cost + output_cost + cache_cost
 
 
-def recalculate_historical_cost(history_file):
-    """Recalcula el costo total histórico desde los tokens de cada sesión.
-    Incluye sesiones de Kilo, OpenCode (JSON + SQLite), y Codex (JSONL).
+def recalculate_historical_cost():
+    """Recalcula el costo total histórico desde SQLite.
+    Lee sesiones de la DB principal + fuentes externas (Codex, OpenCode, Hermes)
+    que aún no estén persistidas.
+
+    El recalculo calcula el costo desde tokens usando model_costs.json,
+    preservando la verificación de que los stored_cost coinciden con lo esperado.
 
     Retorna dict con: total_cost, total_sessions, total_requests,
     total_input, total_output, models_totals
     """
+    if not DB_PATH.exists():
+        return {
+            "total_cost": 0,
+            "total_sessions": 0,
+            "total_requests": 0,
+            "total_input": 0,
+            "total_output": 0,
+            "models_totals": {},
+        }
 
-    import json
-    from pathlib import Path
+    conn = sqlite3.connect(str(DB_PATH))
 
-    history_path = Path(history_file)
-    data = {}
-    if history_path.exists():
-        try:
-            with open(history_path, "r") as f:
-                data = json.load(f)
-        except json.JSONDecodeError:
-            pass
-
-    session_keys = [k for k in data.keys() if k != "historical_total"]
-    base_sessions = data.get("historical_total", {}).get("sessions", 0)
-
-    total_requests = sum(data[k].get("requests", 0) for k in session_keys)
-    total_input = sum(data[k].get("input", 0) for k in session_keys)
-    total_output = sum(data[k].get("output", 0) for k in session_keys)
-    total_sessions = base_sessions + len(session_keys)
-
-    if "historical_total" in data:
-        historical = data["historical_total"]
-        total_requests += historical.get("requests", 0)
-        total_input += historical.get("input", 0)
-        total_output += historical.get("output", 0)
-
-    # Agregar tokens por modelo desde sesiones guardadas
+    # 1. Leer sesiones de SQLite (excluyendo las que manejan lógica especial)
+    session_keys = []
+    base_sessions = 0
+    historical_total_cost = 0.0
+    historical_models_cost = 0.0
     models_totals = {}
-    for key in session_keys:
-        session = data[key]
-        by_model = session.get("by_model", {})
-        for model, model_data in by_model.items():
+
+    srows = conn.execute(
+        "SELECT id, requests, input_tokens, output_tokens, cost, reasoning_tokens "
+        "FROM sessions ORDER BY timestamp"
+    ).fetchall()
+
+    for sid, reqs, inp, out, cost, reasoning in srows:
+        if sid == "historical_total":
+            base_sessions = reasoning  # sessions stored in reasoning_tokens
+            historical_total_cost = cost
+            # Leer by_model de historical_total: agregar a models_totals + calcular adjustment
+            mrows = conn.execute(
+                "SELECT model, requests, input_tokens, output_tokens, cache_tokens FROM model_usage "
+                "WHERE session_id = ?", (sid,)
+            ).fetchall()
+            for model, m_req, m_in, m_out, m_cache in mrows:
+                normalized = normalize_model_name(model)
+                if normalized not in models_totals:
+                    models_totals[normalized] = {
+                        "requests": 0, "input": 0, "output": 0,
+                        "cache": 0, "stored_cost": 0.0,
+                    }
+                models_totals[normalized]["requests"] += m_req
+                models_totals[normalized]["input"] += m_in
+                models_totals[normalized]["output"] += m_out
+                models_totals[normalized]["cache"] += m_cache
+                historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache)
+            continue
+        if sid == "legacy_price_adjustment":
+            # Ajuste de precio legacy: no cuenta como sesión
+            continue
+        session_keys.append(sid)
+
+    # 2. Agregar tokens por modelo desde sesiones guardadas
+    total_requests = 0
+    total_input = 0
+    total_output = 0
+
+    if session_keys:
+        placeholders = ",".join("?" for _ in session_keys)
+        mrows = conn.execute(
+            f"SELECT mu.model, mu.requests, mu.input_tokens, mu.output_tokens, mu.cache_tokens "
+            f"FROM model_usage mu WHERE mu.session_id IN ({placeholders})",
+            session_keys,
+        ).fetchall()
+        for model, reqs, inp, out, cache in mrows:
             normalized = normalize_model_name(model)
             if normalized not in models_totals:
                 models_totals[normalized] = {
-                    "requests": 0,
-                    "input": 0,
-                    "output": 0,
-                    "cache": 0,
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "stored_cost": 0.0,
                 }
-            models_totals[normalized]["requests"] += model_data.get("requests", 0)
-            models_totals[normalized]["input"] += model_data.get("input", 0)
-            models_totals[normalized]["output"] += model_data.get("output", 0)
-            models_totals[normalized]["cache"] += model_data.get("cache", 0)
+            models_totals[normalized]["requests"] += reqs
+            models_totals[normalized]["input"] += inp
+            models_totals[normalized]["output"] += out
+            models_totals[normalized]["cache"] += cache
 
-    # Agregar sesiones de Codex que NO estan ya en el historial
-    codex_sessions = get_codex_sessions()
+        # Totales de sesión desde la tabla sessions
+        srows_agg = conn.execute(
+            f"SELECT requests, input_tokens, output_tokens FROM sessions WHERE id IN ({placeholders})",
+            session_keys,
+        ).fetchall()
+        for reqs, inp, out in srows_agg:
+            total_requests += reqs
+            total_input += inp
+            total_output += out
+
+    conn.close()
+
+    total_sessions = base_sessions + len(session_keys)
+
+    # Agregar tokens de historical_total desde model_usage
+    if base_sessions > 0 and historical_total_cost > 0:
+        conn2 = sqlite3.connect(str(DB_PATH))
+        ht_rows = conn2.execute(
+            "SELECT requests, input_tokens, output_tokens FROM model_usage WHERE session_id = 'historical_total'"
+        ).fetchall()
+        for reqs, inp, out in ht_rows:
+            total_requests += reqs
+            total_input += inp
+            total_output += out
+        conn2.close()
+
+    # 3. Agregar sesiones de Codex que NO estan en SQLite
     existing_codex_ids = {
         k.replace("codex_", "") for k in session_keys if k.startswith("codex_")
     }
-    for sess_file in codex_sessions:
+    for sess_file in get_codex_sessions():
         if not has_real_usage_codex(sess_file):
             continue
         stats = get_codex_session_stats(sess_file)
@@ -832,10 +890,8 @@ def recalculate_historical_cost(history_file):
             normalized = normalize_model_name(stats["model"])
             if normalized not in models_totals:
                 models_totals[normalized] = {
-                    "requests": 0,
-                    "input": 0,
-                    "output": 0,
-                    "cache": 0,
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "stored_cost": 0.0,
                 }
             models_totals[normalized]["requests"] += stats["requests"]
             models_totals[normalized]["input"] += stats["input"]
@@ -846,20 +902,18 @@ def recalculate_historical_cost(history_file):
             total_output += stats["output"]
             total_sessions += 1
 
-    # Agregar sesiones de OpenCode SQLite (v1.3.0+) que NO estan en el historial
+    # 4. Agregar sesiones de OpenCode SQLite (v1.3.0+) que NO estan en SQLite
     opencode_sqlite_sessions = get_opencode_sqlite_sessions()
     for sid, stats in opencode_sqlite_sessions.items():
         if sid in session_keys:
-            continue  # ya está en el historial
+            continue
         by_model = stats.get("by_model", {})
         for model, model_data in by_model.items():
             normalized = normalize_model_name(model)
             if normalized not in models_totals:
                 models_totals[normalized] = {
-                    "requests": 0,
-                    "input": 0,
-                    "output": 0,
-                    "cache": 0,
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "stored_cost": 0.0,
                 }
             models_totals[normalized]["requests"] += model_data.get("requests", 0)
             models_totals[normalized]["input"] += model_data.get("input", 0)
@@ -870,21 +924,18 @@ def recalculate_historical_cost(history_file):
         total_output += stats["output"]
         total_sessions += 1
 
-    # Agregar sesiones de Hermes que NO estan ya en el historial
-    hermes_sessions = get_hermes_sessions()
-    for sess in hermes_sessions:
+    # 5. Agregar sesiones de Hermes que NO estan en SQLite
+    for sess in get_hermes_sessions():
         sid = sess["id"]
         if sid in session_keys:
-            continue  # ya está en el historial
+            continue
         by_model = sess.get("by_model", {})
         for model, model_data in by_model.items():
             normalized = normalize_model_name(model)
             if normalized not in models_totals:
                 models_totals[normalized] = {
-                    "requests": 0,
-                    "input": 0,
-                    "output": 0,
-                    "cache": 0,
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "stored_cost": 0.0,
                 }
             models_totals[normalized]["requests"] += model_data.get("requests", 0)
             models_totals[normalized]["input"] += model_data.get("input", 0)
@@ -895,34 +946,10 @@ def recalculate_historical_cost(history_file):
         total_output += sess.get("output", 0)
         total_sessions += 1
 
-    # Ajuste para sesiones históricas antiguas (pre-guardado)
-    historical_cost_adjustment = 0
-    if "historical_total" in data:
-        historical_models = data["historical_total"].get("by_model", {})
-        historical_models_cost = 0
-        for model, model_data in historical_models.items():
-            normalized = normalize_model_name(model)
-            if normalized not in models_totals:
-                models_totals[normalized] = {
-                    "requests": 0,
-                    "input": 0,
-                    "output": 0,
-                    "cache": 0,
-                }
-            models_totals[normalized]["requests"] += model_data.get("requests", 0)
-            models_totals[normalized]["input"] += model_data.get("input", 0)
-            models_totals[normalized]["output"] += model_data.get("output", 0)
-            models_totals[normalized]["cache"] += model_data.get("cache", 0)
-            historical_models_cost += calculate_cost(
-                normalized,
-                model_data.get("input", 0),
-                model_data.get("output", 0),
-                model_data.get("cache", 0),
-            )
-        historical_total_cost = data["historical_total"].get("cost", 0)
-        historical_cost_adjustment = historical_total_cost - historical_models_cost
+    # 6. Calcular costo total desde tokens + ajuste histórico
+    # Agregar modelos de historical_total a models_totals (mismo comportamiento que versión JSON)
+    historical_cost_adjustment = historical_total_cost - historical_models_cost
 
-    # Calcular costo total desde tokens
     total_cost = 0
     for model, mdata in models_totals.items():
         mdata["cost"] = calculate_cost(
@@ -939,3 +966,283 @@ def recalculate_historical_cost(history_file):
         "total_output": total_output,
         "models_totals": models_totals,
     }
+
+
+# --- SQLite Store ---
+
+DB_PATH = SCRIPT_DIR / "session_history.db"
+
+
+def _parse_timestamp(date_str):
+    if not date_str:
+        return None
+    try:
+        if date_str.endswith("Z"):
+            date_str = date_str[:-1] + "+00:00"
+        return int(datetime.datetime.fromisoformat(date_str).timestamp())
+    except (ValueError, TypeError):
+        return None
+
+
+def _detect_source(session_id):
+    if session_id in ("historical_total", "kilocode_legacy"):
+        return "legacy"
+    if session_id.startswith("codex_"):
+        return "codex"
+    if session_id.startswith("kilocode_") or session_id.startswith("kilo_"):
+        return "kilocode"
+    if session_id.startswith("hermes_"):
+        return "hermes"
+    if session_id.startswith("opencode_"):
+        return "opencode"
+    return "unknown"
+
+
+def init_db(db_path=None):
+    path = Path(db_path or DB_PATH)
+    conn = sqlite3.connect(str(path))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            source TEXT NOT NULL DEFAULT 'unknown',
+            date TEXT NOT NULL,
+            timestamp INTEGER,
+            requests INTEGER NOT NULL DEFAULT 0,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_tokens INTEGER NOT NULL DEFAULT 0,
+            reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+            cost REAL NOT NULL DEFAULT 0.0
+        );
+        CREATE TABLE IF NOT EXISTS model_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            model TEXT NOT NULL,
+            requests INTEGER NOT NULL DEFAULT 0,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_tokens INTEGER NOT NULL DEFAULT 0,
+            reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+            cost REAL NOT NULL DEFAULT 0.0,
+            UNIQUE(session_id, model)
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_ts ON sessions(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
+        CREATE INDEX IF NOT EXISTS idx_model_usage_model ON model_usage(model);
+        CREATE INDEX IF NOT EXISTS idx_model_usage_session ON model_usage(session_id);
+    """)
+    conn.commit()
+    conn.close()
+
+
+def save_session(sid, source, date, timestamp, requests, input_tokens,
+                 output_tokens, cache_tokens, reasoning_tokens, cost,
+                 by_model, db_path=None):
+    path = Path(db_path or DB_PATH)
+    conn = sqlite3.connect(str(path))
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute(
+        """INSERT OR REPLACE INTO sessions
+        (id, source, date, timestamp, requests, input_tokens, output_tokens,
+         cache_tokens, reasoning_tokens, cost)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (sid, source, date, timestamp, requests, input_tokens, output_tokens,
+         cache_tokens, reasoning_tokens, cost)
+    )
+    for model, mdata in by_model.items():
+        conn.execute(
+            """INSERT OR REPLACE INTO model_usage
+            (session_id, model, requests, input_tokens, output_tokens,
+             cache_tokens, reasoning_tokens, cost)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (sid, model,
+             mdata.get("requests", 0),
+             mdata.get("input", 0),
+             mdata.get("output", 0),
+             mdata.get("cache", 0),
+             mdata.get("reasoning", 0),
+             mdata.get("cost", 0.0))
+        )
+    conn.commit()
+    conn.close()
+
+
+def get_sessions(date_from=None, date_to=None, db_path=None):
+    path = Path(db_path or DB_PATH)
+    if not path.exists():
+        return []
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    query = "SELECT * FROM sessions"
+    params = []
+    conditions = []
+    if date_from:
+        conditions.append("date >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("date <= ?")
+        params.append(date_to)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY timestamp DESC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_model_summary(db_path=None):
+    path = Path(db_path or DB_PATH)
+    if not path.exists():
+        return {}
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """SELECT model,
+        SUM(requests) as requests,
+        SUM(input_tokens) as input_tokens,
+        SUM(output_tokens) as output_tokens,
+        SUM(cache_tokens) as cache_tokens,
+        SUM(reasoning_tokens) as reasoning_tokens,
+        SUM(cost) as cost
+        FROM model_usage
+        GROUP BY model
+        ORDER BY cost DESC"""
+    ).fetchall()
+    conn.close()
+    return {r["model"]: dict(r) for r in rows}
+
+
+def get_monthly_data(db_path=None):
+    path = Path(db_path or DB_PATH)
+    if not path.exists():
+        return {}
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """SELECT strftime('%%Y-%%m', date) as month,
+        COUNT(*) as sessions,
+        SUM(requests) as requests,
+        SUM(input_tokens) as input_tokens,
+        SUM(output_tokens) as output_tokens,
+        SUM(cache_tokens) as cache_tokens,
+        SUM(reasoning_tokens) as reasoning_tokens,
+        SUM(cost) as cost
+        FROM sessions
+        WHERE source != 'legacy'
+        GROUP BY month
+        ORDER BY month DESC"""
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def migrate_json_to_sqlite(json_path=None, db_path=None):
+    json_file = Path(json_path or SCRIPT_DIR / "session_history.json")
+    if not json_file.exists():
+        print(f"JSON not found: {json_file}")
+        return False
+
+    with open(json_file) as f:
+        data = json.load(f)
+
+    init_db(db_path)
+    count = 0
+    for sid, session in data.items():
+        source = _detect_source(sid)
+        date = session.get("date", "")
+        timestamp = _parse_timestamp(date)
+        requests = session.get("requests", 0)
+        input_tokens = session.get("input", 0)
+        output_tokens = session.get("output", 0)
+        cache_tokens = session.get("cache", 0)
+        cost = session.get("cost", 0.0)
+        by_model = session.get("by_model", {})
+
+        reasoning_tokens = sum(
+            m.get("reasoning", 0) for m in by_model.values()
+        )
+
+        # Store historical_total.sessions count in reasoning_tokens
+        if sid == "historical_total":
+            reasoning_tokens = session.get("sessions", 0)
+
+        save_session(
+            sid=sid, source=source, date=date, timestamp=timestamp,
+            requests=requests, input_tokens=input_tokens,
+            output_tokens=output_tokens, cache_tokens=cache_tokens,
+            reasoning_tokens=reasoning_tokens, cost=cost,
+            by_model=by_model, db_path=db_path
+        )
+        count += 1
+
+    print(f"Migrated {count} sessions to {db_path or DB_PATH}")
+    return True
+
+
+def verify_parity(json_path=None, db_path=None):
+    json_file = Path(json_path or SCRIPT_DIR / "session_history.json")
+    path = Path(db_path or DB_PATH)
+
+    with open(json_file) as f:
+        json_data = json.load(f)
+
+    conn = sqlite3.connect(str(path))
+    db_count = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+    json_count = len(json_data)
+    print(f"Sessions: JSON={json_count}, SQLite={db_count}")
+
+    db_cost = conn.execute("SELECT COALESCE(SUM(cost),0) FROM sessions").fetchone()[0]
+    json_cost = sum(s.get("cost", 0) for s in json_data.values())
+    print(f"Total cost: JSON={json_cost:.6f}, SQLite={db_cost:.6f}")
+
+    db_input = conn.execute("SELECT COALESCE(SUM(input_tokens),0) FROM sessions").fetchone()[0]
+    json_input = sum(s.get("input", 0) for s in json_data.values())
+    print(f"Total input: JSON={json_input}, SQLite={db_input}")
+
+    db_output = conn.execute("SELECT COALESCE(SUM(output_tokens),0) FROM sessions").fetchone()[0]
+    json_output = sum(s.get("output", 0) for s in json_data.values())
+    print(f"Total output: JSON={json_output}, SQLite={db_output}")
+
+    db_requests = conn.execute("SELECT COALESCE(SUM(requests),0) FROM sessions").fetchone()[0]
+    json_requests = sum(s.get("requests", 0) for s in json_data.values())
+    print(f"Total requests: JSON={json_requests}, SQLite={db_requests}")
+
+    conn.close()
+    return (
+        db_count == json_count
+        and abs(db_cost - json_cost) < 0.01
+        and db_input == json_input
+        and db_output == json_output
+        and db_requests == json_requests
+    )
+
+
+def backup_db(target_dir=None, keep=7, db_path=None):
+    """Backup online de session_history.db con rotación."""
+    target = Path(target_dir or SCRIPT_DIR / "db_backups")
+    target.mkdir(exist_ok=True)
+    ts = __import__("time").strftime("%Y%m%d_%H%M%S")
+    dest = target / f"session_history_{ts}.db"
+
+    srce = Path(db_path or DB_PATH)
+    if not srce.exists():
+        print(f"DB not found: {srce}")
+        return None
+
+    conn_src = sqlite3.connect(str(srce))
+    conn_dst = sqlite3.connect(str(dest))
+    conn_src.backup(conn_dst)
+    conn_dst.close()
+    conn_src.close()
+
+    backups = sorted(target.glob("session_history_*.db"))
+    for old in backups[:-keep]:
+        old.unlink()
+
+    size = dest.stat().st_size
+    print(f"Backup: {dest.name} ({size / 1024:.1f} KB), {len(backups)} total, keeping {keep}")
+    return str(dest)

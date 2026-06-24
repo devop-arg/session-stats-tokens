@@ -17,6 +17,7 @@ import datetime
 from pathlib import Path
 from io import StringIO
 from stats_common import normalize_model_name
+import sqlite3
 
 STATS_DIR = Path("/home/capw/scripts/session-stats")
 WIDTH = 78
@@ -129,9 +130,40 @@ def collect_models(sessions):
             grouped[key]["cost"] += mdata.get("cost", 0.0)
     return grouped
 
-def main():
-    history_file = STATS_DIR / "session_history.json"
+def _load_sqlite_sessions():
+    db_path = STATS_DIR / "session_history.db"
+    if not db_path.exists():
+        return {}
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    result = {}
+    srows = conn.execute(
+        "SELECT id, date, requests, input_tokens, output_tokens, cache_tokens, cost FROM sessions WHERE source != 'legacy'"
+    ).fetchall()
+    for srow in srows:
+        sid = srow["id"]
+        mrows = conn.execute(
+            "SELECT model, requests, input_tokens, output_tokens, cache_tokens, cost FROM model_usage WHERE session_id=?",
+            (sid,)
+        ).fetchall()
+        by_model = {}
+        for mr in mrows:
+            by_model[mr["model"]] = {
+                "requests": mr["requests"], "input": mr["input_tokens"],
+                "output": mr["output_tokens"], "cache": mr["cache_tokens"],
+                "cost": mr["cost"]
+            }
+        result[sid] = {
+            "date": srow["date"], "requests": srow["requests"],
+            "input": srow["input_tokens"], "output": srow["output_tokens"],
+            "cache": srow["cache_tokens"], "cost": srow["cost"],
+            "by_model": by_model
+        }
+    conn.close()
+    return result
 
+
+def main():
     if len(sys.argv) < 2:
         print("Uso: session-stats-period [dia|semana|mes|YYMM|list]")
         print("Ejemplos: session-stats-period dia")
@@ -141,18 +173,12 @@ def main():
 
     period = sys.argv[1].lower()
 
-    if not history_file.exists():
+    data = _load_sqlite_sessions()
+    if not data:
         print("No hay historial disponible.")
         return
 
-    try:
-        with open(history_file, 'r') as f:
-            data = json.load(f)
-    except Exception:
-        print("Error leyendo el historial.")
-        return
-
-    sessions = {k: v for k, v in data.items() if k != "historical_total" and "date" in v}
+    sessions = {k: v for k, v in data.items() if "date" in v}
 
     if period == "list":
         from collections import defaultdict

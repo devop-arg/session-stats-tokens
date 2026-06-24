@@ -130,6 +130,11 @@
     "input": 0.75,
     "output": 4.5
   },
+  "gpt-5.5": {
+    "cache": 0.5,
+    "input": 5.0,
+    "output": 30.0
+  },
   "grok-code-fast-1-optimized-free": {
     "cache": 0.02,
     "input": 0.2,
