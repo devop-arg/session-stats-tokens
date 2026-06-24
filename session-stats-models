@@ -339,7 +339,7 @@ def alias_menu(costs, aliases):
 # ─── Análisis ─────────────────────────────────────────
 
 def find_orphans(costs):
-    """Modelos en session_history.json sin precio en MODEL_COSTS."""
+    """Modelos en sesiones guardadas (SQLite) sin precio en MODEL_COSTS."""
     used = get_used_models()
     sys.path.insert(0, str(SCRIPT_DIR))
     from stats_common import normalize_model_name

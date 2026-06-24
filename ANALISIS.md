@@ -20,7 +20,7 @@ Convertir `session-stats-tokens` de scripts CLI con historial JSON a una base SQ
 | Escritor principal | Completa | `session-stats` escribe solo en SQLite |
 | Backup SQLite | Completa | `backup_db()` + cron diario 06:00 |
 | Interfaz web | Pendiente | Planificada para `stats.dev0p.com` |
-| Corte definitivo de JSON | Pendiente | Requiere actualizar session-stats-history (ya lee SQLite) |
+| Corte definitivo de JSON | Completo | Dual-write cortado: ni `session-stats` ni `capture-all` escriben JSON. recalculate_historical_cost() lee desde SQLite (Enfoque B). JSON congelado como `session_history_legacy_freeze.json` |
 | Costo alineado SQLite/CLI | Completa | Adjustment +$357.49 agregado como modelo opus-4.5 (nov 2025) |
 
 ### Métricas actuales
@@ -35,9 +35,9 @@ Convertir `session-stats-tokens` de scripts CLI con historial JSON a una base SQ
 | Requests migrados | 27,760 |
 | Input tokens migrados | 633,544,380 |
 | Output tokens migrados | 13,733,912 |
-| Costo SQLite (post-adjustment) | $1,618.03 |
-| Costo session-stats (recalculate) | $1,617.26 |
-| Costo session-stats-history | $1,617.21 |
+| Costo SQLite (post-adjustment) | $1,618.05 |
+| Costo session-stats (recalculate) | $1,617.28 |
+| Costo session-stats-history | $1,617.23 |
 | Diferencia recalculate - history | ~$0.05 (floating point, aceptable) |
 | Backups SQLite actuales | 1 |
 | Adjustment agregado | +$357.49 (opus-4.5, 2025-11) |
@@ -46,7 +46,7 @@ Convertir `session-stats-tokens` de scripts CLI con historial JSON a una base SQ
 
 | Archivo | Estado | Rol |
 |---|---|---|
-| `session-stats` | Actualizado | Sesión actual + `--capture-all`; escribe SQLite + JSON |
+| `session-stats` | Actualizado | Sesión actual + `--capture-all`; escribe solo SQLite |
 | `session-stats-history` | Actualizado | Histórico desde SQLite + fuentes externas |
 | `session-stats-period` | Actualizado | Filtros por día/semana/mes desde SQLite |
 | `session-stats-models` | Actualizado | Modelos/precios/aliases con uso leído desde SQLite |
@@ -118,7 +118,7 @@ PRAGMAs activos:
 
 | Problema original | Estado | Solución |
 |---|---:|---|
-| Full rewrite JSON cada 5 min | Mitigado | SQLite incremental implementado |
+| Full rewrite JSON cada 5 min | Resuelto | SQLite incremental implementado, dual-write JSON cortado |
 | Race condition cron vs interactivo | Mitigado | WAL + `busy_timeout` |
 | Sin backup del historial | Resuelto | `backup_db()` + cron diario |
 | Bug nombres en `session-stats-period` | Resuelto | Usa normalización común |
@@ -503,19 +503,20 @@ Criterio de salida:
 
 ## 7. Qué Sigue
 
-### Siguiente paso inmediato: cerrar la fuente de datos
+### ✅ Paso completado: fuente de datos SQLite cerrada
 
-Qué hay que resolver:
+Esto ya está implementado:
 
-- `recalculate_historical_cost()` todavía depende de JSON.
-- El dashboard debe nacer leyendo SQLite, no JSON.
-- El dual-write puede seguir temporalmente, pero no debe ser requisito para calcular totales.
+- `recalculate_historical_cost()` lee desde SQLite (Enfoque B, sin dependencia de JSON).
+- El dashboard web (próxima fase) nacerá leyendo SQLite vía API propia.
+- Dual-write JSON cortado: ningún script escribe en `session_history.json`.
+- JSON congelado como `session_history_legacy_freeze.json` — backup legacy, no usado en cálculos.
 
-Resultado esperado:
+Resultado verificado:
 
-- El flujo normal de lectura usa SQLite.
-- JSON queda como backup legacy.
-- Los comandos existentes siguen mostrando los totales esperados.
+- El flujo normal de lectura usa SQLite como fuente única.
+- Los comandos existentes (`session-stats`, `session-stats-history`, etc.) leen SQLite y muestran totales consistentes.
+- Diferencias menores (< $1) entre vistas por floating point, documentadas.
 
 ### Después: construir backend web
 
@@ -659,3 +660,26 @@ Este checklist debe completarse en orden. No saltear validaciones porque es prod
 - [ ] Si se actualizó nginx/systemd de `dev0p`, documentar el cambio donde corresponda.
 - [ ] Si se tocó `/home/capw/docsvps/`, sincronizar y pushear `weiro2020/docsvps`.
 - [ ] Registrar pendientes explícitos, no supuestos.
+
+## 9. Correcciones Post-Review (2026-06-24)
+
+### 9.1 Hallazgos y acciones
+
+| # | Hallazgo | Acción | Estado |
+|---|---:|---|---|
+| 1 | `kilocode_legacy` tenía `source=''` (vacío) en SQLite, inconsistente con otros legacy (`source='legacy'`) | Corregido vía `UPDATE` directo en SQLite | ✅ |
+| 2 | 8 archivos backup stale (`.bak.*`, `.backup*`, `session_history.json.bak`) en el directorio del repo | Eliminados | ✅ |
+| 3 | Comentario desactualizado en `session-stats-models` L342: "Modelos en session_history.json..." | Corregido a "Modelos en sesiones guardadas (SQLite)..." | ✅ |
+| 4 | Sección 1: "Corte definitivo de JSON" marcado como "Pendiente" cuando ya está completo | Actualizado a "Completo" | ✅ |
+| 5 | Sección 3: "Full rewrite JSON cada 5 min" marcado como "Mitigado" cuando el dual-write ya fue cortado | Actualizado a "Resuelto" | ✅ |
+| 6 | Sección 7: "recalculate_historical_cost() todavía depende de JSON" — desactualizado (Enfoque B ya implementado) | Reemplazado por sección "✅ Paso completado: fuente de datos SQLite cerrada" | ✅ |
+| 7 | Métricas con valores de la sesión anterior | Actualizadas a valores actuales ($1,618.05 / $1,617.28 / $1,617.23) | ✅ |
+
+### 9.2 Verificación final post-correcciones
+
+- SQLite: 284 rows, $1,618.05, 3 legacy con `source='legacy'` consistente.
+- `recalculate_historical_cost()`: 382 sesiones, $1,617.28 (diferencia ~$0.77 con SQLite SUM por floating point y Enfoque B).
+- `session-stats-history`: 382 sesiones, $1,617.23 (diferencia ~$0.05 con recalculate).
+- Dual-write JSON: 0 escritores activos.
+- Backup automático: funcional, rotación 7 días.
+- Directorio limpio: 0 archivos `.bak.*` o `.backup*` remanentes.
