@@ -17,7 +17,7 @@ StandardError=append:/var/log/session-stats-web.err.log
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=read-only
+BindReadOnlyPaths=/home/capw/scripts/session-stats/session_history.db
 ReadWritePaths=
 
 [Install]

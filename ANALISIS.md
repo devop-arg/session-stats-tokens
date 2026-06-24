@@ -19,7 +19,7 @@ Convertir `session-stats-tokens` de scripts CLI con historial JSON a una base SQ
 | Lectores CLI | Completa | `history`, `period`, `models` leen desde SQLite |
 | Escritor principal | Completa | `session-stats` escribe solo en SQLite |
 | Backup SQLite | Completa | `backup_db()` + cron diario 06:00 |
-| Interfaz web | Pendiente | Planificada para `stats.dev0p.com` |
+| Interfaz web | Completa | `stats.dev0p.com` desplegado (FastAPI + nginx + cert + Basic Auth + fix ProtectHome) |
 | Corte definitivo de JSON | Completo | Dual-write cortado: ni `session-stats` ni `capture-all` escriben JSON. recalculate_historical_cost() lee desde SQLite (Enfoque B). JSON congelado como `session_history_legacy_freeze.json` |
 | Costo alineado SQLite/CLI | Completa | Adjustment +$357.49 agregado como modelo opus-4.5 (nov 2025) |
 
@@ -28,19 +28,17 @@ Convertir `session-stats-tokens` de scripts CLI con historial JSON a una base SQ
 | Métrica | Valor |
 |---|---:|
 | SQLite principal | `/home/capw/scripts/session-stats/session_history.db` |
-| Tamaño SQLite | 168 KB |
-| Sesiones en SQLite (filas raw) | 285 (282 reales + 3 legacy: ht, kc, adj) |
-| Total sesiones trackeadas (CLI) | 383 (285 filas - 1 ht + 100 ht.expand - 1 adj) |
-| Modelos únicos | 67 (con prefijos raw y normalizados) |
-| Requests migrados | 28,122 |
-| Input tokens migrados | 639,254,941 |
-| Output tokens migrados | 13,948,224 |
+| Tamaño SQLite | 164 KB |
+| Sesiones en SQLite (filas raw) | 286 |
+| Total sesiones trackeadas (CLI) | 384 (286 raw + expansions) |
+| Modelos únicos | 67 |
+| Requests registrados | 28,232 |
+| Input tokens | 639,254,941 |
+| Output tokens | 13,948,224 |
 | Cache tokens | 810,782,900 |
-| Costo SQLite (stored) | $1,619.45 |
-| Costo session-stats (recalculate) | $1,624.06 |
-| Sesión manual insertada | `hermes_manual_20260624`: 70 reqs, $1.35 (GLM-5.2 + taste-1 + MiniMax-M2.5) |
-| Ajuste `taste-1` sin cache | No tiene pricing de cache; input total = non-cache |
-| Backups SQLite actuales | 1 |
+| Costo SQLite (stored) | $1,619.52 |
+| Costo session-stats (recalculate) | $1,624.13 |
+| Backups SQLite | 1 (db_backups/) + cron diario 06:00 |
 
 ### Archivos principales
 
@@ -524,7 +522,7 @@ WantedBy=multi-user.target
 ```
 
 **Notas**:
-- `ProtectHome=read-only` es deliberado: el proceso no necesita escribir en `/home/capw/`.
+- `ProtectHome=read-only` causa `sqlite3.OperationalError: unable to open database file` (el bind mount overlay de systemd interfiere con FD internos de SQLite). Se reemplazó por `BindReadOnlyPaths=/home/capw/scripts/session-stats/session_history.db`.
 - No hay `ReadWritePaths` porque la app es read-only sobre `session_history.db`.
 - El working directory debe ser `stats-web/` para que las rutas de templates y static sean relativas a `main.py`.
 
@@ -943,14 +941,14 @@ Este checklist debe completarse en orden de fases. No saltear validaciones porqu
 
 ### 8.7 Fase 5 — Cierre documental
 
-- [ ] `ANALISIS.md` refleja estado final real (métricas actualizadas, checklist marcado).
-- [ ] `stats-web/README.md` existe con: qué es, stack, operación diaria, troubleshooting.
-- [ ] Backup reciente de `session_history.db` verificado.
-- [ ] Logs de nginx (stats.dev0p.com) sin errores 5xx.
-- [ ] Logs del servicio sin errores repetidos.
-- [ ] Dashboard usable desde mobile (verificado).
-- [ ] Si se tocó nginx/systemd de `dev0p`, documentar en `/home/capw/docsvps/`.
-- [ ] Si se tocó `/home/capw/docsvps/`, sincronizar y pushear `weiro2020/docsvps`.
+- [x] `ANALISIS.md` refleja estado final real (métricas actualizadas, checklist marcado).
+- [x] `stats-web/README.md` existe con: qué es, stack, operación diaria, troubleshooting.
+- [x] Backup reciente de `session_history.db` verificado (en `db_backups/`).
+- [x] Logs de nginx (stats.dev0p.com) sin errores 5xx.
+- [x] Logs del servicio sin errores repetidos (0 en journalctl -p err).
+- [x] Dashboard usable desde mobile (responsive: cards 2→1 col, charts apilados, scroll horizontal).
+- [x] Si se tocó nginx/systemd de `dev0p`, documentar en `/home/capw/docsvps/`.
+- [x] Si se tocó `/home/capw/docsvps/`, sincronizar y pushear `weiro2020/docsvps`.
 
 ### 8.8 Fase 6 (Póst-MVP) — Plugins de proveedores
 
@@ -977,9 +975,10 @@ Este checklist debe completarse en orden de fases. No saltear validaciones porqu
 
 ### 9.2 Verificación final post-correcciones
 
-- SQLite: 284 rows, $1,618.05, 3 legacy con `source='legacy'` consistente.
-- `recalculate_historical_cost()`: 382 sesiones, $1,617.28 (diferencia ~$0.77 con SQLite SUM por floating point y Enfoque B).
-- `session-stats-history`: 382 sesiones, $1,617.23 (diferencia ~$0.05 con recalculate).
+- SQLite: 286 rows, $1,619.52.
+- `recalculate_historical_cost()`: 384 sesiones, $1,624.13 (diferencia ~$4.61 con SQLite SUM por Enfoque B/expansiones).
+- Dashboard desplegado: `stats.dev0p.com` con FastAPI + nginx + Basic Auth + Chart.js.
+- Fix systemd: `ProtectHome=read-only` → `BindReadOnlyPaths=` (soluciona `sqlite3.OperationalError`).
 - Dual-write JSON: 0 escritores activos.
-- Backup automático: funcional, rotación 7 días.
+- Backup automático: funcional, rotación 7 días, 1 backup existente.
 - Directorio limpio: 0 archivos `.bak.*` o `.backup*` remanentes.
