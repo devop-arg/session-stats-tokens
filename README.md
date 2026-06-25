@@ -61,18 +61,67 @@ Prevents data loss when chat sessions are deleted:
 0 0 * * * rm -f /path/to/capture.log
 ```
 
+### Data Backup (Automático)
+
+- **Cada 5 min**: `session-stats --capture-all` persiste sesiones a `session_history.db` y `session_history.json`
+- **Diario 6 AM**: backup SQLite con rotación de 7 días en `db_backups/`
+- Cron configurado localmente, no trackeado en el repo
+
+## Repository Strategy
+
+Este proyecto mantiene **dos remotos** con contenido diferente:
+
+| Remote | URL | Branch | Contenido |
+|--------|-----|--------|-----------|
+| `private` | `github.com:weiro2020/session-stats-tokens-private.git` | `main` | **Canónico**: scripts + datos de sesión (JSON, DB, backups) |
+| `origin` | `github.com:weiro2020/session-stats-tokens.git` (público) | `public` | **Sanitizado**: solo scripts, sin datos de usuario |
+
+### Reglas
+
+1. **Trabajar siempre en `main`** (local). `main` trackea `private/main`.
+2. **Commitear y pushear al privado** como respaldo:
+   ```bash
+   git push private main
+   ```
+3. **Sincronizar al público** con `sync-public.sh`:
+   ```bash
+   ./sync-public.sh
+   ```
+   Esto mergea `main` a `public`, excluye datos sensibles y pushea a `origin/public`.
+
+### ¿Qué se excluye del público?
+
+Los siguientes archivos están en `.gitignore` del branch `public`:
+- `session_history.json` — historial con nombres de sesiones, costos, tokens
+- `session_history.db` — misma información en SQLite
+- `db_backups/` — backups de la DB
+- `capture.log` — log de capturas
+
+En el branch `main` (privado) estos archivos **sí** están trackeados para backup.
+
+### Commit Hygiene
+
+- **Idioma**: español (consistente con el proyecto)
+- **Formato**: `tipo: mensaje imperativo` — ej: `fix: corregir hermes priority`, `feat: agregar dashboard`, `docs: actualizar README`
+- **Tipos**: `fix:`, `feat:`, `docs:`, `chore:`, `refactor:`
+- **Sin datos sensibles**: no incluir nombres de sesiones, proyectos del usuario, costos específicos ni rutas locales en los mensajes de commit (se pushean al repo público)
+- **Antes de pushear al público**: revisar el diff del commit con `git diff --cached` para confirmar que no hay secretos
+
 ## Files
 
-| File | Description |
-|------|-------------|
-| `session-stats` | Main script: current session + `--capture-all` |
-| `session-stats-history` | Full historical summary |
-| `session-stats-period` | Filter by day/week/month |
-| `session-stats-models` | Interactive model/price/alias manager |
-| `stats_common.py` | Shared module: model costs, DB readers, cost calculation |
-| `session_history.json` | Persistent history (auto-maintained, not tracked) |
-| `model_costs.json` | Model prices (managed by `session-stats-models`) |
-| `model_aliases.json` | Model name aliases (managed by `session-stats-models`) |
+| File | Description | Trackeado |
+|------|-------------|:---------:|
+| `session-stats` | Main script: current session + `--capture-all` | ✅ ambos |
+| `session-stats-history` | Full historical summary | ✅ ambos |
+| `session-stats-period` | Filter by day/week/month | ✅ ambos |
+| `session-stats-models` | Interactive model/price/alias manager | ✅ ambos |
+| `stats_common.py` | Shared module: model costs, DB readers, cost calculation | ✅ ambos |
+| `model_costs.json` | Model prices (managed by `session-stats-models`) | ✅ ambos |
+| `model_aliases.json` | Model name aliases (managed by `session-stats-models`) | ✅ ambos |
+| `session_history.json` | Persistent history con nombres, costos, tokens | ✅ privado ❌ público |
+| `session_history.db` | Historial en SQLite | ✅ privado ❌ público |
+| `db_backups/` | Backups diarios de la DB (rotación 7 días) | ✅ privado ❌ público |
+| `capture.log` | Log de capturas cron | ❌ ninguno |
 
 ## Data Sources
 
@@ -93,6 +142,18 @@ session-stats-models
 ```
 
 Features: add/edit/delete models, manage aliases, detect orphan models without pricing, list unused models. Prices stored in `model_costs.json`, aliases in `model_aliases.json`.
+
+### Siempre muestra Hermes aunque esté cerrado
+
+Si `session-stats` siempre muestra `[Hermes]` incluso después de cerrarlo y ya abriste OpenCode/Kilo, es probable que Hermes haya dejado una sesión abierta (sin `ended_at` en `~/.hermes/state.db`).
+
+Para solucionarlo, cerrar todas las sesiones abiertas de Hermes:
+
+```bash
+sqlite3 ~/.hermes/state.db "UPDATE sessions SET ended_at = started_at + 60 WHERE (ended_at IS NULL OR ended_at = 0) AND input_tokens > 0;"
+```
+
+Esto ocurre cuando el proceso de Hermes se mata abruptamente (ej: `kill`, crash del sistema, cierre del terminal padre) antes de cerrar la sesión correctamente.
 
 ## Troubleshooting
 
