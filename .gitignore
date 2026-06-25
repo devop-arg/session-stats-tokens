@@ -18,6 +18,7 @@ Thumbs.db
 # Data files (tracked in private, excluded in public)
 session_history.json
 session_history.db
+session_history_legacy_freeze.json
 
 # Old backups (not tracked)
 *.bak.*
