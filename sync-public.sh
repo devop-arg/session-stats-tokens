@@ -10,8 +10,8 @@ MSG="${1:-chore: sync main -> public}"
 echo "=== 1. Push main a private ==="
 git push private main
 
-echo "=== 2. Checkout public ==="
-git checkout public
+echo "=== 2. Checkout public (force) ==="
+git checkout public --force
 
 echo "=== 3. Merge main --no-commit ==="
 git merge main --no-commit
@@ -26,7 +26,10 @@ git commit --no-edit -m "$MSG"
 echo "=== 6. Push a origin/public ==="
 git push origin public
 
-echo "=== 7. Volver a $BRANCH_CURRENT ==="
+echo "=== 7. Force-push a origin/main (sanitizado) ==="
+git push origin public:main --force
+
+echo "=== 8. Volver a $BRANCH_CURRENT ==="
 git checkout "$BRANCH_CURRENT"
 
 echo "=== OK ==="
