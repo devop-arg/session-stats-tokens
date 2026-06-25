@@ -165,12 +165,6 @@ def get_current_session():
             ts_ms = int(sess["started_at"] * 1000) if sess.get("started_at") else 0
             candidates.append(("hermes", sess["id"], ts_ms))
 
-    # Collect Cursor CLI sessions with real usage
-    for sess in get_cursor_sessions():
-        if sess["input"] > 0 or sess["output"] > 0:
-            ts_ms = int((sess.get("updated_at") or 0) * 1000)
-            candidates.append(("cursor", sess["id"], ts_ms))
-
     if not candidates:
         return None
 
