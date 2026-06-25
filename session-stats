@@ -621,23 +621,5 @@ def main():
 
     print(f"\n💰 Session Cost: {format_cost(total_session_cost)} - Historical Total ({total_sessions} sessions): {format_cost(total_historical_cost)}")
 
-    # Mostrar Cursor si existe pero no es la sesión más reciente
-    if source != "cursor":
-        for cs in get_cursor_sessions():
-            sid = cs["id"]
-            cs_stats = get_cursor_session_stats(sid)
-            by_model = cs_stats.get("by_model", {})
-            if not by_model:
-                continue
-            cs_in = sum(m["input"] for m in by_model.values())
-            cs_out = sum(m["output"] for m in by_model.values())
-            cs_req = sum(m["requests"] for m in by_model.values())
-            cs_cost = sum(
-                calculate_cost(model, m["input"], m["output"], m.get("cache", 0))
-                for model, m in by_model.items()
-            )
-            title = cs_stats.get("session_title") or sid[:8]
-            print(f"\n📊 Cursor CLI ({title[:50]}): {cs_req} req | In: {format_number(cs_in)} | Out: {format_number(cs_out)} | Cost: {format_cost(cs_cost)}")
-
 if __name__ == "__main__":
     main()
