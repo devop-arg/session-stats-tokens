@@ -4,7 +4,7 @@
 <section class="hero">
   <div class="hero-inner">
     <h1 class="hero-title">Métricas de consumo LLM</h1>
-    <p class="lede">Métricas de uso de modelos y costos.</p>
+    <p class="lede">Métricas de uso de modelos y costos</p>
   </div>
 </section>
 
@@ -31,12 +31,33 @@
   </div>
 </div>
 
+<section class="today-section" id="today-section">
+  <h2 class="section-title-sm">Uso diario de modelos y costos</h2>
+  <div class="today-stats" id="today-stats">
+    <div class="today-stat">
+      <div class="today-stat-label">Tokens Totales</div>
+      <div class="today-stat-value" id="today-tokens">&mdash;</div>
+    </div>
+    <div class="today-stat">
+      <div class="today-stat-label">Requests</div>
+      <div class="today-stat-value" id="today-requests">&mdash;</div>
+    </div>
+    <div class="today-stat">
+      <div class="today-stat-label">Costo Total</div>
+      <div class="today-stat-value" id="today-cost">&mdash;</div>
+    </div>
+  </div>
+  <div class="today-models" id="today-models"></div>
+</section>
+
 <section data-section="top-models" id="top-models" class="stats-section section-block">
+  <h2 class="section-title-sm">Uso de modelos y costos de los últimos 12 meses</h2>
   <div data-component="top-models-chart"
        class="top-models-chart"
        role="img"
        aria-label="Gráfico apilado de uso de modelos (12 meses)"
        id="top-models-chart">
+    <div class="top-y-axis" id="top-y-axis"></div>
     <div data-slot="top-models-axis" class="top-models-axis" aria-hidden="true" id="top-axis"></div>
     <div data-slot="top-models-bars" class="top-models-bars" id="top-bars"></div>
   </div>
@@ -44,7 +65,7 @@
 </section>
 
 <div class="section-block">
-  <h2 class="section-title"><strong>Actividad temporal.</strong> Evolución semanal de sesiones, tokens y costo en los últimos 12 meses.</h2>
+  <h2 class="section-title-sm">Actividad temporal &mdash; evolución semanal de sesiones, tokens y costo en los últimos 12 meses</h2>
   <div class="metric-hero" id="activity-hero">
     <div class="metric-hero-item">
       <span class="metric-hero-label">Semana Pico Tokens</span>
@@ -72,7 +93,7 @@
 </div>
 
 <div class="section-block">
-  <h2 class="section-title"><strong>Costo por millón de tokens.</strong> Precio efectivo por modelo.</h2>
+  <h2 class="section-title-sm">Costo por millón de tokens &mdash; precio efectivo por modelo</h2>
   <div class="metric-hero" id="token-cost-hero">
     <div class="metric-hero-item">
       <span class="metric-hero-label">Precio / 1M tokens</span>
@@ -98,7 +119,7 @@
 </div>
 
 <div class="section-block">
-  <h2 class="section-title"><strong>Proporción de cache.</strong> Tokens input servidos desde cache.</h2>
+  <h2 class="section-title-sm">Proporción de cache &mdash; tokens input servidos desde cache</h2>
   <div class="metric-hero" id="cache-ratio-hero">
     <div class="metric-hero-item">
       <span class="metric-hero-label">Cache ratio global</span>

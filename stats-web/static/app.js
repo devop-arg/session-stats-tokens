@@ -48,6 +48,41 @@ if (document.querySelector('.stats-grid')) {
       if (upd && d.last_updated) upd.textContent = 'Actualizado ' + d.last_updated;
     });
 
+  // --- Today Summary (hora Argentina) ---
+  var todaySection = document.getElementById('today-section');
+  var todayStats = document.getElementById('today-stats');
+  var todayModels = document.getElementById('today-models');
+
+  fetch('/api/today-summary')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d || !d.top_models || d.top_models.length === 0) {
+        todaySection.classList.remove('has-data');
+        return;
+      }
+      todaySection.classList.add('has-data');
+      document.getElementById('today-tokens').textContent = fmt(d.total_tokens);
+      document.getElementById('today-requests').textContent = fmt(d.total_requests);
+      document.getElementById('today-cost').textContent = fmtCost(d.total_cost);
+
+      todayModels.innerHTML = '';
+      d.top_models.forEach(function(m, i) {
+        var row = document.createElement('div');
+        row.className = 'today-model-row';
+        var barPct = m.percent;
+        row.innerHTML =
+          '<span class="today-model-rank">' + String(i + 1).padStart(2, '0') + '</span>' +
+          '<span class="today-model-name">' + m.model + '</span>' +
+          '<div class="today-model-bar"><div class="today-model-bar-fill" style="width:' + barPct + '%"></div></div>' +
+          '<span class="today-model-reqs">' + fmt(m.requests) + ' req</span>' +
+          '<span class="today-model-cost">' + fmtCost(m.cost) + '</span>' +
+          '<span class="today-model-tokens">' + fmtTokens(m.tokens) + '</span>' +
+          '<span class="today-model-pct">' + barPct + '%</span>';
+        todayModels.appendChild(row);
+      });
+    })
+    .catch(function(err) { console.error('today-summary error:', err); });
+
   // --- Top Models (12 meses semanal, colores por modelo) ---
   var topChart = document.getElementById('top-models-chart');
   var topBars = document.getElementById('top-bars');
@@ -286,6 +321,27 @@ if (document.querySelector('.stats-grid')) {
         // Leaderboard all-time
         renderLeaderboard(leaders);
         syncHighlightState();
+
+        // Y-axis: scale in 100M increments
+        var yAxis = document.getElementById('top-y-axis');
+        if (yAxis) {
+          yAxis.innerHTML = '';
+          var maxVal = maxTotal;
+          if (maxVal > 0) {
+            var step = 100000000;
+            var top = Math.ceil(maxVal / step) * step;
+            var labels = [];
+            for (var v = 0; v <= top; v += step) {
+              labels.push(v);
+            }
+            labels.forEach(function(v) {
+              var el = document.createElement('div');
+              el.className = 'top-y-axis-label';
+              el.textContent = fmtTokens(v);
+              yAxis.appendChild(el);
+            });
+          }
+        }
       })
       .catch(function(err) { console.error('top-models error:', err); });
   }

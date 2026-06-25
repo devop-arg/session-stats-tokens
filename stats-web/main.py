@@ -6,6 +6,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 
 import sqlite3
 import datetime
+import zoneinfo
 from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -138,6 +139,65 @@ def api_summary():
         "cost_7d": round(cost_7d, 2),
         "cost_30d": round(cost_30d, 2),
         "last_updated": datetime.datetime.now().isoformat(timespec="minutes"),
+    }
+
+
+@app.get("/api/today-summary")
+def api_today_summary():
+    """Métricas del día actual en hora Argentina (00:00 a 23:59 ART)."""
+    tz_arg = zoneinfo.ZoneInfo("America/Argentina/Buenos_Aires")
+    now_arg = datetime.datetime.now(tz_arg)
+    start_arg = now_arg.replace(hour=0, minute=0, second=0, microsecond=0)
+    end_arg = start_arg + datetime.timedelta(days=1)
+
+    start_utc = int(start_arg.timestamp())
+    end_utc = int(end_arg.timestamp())
+
+    conn = _db()
+
+    sess = conn.execute("""
+        SELECT COALESCE(SUM(requests),0) as total_requests,
+               COALESCE(SUM(input_tokens),0) + COALESCE(SUM(output_tokens),0) + COALESCE(SUM(cache_tokens),0) as total_tokens,
+               COALESCE(SUM(cost),0) as total_cost
+        FROM sessions
+        WHERE source != 'legacy' AND timestamp >= ? AND timestamp < ?
+    """, (start_utc, end_utc)).fetchone()
+
+    total_tokens = sess["total_tokens"]
+    if total_tokens == 0:
+        conn.close()
+        return None
+
+    models = conn.execute("""
+        SELECT mu.model,
+               COALESCE(SUM(mu.requests),0) as requests,
+               COALESCE(SUM(mu.cost),0) as cost,
+               COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as tokens
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
+        GROUP BY mu.model
+        ORDER BY tokens DESC
+        LIMIT 5
+    """, (start_utc, end_utc)).fetchall()
+
+    conn.close()
+
+    top_models = []
+    for m in models:
+        top_models.append({
+            "model": m["model"],
+            "requests": m["requests"],
+            "cost": round(m["cost"], 4),
+            "tokens": m["tokens"],
+            "percent": round(m["tokens"] / total_tokens * 100, 1),
+        })
+
+    return {
+        "total_requests": sess["total_requests"],
+        "total_tokens": total_tokens,
+        "total_cost": round(sess["total_cost"], 4),
+        "top_models": top_models,
     }
 
 
