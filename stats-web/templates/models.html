@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1 class="hero-title" style="font-size:28px;">Modelos</h1>
-  <p class="lede" style="margin:0;">Ranking de modelos por costo. Datos agregados de todas las fuentes.</p>
+  <h1 class="section-title"><strong>Modelos.</strong> Ranking de modelos por costo. Datos agregados de todas las fuentes.</h1>
 </section>
 
 <div class="table-wrap">
@@ -15,11 +14,12 @@
         <th class="num">Input</th>
         <th class="num">Output</th>
         <th class="num">Cache</th>
+        <th class="num">Total</th>
         <th class="num">Costo</th>
       </tr>
     </thead>
     <tbody id="models-tbody">
-      <tr><td colspan="7" class="loading-row">Cargando...</td></tr>
+      <tr><td colspan="8" class="loading-row">Cargando...</td></tr>
     </tbody>
   </table>
 </div>

@@ -1,85 +1,118 @@
 {% extends "base.html" %}
 {% block content %}
+
 <section class="hero">
   <div class="hero-inner">
-    <p class="kicker">Consumo de APIs LLM</p>
-    <h1 class="hero-title">session-stats</h1>
-    <p class="lede">Métricas globales de uso, costos y modelos desde todas las fuentes: Hermes, OpenCode, Codex, Kilocode y registros manuales.</p>
+    <h1 class="hero-title">Métricas de consumo LLM</h1>
+    <p class="lede">Uso, costos y modelos desde Hermes, OpenCode, Codex, Kilocode y registros manuales.</p>
   </div>
 </section>
 
 <div class="stats-grid">
-  <div class="stat-card" id="card-sessions">
-    <div class="stat-label">Sesiones totales</div>
-    <div class="stat-value" data-stat="sessions">&mdash;</div>
+  <div class="stat-card accent">
+    <div class="stat-label">Costo Total</div>
+    <div class="stat-value" data-stat="total-cost">&mdash;</div>
   </div>
-  <div class="stat-card" id="card-requests">
-    <div class="stat-label">Requests</div>
-    <div class="stat-value" data-stat="requests">&mdash;</div>
+  <div class="stat-card">
+    <div class="stat-label">Total Tokens</div>
+    <div class="stat-value" data-stat="total-tokens">&mdash;</div>
   </div>
-  <div class="stat-card accent" id="card-cost">
-    <div class="stat-label">Costo total</div>
-    <div class="stat-value" data-stat="cost">&mdash;</div>
+  <div class="stat-card">
+    <div class="stat-label">Sesiones</div>
+    <div class="stat-value" data-stat="total-sessions">&mdash;</div>
   </div>
-  <div class="stat-card" id="card-cost-30d">
-    <div class="stat-label">Costo últimos 30d</div>
-    <div class="stat-value" data-stat="cost_30d">&mdash;</div>
-  </div>
-  <div class="stat-card" id="card-cost-7d">
-    <div class="stat-label">Costo últimos 7d</div>
-    <div class="stat-value" data-stat="cost_7d">&mdash;</div>
-  </div>
-  <div class="stat-card" id="card-input">
-    <div class="stat-label">Tokens input</div>
-    <div class="stat-value" data-stat="input">&mdash;</div>
-  </div>
-  <div class="stat-card" id="card-output">
-    <div class="stat-label">Tokens output</div>
-    <div class="stat-value" data-stat="output">&mdash;</div>
-  </div>
-  <div class="stat-card" id="card-cache">
-    <div class="stat-label">Tokens cache</div>
-    <div class="stat-value" data-stat="cache">&mdash;</div>
+  <div class="stat-card">
+    <div class="stat-label">Cache Ratio</div>
+    <div class="stat-value" data-stat="cache-ratio">&mdash;</div>
   </div>
 </div>
 
-<div class="chart-section">
-  <div class="chart-header">
-    <h2 class="section-title">Costo en el tiempo</h2>
-    <div class="chart-controls">
-      <select id="range-select" class="select-control">
-        <option value="7d">7 días</option>
-        <option value="30d" selected>30 días</option>
-        <option value="90d">90 días</option>
-        <option value="all">Todo</option>
-      </select>
-      <select id="bucket-select" class="select-control">
-        <option value="day" selected>Por día</option>
-        <option value="week">Por semana</option>
-        <option value="month">Por mes</option>
-      </select>
+<section data-section="top-models" id="top-models" class="stats-section section-block">
+  <h2 data-slot="top-models-title" class="section-title"><strong>Top modelos.</strong> Uso de modelos en OpenCode, Hermes y Codex.</h2>
+  <div data-component="top-models-chart"
+       class="top-models-chart"
+       role="img"
+       aria-label="Gráfico apilado de uso de modelos (12 meses)"
+       id="top-models-chart">
+    <div data-slot="top-models-axis" class="top-models-axis" aria-hidden="true" id="top-axis"></div>
+    <div data-slot="top-models-bars" class="top-models-bars" id="top-bars"></div>
+  </div>
+  <div data-component="leaderboard" class="leaderboard" id="leaderboard" role="list" aria-label="Ranking histórico de modelos"></div>
+</section>
+
+<div class="section-block">
+  <h2 class="section-title"><strong>Actividad temporal.</strong> Evolución semanal de sesiones, tokens y costo en los últimos 12 meses.</h2>
+  <div class="metric-hero" id="activity-hero">
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Semana Pico Tokens</span>
+      <span class="metric-hero-value accent" id="activity-peak-tokens">&mdash;</span>
+    </div>
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Semana Pico Costo</span>
+      <span class="metric-hero-value" id="activity-peak-cost">&mdash;</span>
+    </div>
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Semana Pico Sesiones</span>
+      <span class="metric-hero-value" id="activity-peak-sessions">&mdash;</span>
     </div>
   </div>
-  <div class="chart-wrap">
-    <canvas id="cost-chart"></canvas>
+  <div class="activity-tabs" role="tablist" aria-label="Métrica temporal">
+    <button type="button" class="activity-tab" data-metric="tokens" data-active="true" role="tab" aria-selected="true">Tokens</button>
+    <button type="button" class="activity-tab" data-metric="cost" role="tab" aria-selected="false">Costo</button>
+    <button type="button" class="activity-tab" data-metric="sessions" role="tab" aria-selected="false">Sesiones</button>
+  </div>
+  <div class="chart-wrap activity-chart-wrap">
+    <canvas id="activity-chart" aria-label="Actividad temporal semanal" role="img"></canvas>
   </div>
 </div>
 
-<div class="chart-section">
-  <div class="chart-header">
-    <h2 class="section-title">Top modelos por costo</h2>
+<div class="section-block">
+  <h2 class="section-title"><strong>Costo por millón de tokens.</strong> Precio efectivo por modelo.</h2>
+  <div class="metric-hero" id="token-cost-hero">
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Precio / 1M tokens</span>
+      <span class="metric-hero-value accent" id="overall-price-per-1m">&mdash;</span>
+    </div>
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Total Tokens</span>
+      <span class="metric-hero-value" id="token-total-tokens">&mdash;</span>
+    </div>
   </div>
-  <div class="chart-wrap">
-    <canvas id="models-chart"></canvas>
+  <div class="sort-controls" role="group" aria-label="Ordenar por">
+    <span class="sort-label">Ordenar por:</span>
+    <button type="button" class="sort-btn" data-sort="price" data-active="true" aria-pressed="true">Costo efectivo</button>
+    <button type="button" class="sort-btn" data-sort="tokens" aria-pressed="false">Total tokens</button>
   </div>
+  <div class="token-cost-header">
+    <span>Modelo</span>
+    <span></span>
+    <span>Costo / 1M</span>
+    <span>Total tokens</span>
+  </div>
+  <div class="token-cards" id="token-cost-list"></div>
 </div>
 
-<div class="chart-section">
-  <div class="chart-header">
-    <h2 class="section-title">Distribución por fuente</h2>
+<div class="section-block">
+  <h2 class="section-title"><strong>Proporción de cache.</strong> Tokens input servidos desde cache.</h2>
+  <div class="metric-hero" id="cache-ratio-hero">
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Cache ratio global</span>
+      <span class="metric-hero-value accent" id="overall-cache-ratio">&mdash;</span>
+    </div>
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Tokens cacheados</span>
+      <span class="metric-hero-value" id="overall-cached">&mdash;</span>
+    </div>
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Tokens sin cache</span>
+      <span class="metric-hero-value" id="overall-uncached">&mdash;</span>
+    </div>
+    <div class="metric-hero-item">
+      <span class="metric-hero-label">Total Input</span>
+      <span class="metric-hero-value" id="overall-total-input">&mdash;</span>
+    </div>
   </div>
-  <div class="chart-wrap chart-half">
-    <canvas id="sources-chart"></canvas>
-  </div>
+  <div id="cache-ratio-list"></div>
 </div>
+
 {% endblock %}

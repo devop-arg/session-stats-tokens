@@ -3,8 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>session-stats &middot; dashboard</title>
-<link rel="stylesheet" href="/static/style.css">
+<title>session-stats &middot; consumo LLM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=8">
 <script src="/vendor/chart.umd.min.js"></script>
 </head>
 <body>
@@ -15,9 +18,9 @@
       <span class="brand-name">session-stats</span>
     </a>
     <nav class="nav">
-      <a href="/" class="nav-link">Dashboard</a>
-      <a href="/sessions" class="nav-link">Sesiones</a>
-      <a href="/models" class="nav-link">Modelos</a>
+      <a href="/" class="nav-link{% if request.url.path == '/' %} active{% endif %}">Dashboard</a>
+      <a href="/sessions" class="nav-link{% if request.url.path == '/sessions' %} active{% endif %}">Sesiones</a>
+      <a href="/models" class="nav-link{% if request.url.path == '/models' %} active{% endif %}">Modelos</a>
     </nav>
   </div>
 </header>
@@ -27,13 +30,14 @@
 <footer class="site-footer">
   <div class="container footer-inner">
     <div class="footer-brand">
-      <strong>session-stats</strong> &middot; <span class="fg-dim">consumo de APIs LLM</span>
+      session-stats <span class="fg-dim">&middot; monitoreo de APIs LLM</span>
     </div>
-    <p class="visits">
-      <span id="session-count" class="visits-num">&mdash;</span> sesiones
-    </p>
+    <div class="footer-meta">
+      <span class="badge"><span id="session-count">&mdash;</span> sesiones</span>
+      <span class="badge" id="updated-badge">&mdash;</span>
+    </div>
   </div>
 </footer>
-<script src="/static/app.js"></script>
+<script src="/static/app.js?v=5"></script>
 </body>
 </html>

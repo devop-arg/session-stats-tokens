@@ -19,3 +19,4 @@ Thumbs.db
 *.bak.*
 model_backups/
 __pycache__/
+db_backups/

@@ -18,6 +18,11 @@ OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
 KILOCODE_STATE_FILE = Path.home() / ".kilocode/cli/global/global-state.json"
 KILOCODE_TASKS_DIR = Path.home() / ".kilocode/cli/global/tasks"
 
+# Rutas de Cursor CLI (hook afterAgentResponse → usage-events.jsonl)
+CURSOR_USAGE_JSONL = Path.home() / ".cursor" / "usage-events.jsonl"
+CURSOR_CHATS_DIR = Path.home() / ".cursor" / "chats"
+CURSOR_AGENT_LOGS_DIR = Path("/tmp") / f"cursor-agent-logs-{__import__('os').getuid()}"
+
 # Directorio del script (para JSON de modelos)
 SCRIPT_DIR = Path(__file__).resolve().parent
 MODEL_COSTS_FILE = SCRIPT_DIR / "model_costs.json"
@@ -714,6 +719,218 @@ def get_hermes_session_stats(session_id):
         return {}
 
 
+# --- Cursor CLI ---
+def _load_cursor_events_from_jsonl():
+    """Lee eventos del hook JSONL, deduplicados por generation_id."""
+    if not CURSOR_USAGE_JSONL.exists():
+        return []
+    seen = set()
+    events = []
+    try:
+        with open(CURSOR_USAGE_JSONL) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                gen_id = ev.get("generation_id")
+                if not gen_id or gen_id in seen:
+                    continue
+                seen.add(gen_id)
+                events.append(ev)
+    except OSError:
+        pass
+    return events
+
+
+def _load_cursor_events_from_agent_logs():
+    """Backfill desde logs de debug del cursor-agent (cli.request.*)."""
+    if not CURSOR_AGENT_LOGS_DIR.exists():
+        return []
+    pending = {}
+    events = []
+    for log_file in sorted(CURSOR_AGENT_LOGS_DIR.glob("session-*.log")):
+        try:
+            lines = log_file.read_text(errors="ignore").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            marker = "] analytics.track "
+            if marker not in line:
+                continue
+            try:
+                obj = json.loads(line.split(marker, 1)[1])
+            except (json.JSONDecodeError, IndexError):
+                continue
+            ev_name = obj.get("eventName")
+            props = obj.get("props") or {}
+            inv_id = props.get("invocationID")
+            if not inv_id:
+                continue
+            if ev_name == "cli.request.create":
+                pending[inv_id] = {
+                    "conversation_id": props.get("conversationId"),
+                    "model": props.get("model") or "unknown",
+                    "timestamp": line[1:25] + "Z",
+                }
+            elif ev_name == "cli.request.completed":
+                base = pending.pop(inv_id, {})
+                total = props.get("estimated_tokens") or 0
+                if total <= 0 or props.get("end_reason") != "success":
+                    continue
+                conv_id = base.get("conversation_id") or props.get("conversationId")
+                if not conv_id:
+                    continue
+                # estimated_tokens = total real reportado por Cursor CLI
+                input_tokens = int(total * 0.85)
+                output_tokens = total - input_tokens
+                events.append({
+                    "conversation_id": conv_id,
+                    "generation_id": inv_id,
+                    "model": base.get("model") or "unknown",
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_read_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "timestamp": line[1:25] + "Z",
+                    "source": "agent_log",
+                })
+    return events
+
+
+def _load_cursor_events():
+    """Combina hook JSONL + backfill de agent logs (hook gana en duplicados)."""
+    by_gen = {}
+    for ev in _load_cursor_events_from_agent_logs():
+        gen_id = ev.get("generation_id")
+        if gen_id:
+            by_gen[gen_id] = ev
+    for ev in _load_cursor_events_from_jsonl():
+        gen_id = ev.get("generation_id")
+        if gen_id:
+            by_gen[gen_id] = ev
+    return list(by_gen.values())
+
+
+def _get_cursor_meta(conversation_id):
+    """Busca meta.json de una conversación Cursor CLI."""
+    if not CURSOR_CHATS_DIR.exists():
+        return {}
+    for user_dir in CURSOR_CHATS_DIR.iterdir():
+        if not user_dir.is_dir():
+            continue
+        meta_path = user_dir / conversation_id / "meta.json"
+        if meta_path.exists():
+            try:
+                with open(meta_path) as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+    return {}
+
+
+def _aggregate_cursor_session(conversation_id, events):
+    """Agrega eventos de una conversación en stats por modelo."""
+    conv_events = [e for e in events if e.get("conversation_id") == conversation_id]
+    if not conv_events:
+        return None
+
+    by_model = {}
+    for ev in conv_events:
+        model = normalize_model_name(ev.get("model") or "unknown")
+        if model not in by_model:
+            by_model[model] = {
+                "requests": 0, "input": 0, "output": 0, "cache": 0, "reasoning": 0,
+            }
+        by_model[model]["requests"] += 1
+        by_model[model]["input"] += ev.get("input_tokens") or 0
+        by_model[model]["output"] += ev.get("output_tokens") or 0
+        by_model[model]["cache"] += (
+            (ev.get("cache_read_tokens") or 0) + (ev.get("cache_write_tokens") or 0)
+        )
+
+    meta = _get_cursor_meta(conversation_id)
+    title = meta.get("title") or ""
+
+    date_str = ""
+    ts_epoch = None
+    for ev in conv_events:
+        ts = ev.get("timestamp")
+        if ts:
+            date_str = ts
+            ts_epoch = _parse_timestamp(ts)
+
+    if ts_epoch is None and meta.get("updatedAtMs"):
+        ts_epoch = int(meta["updatedAtMs"] / 1000)
+        try:
+            date_str = datetime.datetime.fromtimestamp(ts_epoch).isoformat()
+        except Exception:
+            date_str = ""
+
+    return {
+        "id": conversation_id,
+        "title": title,
+        "date": date_str,
+        "updated_at": ts_epoch or 0,
+        "requests": sum(m["requests"] for m in by_model.values()),
+        "input": sum(m["input"] for m in by_model.values()),
+        "output": sum(m["output"] for m in by_model.values()),
+        "cache": sum(m["cache"] for m in by_model.values()),
+        "reasoning": 0,
+        "by_model": by_model,
+    }
+
+
+def get_cursor_sessions():
+    """Lista sesiones Cursor CLI agregadas desde usage-events.jsonl."""
+    events = _load_cursor_events()
+    if not events:
+        return []
+    conv_ids = list(dict.fromkeys(
+        e["conversation_id"] for e in events if e.get("conversation_id")
+    ))
+    sessions = []
+    for cid in conv_ids:
+        agg = _aggregate_cursor_session(cid, events)
+        if agg and (agg["input"] > 0 or agg["output"] > 0):
+            sessions.append(agg)
+    sessions.sort(key=lambda s: s.get("updated_at") or 0, reverse=True)
+    return sessions
+
+
+def has_real_usage_cursor(session_id):
+    """Verifica si una sesión Cursor tiene uso real de tokens."""
+    sid = session_id.removeprefix("cursor_")
+    for sess in get_cursor_sessions():
+        if sess["id"] == sid:
+            return sess["input"] > 0 or sess["output"] > 0
+    return False
+
+
+def get_cursor_session_stats(session_id):
+    """Extrae estadísticas de una sesión Cursor CLI."""
+    sid = session_id.removeprefix("cursor_")
+    events = _load_cursor_events()
+    agg = _aggregate_cursor_session(sid, events)
+    if not agg:
+        return {}
+    return {
+        "session_id": sid,
+        "session_title": agg.get("title", ""),
+        "model": next(iter(agg["by_model"]), "unknown"),
+        "input": agg["input"],
+        "output": agg["output"],
+        "cache": agg["cache"],
+        "reasoning": 0,
+        "requests": agg["requests"],
+        "date": agg["date"],
+        "by_model": agg["by_model"],
+    }
+
+
 def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0):
     """Calcula costo basado en tokens."""
     # Sonar: costo fijo por request
@@ -993,6 +1210,8 @@ def _detect_source(session_id):
         return "kilocode"
     if session_id.startswith("hermes_"):
         return "hermes"
+    if session_id.startswith("cursor_"):
+        return "cursor"
     if session_id.startswith("opencode_"):
         return "opencode"
     return "unknown"

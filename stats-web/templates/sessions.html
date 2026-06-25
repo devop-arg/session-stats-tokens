@@ -1,8 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1 class="hero-title" style="font-size:28px;">Sesiones</h1>
-  <p class="lede" style="margin:0;">Listado paginado de todas las sesiones registradas.</p>
+  <h1 class="section-title"><strong>Sesiones.</strong> Listado paginado de todas las sesiones registradas.</h1>
 </section>
 
 <div class="table-controls">
@@ -11,6 +10,7 @@
     <option value="opencode">OpenCode</option>
     <option value="hermes">Hermes</option>
     <option value="codex">Codex</option>
+    <option value="cursor">Cursor</option>
     <option value="kilocode">Kilocode</option>
     <option value="unknown">Unknown</option>
   </select>
@@ -28,11 +28,12 @@
         <th class="num">Input</th>
         <th class="num">Output</th>
         <th class="num">Cache</th>
+        <th class="num">Total</th>
         <th class="num">Costo</th>
       </tr>
     </thead>
     <tbody id="sessions-tbody">
-      <tr><td colspan="8" class="loading-row">Cargando...</td></tr>
+      <tr><td colspan="9" class="loading-row">Cargando...</td></tr>
     </tbody>
   </table>
 </div>

@@ -1,8 +1,12 @@
 (function() {
 'use strict';
 
+var BAR_COLORS = ['#ff8904','#ffb900','#00bc7d','#00d3f2','#00d5be','#51a2ff','#7c86ff','#9ae600','#a684ff','#ed6aff'];
+
 function fmt(n) {
   if (n == null) return '—';
+  if (typeof n === 'number' && n > 1e12) return (n / 1e12).toFixed(1) + 'T';
+  if (typeof n === 'number' && n > 1e9) return (n / 1e9).toFixed(1) + 'B';
   if (typeof n === 'number' && n > 1e6) return (n / 1e6).toFixed(1) + 'M';
   if (typeof n === 'number' && n > 1e3) return (n / 1e3).toFixed(1) + 'K';
   return String(n ?? '—');
@@ -10,205 +14,496 @@ function fmt(n) {
 
 function fmtCost(n) {
   if (n == null) return '—';
+  if (n < 0.01) return '$' + n.toFixed(4);
   return '$' + Number(n).toFixed(2);
 }
 
-function fmtDate(d) {
-  if (!d) return '—';
-  return d.slice(0, 10);
+function fmtPct(n) {
+  if (n == null) return '—';
+  return n.toFixed(1) + '%';
 }
 
-// --- Dashboard page ---
-if (document.querySelector('.stats-grid')) {
-  const summaryUrl = '/api/summary';
+Chart.defaults.color = '#808080';
+Chart.defaults.font.family = '"IBM Plex Mono", monospace';
+Chart.defaults.font.size = 11;
+Chart.defaults.font.weight = '500';
+Chart.defaults.animation = false;
 
-  fetch(summaryUrl)
-    .then(r => r.json())
-    .then(data => {
-      document.querySelector('[data-stat="sessions"]').textContent = fmt(data.total_sessions);
-      document.querySelector('[data-stat="requests"]').textContent = fmt(data.total_requests);
-      document.querySelector('[data-stat="cost"]').textContent = fmtCost(data.total_cost);
-      document.querySelector('[data-stat="cost_30d"]').textContent = fmtCost(data.cost_30d);
-      document.querySelector('[data-stat="cost_7d"]').textContent = fmtCost(data.cost_7d);
-      document.querySelector('[data-stat="input"]').textContent = fmt(data.total_input_tokens);
-      document.querySelector('[data-stat="output"]').textContent = fmt(data.total_output_tokens);
-      document.querySelector('[data-stat="cache"]').textContent = fmt(data.total_cache_tokens);
-      document.getElementById('session-count').textContent = fmt(data.total_sessions);
-    })
-    .catch(() => {
-      document.querySelectorAll('[data-stat]').forEach(el => el.textContent = 'error');
+// --- Dashboard ---
+if (document.querySelector('.stats-grid')) {
+
+  // Summary
+  fetch('/api/summary')
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var totalTokens = d.total_input_tokens + d.total_output_tokens + d.total_cache_tokens;
+      document.querySelector('[data-stat="total-cost"]').textContent = fmtCost(d.total_cost);
+      document.querySelector('[data-stat="total-tokens"]').textContent = fmt(totalTokens);
+      document.querySelector('[data-stat="total-sessions"]').textContent = fmt(d.total_sessions);
+      document.querySelector('[data-stat="cache-ratio"]').textContent = fmtPct(d.cache_ratio);
+      var sc = document.getElementById('session-count');
+      if (sc) sc.textContent = fmt(d.total_sessions);
+      var upd = document.getElementById('updated-badge');
+      if (upd && d.last_updated) upd.textContent = 'Actualizado ' + d.last_updated;
     });
 
-  // --- Timeseries chart ---
-  const costCtx = document.getElementById('cost-chart');
-  let costChart = null;
+  // --- Top Models (12 meses semanal, colores por modelo) ---
+  var topChart = document.getElementById('top-models-chart');
+  var topBars = document.getElementById('top-bars');
+  var topAxis = document.getElementById('top-axis');
+  var leaderboardEl = document.getElementById('leaderboard');
+  var activeModel = '';
 
-  function loadTimeseries() {
-    const range = document.getElementById('range-select').value;
-    const bucket = document.getElementById('bucket-select').value;
-    fetch('/api/timeseries?range=' + range + '&bucket=' + bucket)
-      .then(r => r.json())
-      .then(data => {
-        const labels = data.map(d => d.period);
-        const costs = data.map(d => d.cost);
-        const sessions = data.map(d => d.sessions);
+  // 20 colores distinguibles para los top 20 modelos
+  var MODEL_COLORS = ['#ff8904','#ffb900','#00bc7d','#00d3f2','#51a2ff','#7c86ff','#ed6aff','#ff5e5e','#9ae600','#c77dff','#ffd23f','#00d5be','#a684ff','#f15bb5','#7fb069','#ff073a','#0eb7c0','#b8d12a','#ff6b9d','#8b5cf6'];
+  var GRAY = '#808080';
 
-        if (costChart) costChart.destroy();
+  // Mapa modelo → color (se llena desde topModels del API)
+  var modelColorMap = {};
 
-        costChart = new Chart(costCtx, {
-          type: 'bar',
-          data: {
-            labels: labels,
-            datasets: [
-              {
-                label: 'Costo ($)',
-                data: costs,
-                backgroundColor: 'rgba(0, 212, 170, 0.6)',
-                borderColor: 'rgba(0, 212, 170, 1)',
-                borderWidth: 1,
-                borderRadius: 3,
-                yAxisID: 'y',
-              },
-              {
-                label: 'Sesiones',
-                data: sessions,
-                type: 'line',
-                borderColor: '#ffb454',
-                backgroundColor: 'rgba(255, 180, 84, 0.1)',
-                pointRadius: 3,
-                pointHoverRadius: 5,
-                tension: 0.3,
-                yAxisID: 'y1',
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                labels: { color: '#9aa0ac', font: { size: 11, family: 'JetBrains Mono, monospace' } }
-              }
-            },
-            scales: {
-              x: {
-                ticks: { color: '#626877', font: { size: 10 } },
-                grid: { color: '#1e222b' }
-              },
-              y: {
-                beginAtZero: true,
-                ticks: { color: '#626877', font: { size: 10 }, callback: v => '$' + v.toFixed(1) },
-                grid: { color: '#1e222b' }
-              },
-              y1: {
-                beginAtZero: true,
-                position: 'right',
-                ticks: { color: '#626877', font: { size: 10 } },
-                grid: { display: false }
-              }
-            }
-          }
-        });
-      });
+  function getModelColor(model) {
+    return modelColorMap[model] || GRAY;
   }
 
-  document.getElementById('range-select').addEventListener('change', loadTimeseries);
-  document.getElementById('bucket-select').addEventListener('change', loadTimeseries);
-  loadTimeseries();
+  function syncHighlightState() {
+    if (!topBars) return;
+    topBars.querySelectorAll('.top-models-stack i').forEach(function(seg) {
+      var matches = !activeModel || seg.getAttribute('data-model') === activeModel;
+      seg.setAttribute('data-dimmed', matches ? 'false' : 'true');
+    });
+    if (!leaderboardEl) return;
+    leaderboardEl.querySelectorAll('.leader-card').forEach(function(card) {
+      var selected = activeModel && card.getAttribute('data-model') === activeModel;
+      card.setAttribute('data-selected', selected ? 'true' : 'false');
+      card.setAttribute('data-dimmed', activeModel && !selected ? 'true' : 'false');
+    });
+  }
 
-  // --- Models chart ---
-  const modelsCtx = document.getElementById('models-chart');
+  function fmtTokens(n) {
+    if (n >= 1e12) return (n / 1e12).toFixed(n >= 1e13 ? 0 : 1) + 'T';
+    if (n >= 1e9)  return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + 'B';
+    if (n >= 1e6)  return (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3)  return (n / 1e3).toFixed(1) + 'K';
+    return String(n);
+  }
 
-  fetch('/api/models?limit=15')
-    .then(r => r.json())
-    .then(data => {
-      const labels = data.map(d => d.model).reverse();
-      const costs = data.map(d => d.cost).reverse();
+  function isColumnLabelHidden(i, count) {
+    // Mostrar ~8 labels para 52 semanas
+    if (count <= 14) return false;
+    var interval = Math.max(1, Math.round(count / 8));
+    return i !== count - 1 && i % interval !== 0;
+  }
 
-      new Chart(modelsCtx, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Costo ($)',
-            data: costs,
-            backgroundColor: 'rgba(0, 212, 170, 0.5)',
-            borderColor: 'rgba(0, 212, 170, 0.8)',
-            borderWidth: 1,
-            borderRadius: 3,
-          }]
+  function getMaxTotal(points) {
+    var max = 0;
+    points.forEach(function(p) {
+      var t = 0;
+      (p.segments || []).forEach(function(s) { t += s.value; });
+      if (t > max) max = t;
+    });
+    if (max === 0) return 1;
+    return max;
+  }
+
+  function getBarHeight(total, max) {
+    if (total <= 0) return 0;
+    return Math.max(2, Math.min(100, total / max * 100));
+  }
+
+  function buildBar(barEl, week, weekIndex, maxTotal, totalWeeks) {
+    var total = 0;
+    (week.segments || []).forEach(function(s) { total += s.value; });
+
+    barEl.setAttribute('data-slot', 'top-models-bar');
+    barEl.className = 'top-models-bar';
+    barEl.setAttribute('role', 'button');
+    barEl.setAttribute('tabindex', '0');
+    barEl.setAttribute('aria-label', week.date + ': ' + fmtTokens(total) + ' tokens');
+    barEl.style.setProperty('--bar-height', getBarHeight(total, maxTotal) + '%');
+
+    if (total === 0) return;
+
+    var stack = document.createElement('div');
+    stack.setAttribute('data-slot', 'top-models-stack');
+    stack.className = 'top-models-stack';
+
+    var visible = week.segments.filter(function(s) { return s.value > 0; });
+    var sorted = visible.slice().sort(function(a, b) { return b.value - a.value; });
+    stack.style.gridTemplateRows = sorted.map(function(s) {
+      return (s.value / total * 100).toFixed(3) + '%';
+    }).join(' ');
+
+    sorted.forEach(function(s) {
+      var el = document.createElement('i');
+      el.setAttribute('data-model', s.model);
+      el.setAttribute('title', s.model);
+      el.style.background = getModelColor(s.model);
+      stack.appendChild(el);
+    });
+
+    barEl.appendChild(stack);
+
+    // Tooltip
+    var tip = document.createElement('div');
+    tip.setAttribute('data-component', 'chart-tooltip');
+    tip.className = 'chart-tooltip';
+    var threshold = totalWeeks - Math.max(4, Math.floor(totalWeeks * 0.4));
+    tip.setAttribute('data-placement', weekIndex >= threshold ? 'left' : 'right');
+
+    var strong = document.createElement('strong');
+    strong.textContent = week.date;
+    tip.appendChild(strong);
+
+    var sub = document.createElement('span');
+    sub.textContent = fmtTokens(total) + ' total';
+    tip.appendChild(sub);
+
+    var divider = document.createElement('div');
+    divider.setAttribute('data-slot', 'tooltip-divider');
+    divider.className = 'tooltip-divider';
+    tip.appendChild(divider);
+
+    visible.slice().sort(function(a, b) { return b.value - a.value; }).forEach(function(s) {
+      var p = document.createElement('p');
+      var label = document.createElement('span');
+      label.className = 'tooltip-label';
+      var dot = document.createElement('i');
+      dot.style.background = getModelColor(s.model);
+      label.appendChild(dot);
+      var nameSpan = document.createElement('span');
+      nameSpan.textContent = s.model;
+      label.appendChild(nameSpan);
+      p.appendChild(label);
+      var b = document.createElement('b');
+      b.textContent = fmtTokens(s.value);
+      p.appendChild(b);
+      tip.appendChild(p);
+    });
+
+    barEl.appendChild(tip);
+  }
+
+  function buildLeaderCard(entry) {
+    var card = document.createElement('div');
+    card.className = 'leader-card';
+    card.setAttribute('data-model', entry.model);
+    card.setAttribute('role', 'listitem');
+
+    var rank = document.createElement('span');
+    rank.className = 'leader-rank';
+    rank.textContent = String(entry.rank).padStart(2, '0');
+    card.appendChild(rank);
+
+    var body = document.createElement('div');
+    body.className = 'leader-body';
+
+    var name = document.createElement('span');
+    name.className = 'leader-name';
+    name.textContent = entry.model;
+    body.appendChild(name);
+
+    var meta = document.createElement('span');
+    meta.className = 'leader-meta';
+    meta.textContent = entry.author;
+    body.appendChild(meta);
+
+    var tokens = document.createElement('span');
+    tokens.className = 'leader-tokens';
+    tokens.textContent = fmtTokens(entry.tokens);
+    body.appendChild(tokens);
+
+    card.appendChild(body);
+
+    var pct = document.createElement('span');
+    pct.className = 'leader-percent';
+    pct.textContent = entry.percent.toFixed(1) + '%';
+    card.appendChild(pct);
+
+    card.addEventListener('click', function() {
+      activeModel = activeModel === entry.model ? '' : entry.model;
+      syncHighlightState();
+    });
+
+    return card;
+  }
+
+  function renderLeaderboard(entries) {
+    if (!leaderboardEl) return;
+    leaderboardEl.innerHTML = '';
+    if (!entries || entries.length === 0) return;
+    entries.forEach(function(e) {
+      leaderboardEl.appendChild(buildLeaderCard(e));
+    });
+  }
+
+  function loadTopModels() {
+    if (!topBars) return;
+    fetch('/api/top-models')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var points = (data.usage && data.usage['All Users'] && data.usage['All Users']['12M']) || [];
+        var leaders = data.leaderboard || [];
+        var topModels = data.topModels || [];
+
+        // Asignar colores a los top 20 modelos
+        topModels.forEach(function(m, i) {
+          modelColorMap[m] = MODEL_COLORS[i % MODEL_COLORS.length];
+        });
+
+        if (topChart) {
+          topChart.setAttribute('data-range', '12M');
+        }
+
+        var maxTotal = getMaxTotal(points);
+        var totalWeeks = points.length;
+
+        // Axis: solo fechas, sin totales
+        topAxis.innerHTML = '';
+        points.forEach(function(p, i) {
+          var cell = document.createElement('div');
+          if (isColumnLabelHidden(i, totalWeeks)) {
+            cell.setAttribute('data-label-hidden', 'true');
+          }
+          var label = document.createElement('span');
+          label.className = 'axis-label';
+          var dateSpan = document.createElement('span');
+          dateSpan.className = 'axis-date';
+          dateSpan.textContent = p.date;
+          label.appendChild(dateSpan);
+          cell.appendChild(label);
+          topAxis.appendChild(cell);
+        });
+
+        // Bars: una por semana
+        topBars.innerHTML = '';
+        points.forEach(function(p, i) {
+          var bar = document.createElement('div');
+          buildBar(bar, p, i, maxTotal, totalWeeks);
+          topBars.appendChild(bar);
+        });
+
+        // Leaderboard all-time
+        renderLeaderboard(leaders);
+        syncHighlightState();
+      })
+      .catch(function(err) { console.error('top-models error:', err); });
+  }
+
+  loadTopModels();
+
+  // --- Activity (weekly timeseries) ---
+  var activityCanvas = document.getElementById('activity-chart');
+  var activityMetric = 'tokens';
+  var activityChart = null;
+
+  function buildActivityDataset(rows, metric) {
+    return rows.map(function(r) {
+      if (metric === 'cost') return Number(r.cost || 0);
+      if (metric === 'sessions') return Number(r.sessions || 0);
+      return Number(r.input_tokens || 0) + Number(r.output_tokens || 0) + Number(r.cache_tokens || 0);
+    });
+  }
+
+  function activityLabel(metric, value) {
+    if (metric === 'cost') return fmtCost(value);
+    if (metric === 'sessions') return fmt(value);
+    return fmt(value);
+  }
+
+  function renderActivity(rows) {
+    if (!activityCanvas) return;
+    var labels = rows.map(function(r) {
+      var date = new Date(r.period + 'T00:00:00');
+      var months = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+      return String(date.getDate()).padStart(2, '0') + '/' + months[date.getMonth()];
+    });
+    var values = buildActivityDataset(rows, activityMetric);
+    var peak = 0;
+    var peakIndex = 0;
+    values.forEach(function(v, i) {
+      if (v >= peak) {
+        peak = v;
+        peakIndex = i;
+      }
+    });
+
+    if (activityChart) activityChart.destroy();
+    activityChart = new Chart(activityCanvas.getContext('2d'), {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: values,
+          backgroundColor: values.map(function(_, i) { return i === peakIndex ? '#ff8904' : '#3a3a3a'; }),
+          borderWidth: 0,
+          barPercentage: 0.9,
+          categoryPercentage: 0.96
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) { return activityLabel(activityMetric, ctx.parsed.y); }
+            }
+          }
         },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false }
+        scales: {
+          x: {
+            grid: { display: false },
+            ticks: {
+              color: '#808080',
+              maxTicksLimit: 8
+            }
           },
-          scales: {
-            x: {
-              beginAtZero: true,
-              ticks: { color: '#626877', font: { size: 10 } },
-              grid: { color: '#1e222b' }
-            },
-            y: {
-              ticks: { color: '#9aa0ac', font: { size: 10, family: 'JetBrains Mono, monospace' } },
-              grid: { display: false }
+          y: {
+            grid: { color: 'rgba(255,255,255,0.08)' },
+            ticks: {
+              color: '#808080',
+              callback: function(value) { return activityLabel(activityMetric, value); }
             }
           }
         }
+      }
+    });
+  }
+
+  fetch('/api/timeseries?range=all&bucket=week')
+    .then(function(r) { return r.json(); })
+    .then(function(rows) {
+      var last52 = rows.slice(-52);
+      function getPeak(metric) {
+        var values = buildActivityDataset(last52, metric);
+        var peak = 0;
+        values.forEach(function(v) { if (v > peak) peak = v; });
+        return peak;
+      }
+      document.getElementById('activity-peak-tokens').textContent = fmt(getPeak('tokens'));
+      document.getElementById('activity-peak-cost').textContent = fmtCost(getPeak('cost'));
+      document.getElementById('activity-peak-sessions').textContent = fmt(getPeak('sessions'));
+      renderActivity(last52);
+
+      var tabs = document.querySelectorAll('.activity-tab');
+      tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+          activityMetric = tab.getAttribute('data-metric');
+          tabs.forEach(function(t) {
+            t.removeAttribute('data-active');
+            t.setAttribute('aria-selected', 'false');
+          });
+          tab.setAttribute('data-active', 'true');
+          tab.setAttribute('aria-selected', 'true');
+          renderActivity(last52);
+        });
       });
     });
 
-  // --- Sources chart ---
-  const sourcesCtx = document.getElementById('sources-chart');
+  // --- Token Cost ---
+  var tokenCostData = null;
+  var tokenCostSort = 'price';
 
-  fetch('/api/sources')
-    .then(r => r.json())
-    .then(data => {
-      const colors = ['#00d4aa', '#ffb454', '#6c5ce7', '#fd79a8', '#626877'];
-      new Chart(sourcesCtx, {
-        type: 'doughnut',
-        data: {
-          labels: data.map(d => d.source),
-          datasets: [{
-            data: data.map(d => d.cost),
-            backgroundColor: colors.slice(0, data.length),
-            borderWidth: 0,
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: { color: '#9aa0ac', font: { size: 11, family: 'JetBrains Mono, monospace' }, padding: 16 }
-            }
-          }
-        }
+  function renderTokenCost() {
+    var list = document.getElementById('token-cost-list');
+    if (!list || !tokenCostData) return;
+    list.innerHTML = '';
+
+    var models = tokenCostData.models.slice();
+    models.sort(function(a, b) {
+      if (tokenCostSort === 'tokens') return (b.total_tokens || 0) - (a.total_tokens || 0);
+      return (b.price_per_1m || 0) - (a.price_per_1m || 0);
+    });
+
+    var refMax = tokenCostSort === 'tokens'
+      ? (models.length ? Math.max.apply(null, models.map(function(m) { return m.total_tokens || 0; })) : 1)
+      : (models.length ? Math.max.apply(null, models.map(function(m) { return m.price_per_1m || 0; })) : 1);
+
+    models.forEach(function(m, i) {
+      var val = tokenCostSort === 'tokens' ? (m.total_tokens || 0) : (m.price_per_1m || 0);
+      var pct = refMax > 0 ? (val / refMax * 100).toFixed(0) : 0;
+      var color = BAR_COLORS[i % BAR_COLORS.length];
+      var row = document.createElement('div');
+      row.className = 'token-row';
+      row.innerHTML =
+        '<span class="token-row-name">' + m.model + '</span>' +
+        '<div class="metric-bar"><div class="metric-bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div>' +
+        '<span class="token-row-value">' + fmtCost(m.price_per_1m) + '</span>' +
+        '<span class="token-row-tokens">' + fmt(m.total_tokens) + '</span>';
+      list.appendChild(row);
+    });
+  }
+
+  fetch('/api/token-cost')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      document.getElementById('overall-price-per-1m').textContent = fmtCost(data.overall.price_per_1m);
+      document.getElementById('token-total-tokens').textContent = fmt(data.overall.total_tokens);
+      tokenCostData = data;
+      renderTokenCost();
+
+      var sortBtns = document.querySelectorAll('.sort-btn');
+      sortBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          tokenCostSort = btn.getAttribute('data-sort');
+          sortBtns.forEach(function(b) {
+            b.removeAttribute('data-active');
+            b.setAttribute('aria-pressed', 'false');
+          });
+          btn.setAttribute('data-active', 'true');
+          btn.setAttribute('aria-pressed', 'true');
+          renderTokenCost();
+        });
+      });
+    });
+
+  // --- Cache Ratio ---
+  fetch('/api/cache-ratio')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      document.getElementById('overall-cache-ratio').textContent = fmtPct(data.overall.ratio);
+      document.getElementById('overall-cached').textContent = fmt(data.overall.cached);
+      document.getElementById('overall-uncached').textContent = fmt(data.overall.uncached);
+      document.getElementById('overall-total-input').textContent = fmt(data.overall.cached + data.overall.uncached);
+
+      var list = document.getElementById('cache-ratio-list');
+      if (!list) return;
+      list.innerHTML = '';
+
+      data.models.forEach(function(m, i) {
+        var left = m.ratio;
+        var row = document.createElement('div');
+        row.className = 'cache-row';
+        row.innerHTML =
+          '<span class="cache-rank">' + String(i + 1).padStart(2, '0') + '</span>' +
+          '<span class="cache-name">' + m.model + '</span>' +
+          '<div class="cache-bar-wrap">' +
+            '<div class="cache-bar"><div class="cache-marker" style="left:calc(' + left + '% - 3.5px)"></div></div>' +
+            '<span class="cache-value">' + fmtPct(m.ratio) + '</span>' +
+          '</div>';
+        list.appendChild(row);
       });
     });
 }
 
 // --- Sessions page ---
 if (document.getElementById('sessions-tbody')) {
-  let offset = 0;
-  const limit = 50;
-  let sourceFilter = '';
+  var offset = 0;
+  var limit = 50;
+  var sourceFilter = '';
 
   function loadSessions() {
-    const tbody = document.getElementById('sessions-tbody');
+    var tbody = document.getElementById('sessions-tbody');
     tbody.innerHTML = '<tr><td colspan="8" class="loading-row">Cargando...</td></tr>';
-
-    let url = '/api/sessions?limit=' + limit + '&offset=' + offset;
+    var url = '/api/sessions?limit=' + limit + '&offset=' + offset;
     if (sourceFilter) url += '&source=' + sourceFilter;
 
     fetch(url)
-      .then(r => r.json())
-      .then(data => {
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
         tbody.innerHTML = '';
-        const total = data.total;
+        var total = data.total;
         document.getElementById('total-sessions-label').textContent = total;
         document.getElementById('page-num').textContent = Math.floor(offset / limit) + 1;
         document.getElementById('prev-page').disabled = offset <= 0;
@@ -219,11 +514,12 @@ if (document.getElementById('sessions-tbody')) {
           return;
         }
 
-        data.sessions.forEach(s => {
-          const tr = document.createElement('tr');
+        data.sessions.forEach(function(s) {
+          var tr = document.createElement('tr');
+          var totalT = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_tokens || 0);
           tr.innerHTML =
-            '<td title="' + (s.id || '') + '">' + (s.id ? s.id.slice(0, 24) + '…' : '—') + '</td>' +
-            '<td>' + fmtDate(s.date) + '</td>' +
+            '<td title="' + (s.id || '') + '">' + (s.id ? s.id.slice(0, 24) + '...' : '—') + '</td>' +
+            '<td>' + (s.date || '—') + '</td>' +
             '<td>' + (s.source || '—') + '</td>' +
             '<td class="num">' + fmt(s.requests) + '</td>' +
             '<td class="num">' + fmt(s.input_tokens) + '</td>' +
@@ -233,42 +529,42 @@ if (document.getElementById('sessions-tbody')) {
           tbody.appendChild(tr);
         });
       })
-      .catch(() => {
+      .catch(function() {
         tbody.innerHTML = '<tr><td colspan="8" class="loading-row">Error al cargar</td></tr>';
       });
   }
 
-  document.getElementById('prev-page').addEventListener('click', () => {
+  document.getElementById('prev-page').addEventListener('click', function() {
     if (offset > 0) { offset -= limit; loadSessions(); }
   });
-  document.getElementById('next-page').addEventListener('click', () => {
+  document.getElementById('next-page').addEventListener('click', function() {
     offset += limit; loadSessions();
   });
-  document.getElementById('source-filter').addEventListener('change', e => {
-    sourceFilter = e.target.value;
-    offset = 0;
-    loadSessions();
+  document.getElementById('source-filter').addEventListener('change', function(e) {
+    sourceFilter = e.target.value; offset = 0; loadSessions();
   });
-
   loadSessions();
 }
 
 // --- Models page ---
 if (document.getElementById('models-tbody')) {
   fetch('/api/models?limit=200')
-    .then(r => r.json())
-    .then(data => {
-      const tbody = document.getElementById('models-tbody');
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var tbody = document.getElementById('models-tbody');
       tbody.innerHTML = '';
-      data.forEach((m, i) => {
-        const tr = document.createElement('tr');
+
+      data.forEach(function(m, i) {
+        var tr = document.createElement('tr');
+        var totalT = (m.input_tokens || 0) + (m.output_tokens || 0) + (m.cache_tokens || 0);
         tr.innerHTML =
-          '<td class="num">' + (i + 1) + '</td>' +
-          '<td>' + m.model + '</td>' +
+          '<td class="num"><span class="rank' + (i < 3 ? ' top-3' : '') + '">' + (i + 1) + '</span></td>' +
+          '<td><span class="model-name">' + m.model + '</span></td>' +
           '<td class="num">' + fmt(m.requests) + '</td>' +
           '<td class="num">' + fmt(m.input_tokens) + '</td>' +
           '<td class="num">' + fmt(m.output_tokens) + '</td>' +
           '<td class="num">' + fmt(m.cache_tokens) + '</td>' +
+          '<td class="num">' + fmt(totalT) + '</td>' +
           '<td class="num">' + fmtCost(m.cost) + '</td>';
         tbody.appendChild(tr);
       });
