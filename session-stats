@@ -414,27 +414,36 @@ def capture_all_sessions():
             }}
         })
 
-    # --- Hermes ---
+    # --- Hermes (siempre upsert: sesiones activas crecen) ---
     for sess in get_hermes_sessions():
         sid = sess["id"]
-        if sid in existing_keys or not sess.get("by_model"):
+        by_model = sess.get("by_model", {})
+        if not by_model:
             continue
-        total_input = sum(m["input"] for m in sess["by_model"].values())
-        total_output = sum(m["output"] for m in sess["by_model"].values())
-        session_cost = 0
-        by_model_with_cost = {}
-        for model, mdata in sess["by_model"].items():
-            c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
-            session_cost += c
-            by_model_with_cost[model] = {**mdata, "cost": c}
-        _save_if_new(sid, {
-            "date": sess["date"],
-            "requests": sess["requests"],
-            "input": total_input,
-            "output": total_output,
-            "cost": session_cost,
-            "by_model": by_model_with_cost
-        })
+        was_new = sid not in existing_keys
+        try:
+            by_model_with_cost = {}
+            session_cost = 0
+            for model, mdata in by_model.items():
+                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+                session_cost += c
+                by_model_with_cost[model] = {**mdata, "cost": c}
+            cache_tokens = sum(m.get("cache", 0) for m in by_model_with_cost.values())
+            save_session(
+                sid, "hermes",
+                sess.get("date", ""), sess.get("started_at", 0),
+                sess.get("requests", 0),
+                sess.get("input", 0),
+                sess.get("output", 0),
+                cache_tokens, sess.get("reasoning", 0),
+                session_cost,
+                by_model_with_cost, DB_PATH
+            )
+            if was_new:
+                new_count += 1
+            existing_keys.add(sid)
+        except Exception:
+            pass
 
     # --- Cursor CLI (siempre upsert: sesiones activas crecen) ---
     for sess in get_cursor_sessions():

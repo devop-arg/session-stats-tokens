@@ -565,7 +565,7 @@ def get_hermes_sessions():
                    cache_read_tokens, cache_write_tokens, reasoning_tokens,
                    estimated_cost_usd, actual_cost_usd, ended_at, started_at, title
             FROM sessions
-            WHERE source = 'cli' AND input_tokens > 0
+            WHERE source IN ('cli', 'telegram') AND input_tokens > 0
             ORDER BY started_at DESC
         """)
         sessions = []
@@ -632,7 +632,7 @@ def has_real_usage_hermes(session_id):
         conn = sqlite3.connect(str(HERMES_DB_PATH))
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT input_tokens FROM sessions WHERE id = ? AND source = 'cli'",
+            "SELECT input_tokens FROM sessions WHERE id = ? AND source IN ('cli', 'telegram')",
             (session_id,)
         )
         row = cursor.fetchone()
@@ -657,7 +657,7 @@ def get_hermes_session_stats(session_id):
             SELECT model, input_tokens, output_tokens,
                    cache_read_tokens, cache_write_tokens, reasoning_tokens,
                    estimated_cost_usd, actual_cost_usd, ended_at, started_at, title
-            FROM sessions WHERE id = ? AND source = 'cli'
+            FROM sessions WHERE id = ? AND source IN ('cli', 'telegram')
         """, (session_id,))
         row = cursor.fetchone()
         if not row:
