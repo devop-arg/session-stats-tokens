@@ -1269,24 +1269,50 @@ def init_db(db_path=None):
 def save_session(sid, source, date, timestamp, requests, input_tokens,
                  output_tokens, cache_tokens, reasoning_tokens, cost,
                  by_model, db_path=None):
+    """Persiste/actualiza estadísticas de una sesión en session_history.db.
+
+    NOTA: El 2025-06-25 se cambió INSERT OR REPLACE por INSERT ... ON CONFLICT
+    DO UPDATE SET con MAX() para evitar que borrar conversaciones en OpenCode
+    (o cualquier fuente) pisé valores históricos altos con datos más bajos.
+
+    Ver stats_common.py.bak.(fecha) para el código original.
+
+    Rollback: copiar el .bak sobre este archivo y reiniciar.
+    """
     path = Path(db_path or DB_PATH)
     conn = sqlite3.connect(str(path))
     conn.execute("PRAGMA foreign_keys=ON")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute(
-        """INSERT OR REPLACE INTO sessions
+        """INSERT INTO sessions
         (id, source, date, timestamp, requests, input_tokens, output_tokens,
          cache_tokens, reasoning_tokens, cost)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          date = excluded.date,
+          timestamp = excluded.timestamp,
+          requests = MAX(requests, excluded.requests),
+          input_tokens = MAX(input_tokens, excluded.input_tokens),
+          output_tokens = MAX(output_tokens, excluded.output_tokens),
+          cache_tokens = MAX(cache_tokens, excluded.cache_tokens),
+          reasoning_tokens = MAX(reasoning_tokens, excluded.reasoning_tokens),
+          cost = MAX(cost, excluded.cost)""",
         (sid, source, date, timestamp, requests, input_tokens, output_tokens,
          cache_tokens, reasoning_tokens, cost)
     )
     for model, mdata in by_model.items():
         conn.execute(
-            """INSERT OR REPLACE INTO model_usage
+            """INSERT INTO model_usage
             (session_id, model, requests, input_tokens, output_tokens,
              cache_tokens, reasoning_tokens, cost)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id, model) DO UPDATE SET
+              requests = MAX(requests, excluded.requests),
+              input_tokens = MAX(input_tokens, excluded.input_tokens),
+              output_tokens = MAX(output_tokens, excluded.output_tokens),
+              cache_tokens = MAX(cache_tokens, excluded.cache_tokens),
+              reasoning_tokens = MAX(reasoning_tokens, excluded.reasoning_tokens),
+              cost = MAX(cost, excluded.cost)""",
             (sid, model,
              mdata.get("requests", 0),
              mdata.get("input", 0),
