@@ -15,7 +15,8 @@ Thumbs.db
 # Logs
 *.log
 
-# Data files (tracked in private, excluded in public)
+# Data files — NUNCA commitear a origin (público).
+# En private se trackean con git add -f.
 session_history.json
 session_history.db
 session_history_legacy_freeze.json
