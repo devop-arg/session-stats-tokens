@@ -1,5 +1,7 @@
 # session-stats
 
+> **Mantener actualizado.** Si cambian paths, archivos críticos o procedimientos de recuperación, editar este archivo y commitear.
+
 ## ⚠️ `session_history.db` y `session_history.json` están en `.gitignore`
 
 Cualquier operación git destructiva (`rebase`, `stash pop`, `reset --hard`) los puede borrar sin aviso.
