@@ -50,6 +50,20 @@
   <div class="today-models" id="today-models"></div>
 </section>
 
+<section data-section="top-models-30d" id="top-models-30d" class="stats-section section-block">
+  <h2 class="section-title-sm">Uso de modelos y costos de los últimos 30 días</h2>
+  <div data-component="top-models-chart"
+       class="top-models-chart"
+       role="img"
+       aria-label="Gráfico apilado de uso de modelos (30 días)"
+       id="top-models-30d-chart">
+    <div class="top-y-axis" id="top-models-30d-y-axis"></div>
+    <div data-slot="top-models-axis" class="top-models-axis" aria-hidden="true" id="top-models-30d-axis"></div>
+    <div data-slot="top-models-bars" class="top-models-bars" id="top-models-30d-bars"></div>
+  </div>
+  <div data-component="leaderboard" class="leaderboard" id="top-models-30d-leaderboard" role="list" aria-label="Ranking de 30 días de modelos"></div>
+</section>
+
 <section data-section="top-models" id="top-models" class="stats-section section-block">
   <h2 class="section-title-sm">Uso de modelos y costos de los últimos 12 meses</h2>
   <div data-component="top-models-chart"

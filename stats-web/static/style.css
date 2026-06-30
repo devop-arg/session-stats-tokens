@@ -249,9 +249,10 @@ a:hover { text-decoration: underline; }
   --bar-gap: 8px;
   --dot-size: 6px;
   --dot-offset: 2px;
+  --y-axis-width: 60px;
   position: relative;
   display: grid;
-  grid-template-columns: 60px 1fr;
+  grid-template-columns: var(--y-axis-width) 1fr;
   grid-template-rows: 40px minmax(0, 1fr);
   gap: 0 8px;
   width: 100%;

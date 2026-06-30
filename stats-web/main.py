@@ -19,6 +19,9 @@ templates = Jinja2Templates(directory=str(SCRIPT_DIR / "stats-web/templates"))
 app.mount("/static", StaticFiles(directory=str(SCRIPT_DIR / "stats-web/static")), name="static")
 app.mount("/vendor", StaticFiles(directory=str(SCRIPT_DIR / "stats-web/vendor")), name="vendor")
 
+ART_TZ = zoneinfo.ZoneInfo("America/Argentina/Buenos_Aires")
+ART_SQL_OFFSET = "-3 hours"
+
 
 def _db():
     conn = sqlite3.connect(str(DB_PATH))
@@ -27,12 +30,38 @@ def _db():
     return conn
 
 
-def _today():
-    return datetime.date.today().isoformat()
+def _art_today():
+    return datetime.datetime.now(ART_TZ).date()
 
 
-def _days_ago(n):
-    return (datetime.date.today() - datetime.timedelta(days=n)).isoformat()
+def _art_day_bounds(day: datetime.date):
+    start = datetime.datetime.combine(day, datetime.time.min, tzinfo=ART_TZ)
+    end = start + datetime.timedelta(days=1)
+    return start, end, int(start.timestamp()), int(end.timestamp())
+
+
+def _art_window_days(days: int):
+    end_day = _art_today()
+    start_day = end_day - datetime.timedelta(days=days - 1)
+    start_dt, _, start_ts, _ = _art_day_bounds(start_day)
+    _, end_dt, _, end_ts = _art_day_bounds(end_day)
+    return {
+        "start_day": start_day,
+        "end_day": end_day,
+        "start_dt": start_dt,
+        "end_dt": end_dt,
+        "start_ts": start_ts,
+        "end_ts": end_ts,
+    }
+
+
+def _sql_period_expr(bucket: str, column: str = "timestamp") -> str:
+    local_dt = f"datetime({column}, 'unixepoch', '{ART_SQL_OFFSET}')"
+    if bucket == "month":
+        return f"strftime('%Y-%m-01', {local_dt})"
+    if bucket == "week":
+        return f"date({local_dt}, 'weekday 0', '-6 days')"
+    return f"date({local_dt})"
 
 
 def _author(model_name: str) -> str:
@@ -104,6 +133,8 @@ def models_page(request: Request):
 @app.get("/api/summary")
 def api_summary():
     conn = _db()
+    window_7d = _art_window_days(7)
+    window_30d = _art_window_days(30)
 
     overall = conn.execute("""
         SELECT COUNT(*) as total_sessions,
@@ -117,16 +148,33 @@ def api_summary():
     """).fetchone()
 
     cost_7d = conn.execute(
-        "SELECT COALESCE(SUM(cost),0) FROM sessions WHERE source != 'legacy' AND date >= ?",
-        (_days_ago(7),)
+        "SELECT COALESCE(SUM(cost),0) FROM sessions WHERE source != 'legacy' AND timestamp >= ? AND timestamp < ?",
+        (window_7d["start_ts"], window_7d["end_ts"])
     ).fetchone()[0]
 
     cost_30d = conn.execute(
-        "SELECT COALESCE(SUM(cost),0) FROM sessions WHERE source != 'legacy' AND date >= ?",
-        (_days_ago(30),)
+        "SELECT COALESCE(SUM(cost),0) FROM sessions WHERE source != 'legacy' AND timestamp >= ? AND timestamp < ?",
+        (window_30d["start_ts"], window_30d["end_ts"])
     ).fetchone()[0]
 
     conn.close()
+
+    try:
+        rh = recalculate_historical_cost()
+        hc = {
+            "sessions": rh["total_sessions"],
+            "requests": rh["total_requests"],
+            "cost": round(rh["total_cost"], 2),
+            "input_tokens": rh["total_input"],
+            "output_tokens": rh["total_output"],
+            "cache_tokens": sum(m.get("cache", 0) for m in rh["models_totals"].values()),
+        }
+        hc["cache_ratio"] = round(
+            hc["cache_tokens"] / (hc["input_tokens"] + hc["cache_tokens"]) * 100, 1
+        ) if (hc["input_tokens"] + hc["cache_tokens"]) > 0 else 0
+        totals_cli = hc
+    except Exception:
+        totals_cli = None
 
     return {
         "total_sessions": overall["total_sessions"],
@@ -138,20 +186,15 @@ def api_summary():
         "cache_ratio": round((overall["total_cache_tokens"] / (overall["total_input_tokens"] + overall["total_cache_tokens"]) * 100) if (overall["total_input_tokens"] + overall["total_cache_tokens"]) > 0 else 0, 1),
         "cost_7d": round(cost_7d, 2),
         "cost_30d": round(cost_30d, 2),
-        "last_updated": datetime.datetime.now().isoformat(timespec="minutes"),
+        "header_totals_cli": totals_cli,
+        "last_updated": datetime.datetime.now(ART_TZ).isoformat(timespec="minutes"),
     }
 
 
 @app.get("/api/today-summary")
 def api_today_summary():
     """Métricas del día actual en hora Argentina (00:00 a 23:59 ART)."""
-    tz_arg = zoneinfo.ZoneInfo("America/Argentina/Buenos_Aires")
-    now_arg = datetime.datetime.now(tz_arg)
-    start_arg = now_arg.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_arg = start_arg + datetime.timedelta(days=1)
-
-    start_utc = int(start_arg.timestamp())
-    end_utc = int(end_arg.timestamp())
+    _, _, start_utc, end_utc = _art_day_bounds(_art_today())
 
     conn = _db()
 
@@ -203,51 +246,30 @@ def api_today_summary():
 
 @app.get("/api/timeseries")
 def api_timeseries(
-    range: str = Query("30d", regex=r"^(7d|30d|90d|all)$"),
-    bucket: str = Query("day", regex=r"^(day|week|month)$"),
+    range: str = Query("30d", pattern=r"^(7d|30d|90d|all)$"),
+    bucket: str = Query("day", pattern=r"^(day|week|month)$"),
 ):
-    date_from = None if range == "all" else _days_ago(int(range.replace("d", "")))
+    window = None if range == "all" else _art_window_days(int(range.replace("d", "")))
+    period_expr = _sql_period_expr(bucket)
 
     conn = _db()
-    if bucket == "month":
-        rows = conn.execute("""
-            SELECT strftime('%Y-%m-01', date) as period,
-                   COUNT(*) as sessions,
-                   COALESCE(SUM(requests),0) as requests,
-                   COALESCE(SUM(input_tokens),0) as input_tokens,
-                   COALESCE(SUM(output_tokens),0) as output_tokens,
-                   COALESCE(SUM(cache_tokens),0) as cache_tokens,
-                   COALESCE(SUM(cost),0) as cost
-            FROM sessions
-            WHERE source != 'legacy'""" + (" AND date >= ?" if date_from else "") + """
-            GROUP BY period ORDER BY period ASC
-        """, ([date_from] if date_from else [])).fetchall()
-    elif bucket == "week":
-        rows = conn.execute("""
-            SELECT date(date, 'weekday 0', '-6 days') as period,
-                   COUNT(*) as sessions,
-                   COALESCE(SUM(requests),0) as requests,
-                   COALESCE(SUM(input_tokens),0) as input_tokens,
-                   COALESCE(SUM(output_tokens),0) as output_tokens,
-                   COALESCE(SUM(cache_tokens),0) as cache_tokens,
-                   COALESCE(SUM(cost),0) as cost
-            FROM sessions
-            WHERE source != 'legacy'""" + (" AND date >= ?" if date_from else "") + """
-            GROUP BY period ORDER BY period ASC
-        """, ([date_from] if date_from else [])).fetchall()
-    else:
-        rows = conn.execute("""
-            SELECT DATE(date) as period,
-                   COUNT(*) as sessions,
-                   COALESCE(SUM(requests),0) as requests,
-                   COALESCE(SUM(input_tokens),0) as input_tokens,
-                   COALESCE(SUM(output_tokens),0) as output_tokens,
-                   COALESCE(SUM(cache_tokens),0) as cache_tokens,
-                   COALESCE(SUM(cost),0) as cost
-            FROM sessions
-            WHERE source != 'legacy'""" + (" AND date >= ?" if date_from else "") + """
-            GROUP BY period ORDER BY period ASC
-        """, ([date_from] if date_from else [])).fetchall()
+    query = f"""
+        SELECT {period_expr} as period,
+               COUNT(*) as sessions,
+               COALESCE(SUM(requests),0) as requests,
+               COALESCE(SUM(input_tokens),0) as input_tokens,
+               COALESCE(SUM(output_tokens),0) as output_tokens,
+               COALESCE(SUM(cache_tokens),0) as cache_tokens,
+               COALESCE(SUM(cost),0) as cost
+        FROM sessions
+        WHERE source != 'legacy'
+    """
+    params = []
+    if window:
+        query += " AND timestamp >= ? AND timestamp < ?"
+        params.extend([window["start_ts"], window["end_ts"]])
+    query += " GROUP BY period ORDER BY period ASC"
+    rows = conn.execute(query, params).fetchall()
 
     conn.close()
     return [dict(r) for r in rows]
@@ -255,46 +277,27 @@ def api_timeseries(
 
 @app.get("/api/timeseries/sources")
 def api_timeseries_sources(
-    range: str = Query("all", regex=r"^(7d|30d|90d|all)$"),
-    bucket: str = Query("week", regex=r"^(day|week|month)$"),
+    range: str = Query("all", pattern=r"^(7d|30d|90d|all)$"),
+    bucket: str = Query("week", pattern=r"^(day|week|month)$"),
 ):
-    date_from = None if range == "all" else _days_ago(int(range.replace("d", "")))
-    date_filter = f" AND date >= '{date_from}'" if date_from else ""
+    window = None if range == "all" else _art_window_days(int(range.replace("d", "")))
+    period_expr = _sql_period_expr(bucket)
 
     conn = _db()
-    if bucket == "month":
-        rows = conn.execute(f"""
-            SELECT strftime('%Y-%m-01', date) as period,
-                   source,
-                   COUNT(*) as sessions,
-                   COALESCE(SUM(requests),0) as requests
-            FROM sessions
-            WHERE source NOT IN ('legacy'){date_filter}
-            GROUP BY period, source
-            ORDER BY period ASC, sessions DESC
-        """).fetchall()
-    elif bucket == "week":
-        rows = conn.execute(f"""
-            SELECT date(date, 'weekday 0', '-6 days') as period,
-                   source,
-                   COUNT(*) as sessions,
-                   COALESCE(SUM(requests),0) as requests
-            FROM sessions
-            WHERE source NOT IN ('legacy'){date_filter}
-            GROUP BY period, source
-            ORDER BY period ASC, sessions DESC
-        """).fetchall()
-    else:
-        rows = conn.execute(f"""
-            SELECT DATE(date) as period,
-                   source,
-                   COUNT(*) as sessions,
-                   COALESCE(SUM(requests),0) as requests
-            FROM sessions
-            WHERE source NOT IN ('legacy'){date_filter}
-            GROUP BY period, source
-            ORDER BY period ASC, sessions DESC
-        """).fetchall()
+    query = f"""
+        SELECT {period_expr} as period,
+               source,
+               COUNT(*) as sessions,
+               COALESCE(SUM(requests),0) as requests
+        FROM sessions
+        WHERE source NOT IN ('legacy')
+    """
+    params = []
+    if window:
+        query += " AND timestamp >= ? AND timestamp < ?"
+        params.extend([window["start_ts"], window["end_ts"]])
+    query += " GROUP BY period, source ORDER BY period ASC, sessions DESC"
+    rows = conn.execute(query, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -303,14 +306,16 @@ def api_timeseries_sources(
 def api_models(limit: int = Query(20, ge=1, le=200)):
     conn = _db()
     rows = conn.execute("""
-        SELECT model,
-               COALESCE(SUM(requests),0) as requests,
-               COALESCE(SUM(input_tokens),0) as input_tokens,
-               COALESCE(SUM(output_tokens),0) as output_tokens,
-               COALESCE(SUM(cache_tokens),0) as cache_tokens,
-               COALESCE(SUM(cost),0) as cost
-        FROM model_usage
-        GROUP BY model
+        SELECT mu.model,
+               COALESCE(SUM(mu.requests),0) as requests,
+               COALESCE(SUM(mu.input_tokens),0) as input_tokens,
+               COALESCE(SUM(mu.output_tokens),0) as output_tokens,
+               COALESCE(SUM(mu.cache_tokens),0) as cache_tokens,
+               COALESCE(SUM(mu.cost),0) as cost
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy'
+        GROUP BY mu.model
         ORDER BY cost DESC
         LIMIT ?
     """, (limit,)).fetchall()
@@ -337,8 +342,8 @@ def api_sessions(
     ).fetchone()[0]
 
     rows = conn.execute(
-        f"SELECT id, source, date, requests, input_tokens, output_tokens, cache_tokens, cost "
-        f"FROM sessions {where} ORDER BY date DESC, timestamp DESC LIMIT ? OFFSET ?",
+        f"SELECT id, source, date, timestamp, requests, input_tokens, output_tokens, cache_tokens, cost "
+        f"FROM sessions {where} ORDER BY timestamp DESC, id DESC LIMIT ? OFFSET ?",
         params + [limit, offset]
     ).fetchall()
 
@@ -406,12 +411,135 @@ def _provider_key(author: str) -> str:
     return a
 
 
+def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
+    """Construye series y ranking de modelos para una ventana móvil."""
+    today = _art_today()
+    if bucket == "week":
+        period_expr = _sql_period_expr("week", "s.timestamp")
+        points_range = [
+            (today - datetime.timedelta(days=today.weekday()) - datetime.timedelta(weeks=i)).isoformat()
+            for i in range(51, -1, -1)
+        ]
+        range_label = "12M"
+    else:
+        start_date = today - datetime.timedelta(days=days - 1)
+        period_expr = _sql_period_expr("day", "s.timestamp")
+        points_range = [
+            (start_date + datetime.timedelta(days=i)).isoformat()
+            for i in range(days)
+        ]
+        range_label = f"{days}D"
+
+    start_day = datetime.date.fromisoformat(points_range[0])
+    _, _, start_ts, _ = _art_day_bounds(start_day)
+    _, _, _, end_ts = _art_day_bounds(today)
+    conn = _db()
+
+    top_rows = conn.execute("""
+        SELECT mu.model,
+               COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as total_tokens
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
+        GROUP BY mu.model
+        ORDER BY total_tokens DESC
+        LIMIT ?
+    """, (start_ts, end_ts, limit)).fetchall()
+    top_models = [r["model"] for r in top_rows]
+    top_set = set(top_models)
+
+    leaderboard_rows = conn.execute("""
+        SELECT mu.model,
+               COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as total_tokens,
+               COALESCE(SUM(mu.cost),0) as total_cost
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
+        GROUP BY mu.model
+        ORDER BY total_tokens DESC
+        LIMIT ?
+    """, (start_ts, end_ts, limit)).fetchall()
+
+    total_row = conn.execute("""
+        SELECT COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as total
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
+    """, (start_ts, end_ts)).fetchone()
+    grand_total = max(1, total_row["total"] or 1)
+
+    grouped_rows = conn.execute(f"""
+        SELECT {period_expr} as period, mu.model,
+               COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as tokens,
+               COALESCE(SUM(mu.cost),0) as cost
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
+        GROUP BY period, mu.model
+        ORDER BY period ASC
+    """, (start_ts, end_ts)).fetchall()
+
+    conn.close()
+
+    grouped_by_model: dict[str, dict[str, dict]] = {}
+    for row in grouped_rows:
+        period_data = grouped_by_model.setdefault(row["period"], {})
+        model_data = period_data.setdefault(row["model"], {"tokens": 0, "cost": 0})
+        model_data["tokens"] += row["tokens"]
+        model_data["cost"] += row["cost"]
+
+    points = []
+    for period in points_range:
+        period_data = grouped_by_model.get(period, {})
+        segments = []
+        for model in top_models:
+            model_data = period_data.get(model)
+            if model_data and model_data["tokens"] > 0:
+                segments.append({
+                    "model": model,
+                    "value": model_data["tokens"],
+                    "cost": round(model_data["cost"], 4),
+                })
+        other_tokens = sum(model_data["tokens"] for model, model_data in period_data.items() if model not in top_set)
+        other_cost = sum(model_data["cost"] for model, model_data in period_data.items() if model not in top_set)
+        if other_tokens > 0:
+            segments.append({"model": "Other", "value": other_tokens, "cost": round(other_cost, 4)})
+        points.append({
+            "date": _fmt_date_short(period),
+            "_iso": period,
+            "segments": segments,
+        })
+
+    leaderboard = []
+    for i, row in enumerate(leaderboard_rows):
+        author = _author(row["model"])
+        tokens = row["total_tokens"]
+        leaderboard.append({
+            "model": row["model"],
+            "author": author,
+            "tokens": tokens,
+            "cost": round(row["total_cost"], 2),
+            "percent": round(tokens / grand_total * 100, 2),
+            "rank": i + 1,
+        })
+
+    return {
+        "range": range_label,
+        "updatedAt": datetime.datetime.utcnow().isoformat() + "Z",
+        "usage": {
+            "All Users": {range_label: points},
+        },
+        "leaderboard": leaderboard,
+        "topModels": top_models,
+    }
+
+
 @app.get("/api/top-models")
 def api_top_models():
-    """Top modelos — 12 meses, agrupado por semana (52 semanas).
+    """Top modelos — últimos 12 meses, agrupado por semana (52 semanas).
 
-    - `usage`: 52 puntos semanales. Segmentos = top 20 modelos all-time + "Other".
-    - `leaderboard`: top 20 all-time con % de uso.
+    - `usage`: 52 puntos semanales. Segmentos = top 20 del período + "Other".
+    - `leaderboard`: top 20 del período con % de uso.
     - `topModels`: lista de los 20 modelos con color asignado.
 
     Response shape:
@@ -425,117 +553,13 @@ def api_top_models():
       Point  = {"date": "MAY 5", "segments": [{"model": "gpt-5.4", "value": 123}]}
       Leader = {"model": "...", "author": "...", "tokens": 12345, "percent": 82.4, "rank": 1}
     """
-    conn = _db()
+    return _build_top_models_payload(days=364, bucket="week", limit=20)
 
-    # 1) Top 20 modelos all-time (segmentos del chart + colores)
-    top20_rows = conn.execute("""
-        SELECT mu.model,
-               COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as total_tokens
-        FROM model_usage mu
-        JOIN sessions s ON s.id = mu.session_id
-        WHERE s.source != 'legacy'
-        GROUP BY mu.model
-        ORDER BY total_tokens DESC
-        LIMIT 20
-    """).fetchall()
-    top_models = [r["model"] for r in top20_rows]
-    top_set = set(top_models)
 
-    # 2) Leaderboard all-time (top 20 para las tarjetas)
-    all_time_rows = conn.execute("""
-        SELECT mu.model,
-               COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as total_tokens,
-               COALESCE(SUM(mu.cost),0) as total_cost
-        FROM model_usage mu
-        JOIN sessions s ON s.id = mu.session_id
-        WHERE s.source != 'legacy'
-        GROUP BY mu.model
-        ORDER BY total_tokens DESC
-        LIMIT 20
-    """).fetchall()
-
-    # 3) Grand total all-time
-    grand_total_row = conn.execute("""
-        SELECT COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as total
-        FROM model_usage mu
-        JOIN sessions s ON s.id = mu.session_id
-        WHERE s.source != 'legacy'
-    """).fetchone()
-    grand_total = max(1, grand_total_row["total"] or 1)
-
-    # 4) Breakdown semanal por modelo (52 semanas)
-    today = datetime.date.today()
-    current_monday = today - datetime.timedelta(days=today.weekday())
-    first_monday = current_monday - datetime.timedelta(weeks=51)
-    date_from = first_monday.isoformat()
-
-    weekly_rows = conn.execute("""
-        SELECT date(date(s.date), 'weekday 0', '-6 days') as week_start, mu.model,
-               COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0) as tokens,
-               COALESCE(SUM(mu.cost),0) as cost
-        FROM model_usage mu
-        JOIN sessions s ON s.id = mu.session_id
-        WHERE s.source != 'legacy' AND s.date >= ?
-        GROUP BY week_start, mu.model
-        ORDER BY week_start ASC
-    """, (date_from,)).fetchall()
-
-    conn.close()
-
-    # 5) Agrupar por semana → modelo (tokens + cost)
-    weekly_by_model: dict[str, dict[str, dict]] = {}
-    for r2 in weekly_rows:
-        week_data = weekly_by_model.setdefault(r2["week_start"], {})
-        model_data = week_data.setdefault(r2["model"], {"tokens": 0, "cost": 0})
-        model_data["tokens"] += r2["tokens"]
-        model_data["cost"] += r2["cost"]
-
-    # 6) Generar las 52 semanas (incluyendo vacías)
-    week_starts = [(current_monday - datetime.timedelta(weeks=i)).isoformat()
-                   for i in range(51, -1, -1)]
-
-    # 7) Construir points
-    points = []
-    for ws in week_starts:
-        week_data = weekly_by_model.get(ws, {})
-        segments = []
-        for m in top_models:
-            md = week_data.get(m)
-            if md and md["tokens"] > 0:
-                segments.append({"model": m, "value": md["tokens"], "cost": round(md["cost"], 4)})
-        other_tokens = sum(md["tokens"] for m, md in week_data.items() if m not in top_set)
-        other_cost = sum(md["cost"] for m, md in week_data.items() if m not in top_set)
-        if other_tokens > 0:
-            segments.append({"model": "Other", "value": other_tokens, "cost": round(other_cost, 4)})
-        points.append({
-            "date": _fmt_date_short(ws),
-            "_iso": ws,
-            "segments": segments,
-        })
-
-    # 8) Leaderboard all-time con % + cost
-    leaderboard = []
-    for i, r2 in enumerate(all_time_rows):
-        author = _author(r2["model"])
-        tokens = r2["total_tokens"]
-        leaderboard.append({
-            "model": r2["model"],
-            "author": author,
-            "tokens": tokens,
-            "cost": round(r2["total_cost"], 2),
-            "percent": round(tokens / grand_total * 100, 2),
-            "rank": i + 1,
-        })
-
-    return {
-        "range": "12M",
-        "updatedAt": datetime.datetime.utcnow().isoformat() + "Z",
-        "usage": {
-            "All Users": {"12M": points},
-        },
-        "leaderboard": leaderboard,
-        "topModels": top_models,
-    }
+@app.get("/api/top-models-30d")
+def api_top_models_30d():
+    """Top modelos de los últimos 30 días corridos, agrupado por día."""
+    return _build_top_models_payload(days=30, bucket="day", limit=20)
 
 
 @app.get("/api/token-cost")
@@ -550,14 +574,16 @@ def api_token_cost():
     """).fetchone()
 
     rows = conn.execute("""
-        SELECT model,
-               COALESCE(SUM(cost),0) as total_cost,
-               COALESCE(SUM(input_tokens),0) as input_tokens,
-               COALESCE(SUM(output_tokens),0) as output_tokens,
-               COALESCE(SUM(cache_tokens),0) as cache_tokens
-        FROM model_usage
-        GROUP BY model
-        HAVING (COALESCE(SUM(input_tokens),0) + COALESCE(SUM(output_tokens),0) + COALESCE(SUM(cache_tokens),0)) >= 1000000
+        SELECT mu.model,
+               COALESCE(SUM(mu.cost),0) as total_cost,
+               COALESCE(SUM(mu.input_tokens),0) as input_tokens,
+               COALESCE(SUM(mu.output_tokens),0) as output_tokens,
+               COALESCE(SUM(mu.cache_tokens),0) as cache_tokens
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy'
+        GROUP BY mu.model
+        HAVING (COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.output_tokens),0) + COALESCE(SUM(mu.cache_tokens),0)) >= 1000000
         ORDER BY total_cost DESC
     """).fetchall()
 
@@ -601,14 +627,16 @@ def api_cache_ratio():
     """).fetchone()
 
     rows = conn.execute("""
-        SELECT model,
-               COALESCE(SUM(input_tokens),0) as input_tokens,
-               COALESCE(SUM(cache_tokens),0) as cache_tokens
-        FROM model_usage
-        GROUP BY model
-        HAVING COALESCE(SUM(cache_tokens),0) > 0
-           AND (COALESCE(SUM(input_tokens),0) + COALESCE(SUM(cache_tokens),0)) >= 1000000
-        ORDER BY (CAST(COALESCE(SUM(cache_tokens),0) AS REAL) / (COALESCE(SUM(input_tokens),0) + COALESCE(SUM(cache_tokens),0))) DESC
+        SELECT mu.model,
+               COALESCE(SUM(mu.input_tokens),0) as input_tokens,
+               COALESCE(SUM(mu.cache_tokens),0) as cache_tokens
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy'
+        GROUP BY mu.model
+        HAVING COALESCE(SUM(mu.cache_tokens),0) > 0
+           AND (COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.cache_tokens),0)) >= 1000000
+        ORDER BY (CAST(COALESCE(SUM(mu.cache_tokens),0) AS REAL) / (COALESCE(SUM(mu.input_tokens),0) + COALESCE(SUM(mu.cache_tokens),0))) DESC
     """).fetchall()
 
     models = []

@@ -23,6 +23,31 @@ function fmtPct(n) {
   return n.toFixed(1) + '%';
 }
 
+function fmtTokens(n) {
+  if (n >= 1e12) return (n / 1e12).toFixed(n >= 1e13 ? 0 : 1) + 'T';
+  if (n >= 1e9)  return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + 'B';
+  if (n >= 1e6)  return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3)  return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
+function fmtDateTimeArt(ts, fallback) {
+  if (!ts) return fallback || '—';
+  try {
+    return new Intl.DateTimeFormat('es-AR', {
+      timeZone: 'America/Argentina/Buenos_Aires',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(new Date(ts * 1000)).replace(',', '');
+  } catch (err) {
+    return fallback || '—';
+  }
+}
+
 Chart.defaults.color = '#808080';
 Chart.defaults.font.family = '"IBM Plex Mono", monospace';
 Chart.defaults.font.size = 11;
@@ -36,12 +61,18 @@ if (document.querySelector('.stats-grid')) {
   fetch('/api/summary')
     .then(function(r) { return r.json(); })
     .then(function(d) {
-      var totalTokens = d.total_input_tokens + d.total_output_tokens + d.total_cache_tokens;
-      document.querySelector('[data-stat="total-cost"]').textContent = fmtCost(d.total_cost);
-      document.querySelector('[data-stat="total-tokens"]').textContent = fmt(totalTokens);
-      document.querySelector('[data-stat="total-sessions"]').textContent = fmt(d.total_sessions);
-      document.querySelector('[data-stat="cache-ratio"]').textContent = fmtPct(d.cache_ratio);
-      document.querySelector('[data-stat="total-requests"]').textContent = fmt(d.total_requests);
+      var cli = d.header_totals_cli;
+      var ts = cli ? cli.sessions : d.total_sessions;
+      var tc = cli ? cli.cost : d.total_cost;
+      var tr = cli ? cli.requests : d.total_requests;
+      var ti = cli ? cli.input_tokens : d.total_input_tokens;
+      var to = cli ? cli.output_tokens : d.total_output_tokens;
+      var tca = cli ? cli.cache_tokens : d.total_cache_tokens;
+      document.querySelector('[data-stat="total-cost"]').textContent = fmtCost(tc);
+      document.querySelector('[data-stat="total-tokens"]').textContent = fmt(ti + to + tca);
+      document.querySelector('[data-stat="total-sessions"]').textContent = fmt(ts);
+      document.querySelector('[data-stat="cache-ratio"]').textContent = fmtPct(cli ? cli.cache_ratio : d.cache_ratio);
+      document.querySelector('[data-stat="total-requests"]').textContent = fmt(tr);
       var sc = document.getElementById('session-count');
       if (sc) sc.textContent = fmt(d.total_sessions);
       var upd = document.getElementById('updated-badge');
@@ -84,48 +115,14 @@ if (document.querySelector('.stats-grid')) {
     .catch(function(err) { console.error('today-summary error:', err); });
 
   // --- Top Models (12 meses semanal, colores por modelo) ---
-  var topChart = document.getElementById('top-models-chart');
-  var topBars = document.getElementById('top-bars');
-  var topAxis = document.getElementById('top-axis');
-  var leaderboardEl = document.getElementById('leaderboard');
-  var activeModel = '';
-
   // 20 colores distinguibles para los top 20 modelos
   var MODEL_COLORS = ['#ff8904','#ffb900','#00bc7d','#00d3f2','#51a2ff','#7c86ff','#ed6aff','#ff5e5e','#9ae600','#c77dff','#ffd23f','#00d5be','#a684ff','#f15bb5','#7fb069','#ff073a','#0eb7c0','#b8d12a','#ff6b9d','#8b5cf6'];
   var GRAY = '#808080';
 
-  // Mapa modelo → color (se llena desde topModels del API)
-  var modelColorMap = {};
-
-  function getModelColor(model) {
-    return modelColorMap[model] || GRAY;
-  }
-
-  function syncHighlightState() {
-    if (!topBars) return;
-    topBars.querySelectorAll('.top-models-stack i').forEach(function(seg) {
-      var matches = !activeModel || seg.getAttribute('data-model') === activeModel;
-      seg.setAttribute('data-dimmed', matches ? 'false' : 'true');
-    });
-    if (!leaderboardEl) return;
-    leaderboardEl.querySelectorAll('.leader-card').forEach(function(card) {
-      var selected = activeModel && card.getAttribute('data-model') === activeModel;
-      card.setAttribute('data-selected', selected ? 'true' : 'false');
-      card.setAttribute('data-dimmed', activeModel && !selected ? 'true' : 'false');
-    });
-  }
-
-  function fmtTokens(n) {
-    if (n >= 1e12) return (n / 1e12).toFixed(n >= 1e13 ? 0 : 1) + 'T';
-    if (n >= 1e9)  return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + 'B';
-    if (n >= 1e6)  return (n / 1e6).toFixed(1) + 'M';
-    if (n >= 1e3)  return (n / 1e3).toFixed(1) + 'K';
-    return String(n);
-  }
-
   function isColumnLabelHidden(i, count) {
     // Mostrar ~8 labels para 52 semanas
-    if (count <= 14) return false;
+    if (count <= 8) return false;
+    if (count <= 14) return i % 2 !== 0 && i !== count - 1;
     var interval = Math.max(1, Math.round(count / 8));
     return i !== count - 1 && i % interval !== 0;
   }
@@ -146,16 +143,39 @@ if (document.querySelector('.stats-grid')) {
     return Math.max(2, Math.min(100, total / max * 100));
   }
 
-  function buildBar(barEl, week, weekIndex, maxTotal, totalWeeks) {
+  function getYAxisStep(maxVal) {
+    if (maxVal <= 0) return 1;
+    var rough = maxVal / 4;
+    var power = Math.pow(10, Math.floor(Math.log10(rough)));
+    var normalized = rough / power;
+    var factor = 1;
+    if (normalized > 5) factor = 10;
+    else if (normalized > 2) factor = 5;
+    else if (normalized > 1) factor = 2;
+    return factor * power;
+  }
+
+  function getYAxisWidth(maxVal) {
+    return Math.max(60, Math.min(88, fmtTokens(maxVal).length * 8 + 12));
+  }
+
+  function getBarGap(totalPoints) {
+    if (totalPoints >= 28) return 3;
+    if (totalPoints >= 20) return 4;
+    if (totalPoints >= 12) return 6;
+    return 8;
+  }
+
+  function buildBar(barEl, point, pointIndex, maxTotal, totalPoints, getModelColor) {
     var total = 0;
     var totalCost = 0;
-    (week.segments || []).forEach(function(s) { total += s.value; totalCost += s.cost || 0; });
+    (point.segments || []).forEach(function(s) { total += s.value; totalCost += s.cost || 0; });
 
     barEl.setAttribute('data-slot', 'top-models-bar');
     barEl.className = 'top-models-bar';
     barEl.setAttribute('role', 'button');
     barEl.setAttribute('tabindex', '0');
-    barEl.setAttribute('aria-label', week.date + ': ' + fmtTokens(total) + ' tokens');
+    barEl.setAttribute('aria-label', point.date + ': ' + fmtTokens(total) + ' tokens');
     barEl.style.setProperty('--bar-height', getBarHeight(total, maxTotal) + '%');
 
     if (total === 0) return;
@@ -164,7 +184,7 @@ if (document.querySelector('.stats-grid')) {
     stack.setAttribute('data-slot', 'top-models-stack');
     stack.className = 'top-models-stack';
 
-    var visible = week.segments.filter(function(s) { return s.value > 0; });
+    var visible = point.segments.filter(function(s) { return s.value > 0; });
     var sorted = visible.slice().sort(function(a, b) { return b.value - a.value; });
     stack.style.gridTemplateRows = sorted.map(function(s) {
       return (s.value / total * 100).toFixed(3) + '%';
@@ -184,11 +204,11 @@ if (document.querySelector('.stats-grid')) {
     var tip = document.createElement('div');
     tip.setAttribute('data-component', 'chart-tooltip');
     tip.className = 'chart-tooltip';
-    var threshold = totalWeeks - Math.max(4, Math.floor(totalWeeks * 0.4));
-    tip.setAttribute('data-placement', weekIndex >= threshold ? 'left' : 'right');
+    var threshold = totalPoints - Math.max(4, Math.floor(totalPoints * 0.4));
+    tip.setAttribute('data-placement', pointIndex >= threshold ? 'left' : 'right');
 
     var strong = document.createElement('strong');
-    strong.textContent = week.date;
+    strong.textContent = point.date;
     tip.appendChild(strong);
 
     var sub = document.createElement('span');
@@ -220,7 +240,7 @@ if (document.querySelector('.stats-grid')) {
     barEl.appendChild(tip);
   }
 
-  function buildLeaderCard(entry) {
+  function buildLeaderCard(entry, onToggle) {
     var card = document.createElement('div');
     card.className = 'leader-card';
     card.setAttribute('data-model', entry.model);
@@ -262,48 +282,88 @@ if (document.querySelector('.stats-grid')) {
     card.appendChild(pct);
 
     card.addEventListener('click', function() {
-      activeModel = activeModel === entry.model ? '' : entry.model;
-      syncHighlightState();
+      onToggle(entry.model);
     });
 
     return card;
   }
 
-  function renderLeaderboard(entries) {
-    if (!leaderboardEl) return;
-    leaderboardEl.innerHTML = '';
+  function renderLeaderboard(container, entries, onToggle) {
+    if (!container) return;
+    container.innerHTML = '';
     if (!entries || entries.length === 0) return;
     entries.forEach(function(e) {
-      leaderboardEl.appendChild(buildLeaderCard(e));
+      container.appendChild(buildLeaderCard(e, onToggle));
     });
   }
 
-  function loadTopModels() {
-    if (!topBars) return;
-    fetch('/api/top-models')
+  function createTopModelsSection(config) {
+    var section = document.getElementById(config.sectionId);
+    var chartEl = document.getElementById(config.chartId);
+    var barsEl = document.getElementById(config.barsId);
+    var axisEl = document.getElementById(config.axisId);
+    var yAxisEl = document.getElementById(config.yAxisId);
+    var leaderboardContainer = document.getElementById(config.leaderboardId);
+    var activeModel = '';
+    var modelColorMap = {};
+
+    if (!barsEl || !axisEl || !leaderboardContainer) return;
+
+    function getModelColor(model) {
+      return modelColorMap[model] || GRAY;
+    }
+
+    function syncHighlightState() {
+      barsEl.querySelectorAll('.top-models-stack i').forEach(function(seg) {
+        var matches = !activeModel || seg.getAttribute('data-model') === activeModel;
+        seg.setAttribute('data-dimmed', matches ? 'false' : 'true');
+      });
+      leaderboardContainer.querySelectorAll('.leader-card').forEach(function(card) {
+        var selected = activeModel && card.getAttribute('data-model') === activeModel;
+        card.setAttribute('data-selected', selected ? 'true' : 'false');
+        card.setAttribute('data-dimmed', activeModel && !selected ? 'true' : 'false');
+      });
+    }
+
+    function toggleModel(model) {
+      activeModel = activeModel === model ? '' : model;
+      syncHighlightState();
+    }
+
+    fetch(config.endpoint)
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        var points = (data.usage && data.usage['All Users'] && data.usage['All Users']['12M']) || [];
+        var rangeKey = data.range || config.rangeKey;
+        var points = (data.usage && data.usage['All Users'] && data.usage['All Users'][rangeKey]) || [];
         var leaders = data.leaderboard || [];
         var topModels = data.topModels || [];
 
-        // Asignar colores a los top 20 modelos
+        if (section) {
+          section.style.display = leaders.length > 0 ? 'block' : 'none';
+        }
+
+        modelColorMap = {};
         topModels.forEach(function(m, i) {
           modelColorMap[m] = MODEL_COLORS[i % MODEL_COLORS.length];
         });
 
-        if (topChart) {
-          topChart.setAttribute('data-range', '12M');
+        if (chartEl) {
+          chartEl.setAttribute('data-range', rangeKey);
         }
 
         var maxTotal = getMaxTotal(points);
-        var totalWeeks = points.length;
+        var totalPoints = points.length;
+        var yAxisStep = config.yAxisStep || getYAxisStep(maxTotal);
 
-        // Axis: solo fechas, sin totales
-        topAxis.innerHTML = '';
+        if (chartEl) {
+          chartEl.style.setProperty('--y-axis-width', getYAxisWidth(Math.ceil(maxTotal / yAxisStep) * yAxisStep) + 'px');
+          chartEl.style.setProperty('--bar-gap', getBarGap(totalPoints) + 'px');
+        }
+
+        axisEl.innerHTML = '';
         points.forEach(function(p, i) {
           var cell = document.createElement('div');
-          if (isColumnLabelHidden(i, totalWeeks)) {
+          if (isColumnLabelHidden(i, totalPoints)) {
             cell.setAttribute('data-label-hidden', 'true');
           }
           var label = document.createElement('span');
@@ -313,28 +373,24 @@ if (document.querySelector('.stats-grid')) {
           dateSpan.textContent = p.date;
           label.appendChild(dateSpan);
           cell.appendChild(label);
-          topAxis.appendChild(cell);
+          axisEl.appendChild(cell);
         });
 
-        // Bars: una por semana
-        topBars.innerHTML = '';
+        barsEl.innerHTML = '';
         points.forEach(function(p, i) {
           var bar = document.createElement('div');
-          buildBar(bar, p, i, maxTotal, totalWeeks);
-          topBars.appendChild(bar);
+          buildBar(bar, p, i, maxTotal, totalPoints, getModelColor);
+          barsEl.appendChild(bar);
         });
 
-        // Leaderboard all-time
-        renderLeaderboard(leaders);
+        renderLeaderboard(leaderboardContainer, leaders, toggleModel);
         syncHighlightState();
 
-        // Y-axis: scale in 100M increments
-        var yAxis = document.getElementById('top-y-axis');
-        if (yAxis) {
-          yAxis.innerHTML = '';
+        if (yAxisEl) {
+          yAxisEl.innerHTML = '';
           var maxVal = maxTotal;
           if (maxVal > 0) {
-            var step = 100000000;
+            var step = yAxisStep;
             var top = Math.ceil(maxVal / step) * step;
             var labels = [];
             for (var v = 0; v <= top; v += step) {
@@ -344,15 +400,35 @@ if (document.querySelector('.stats-grid')) {
               var el = document.createElement('div');
               el.className = 'top-y-axis-label';
               el.textContent = fmtTokens(v);
-              yAxis.appendChild(el);
+              yAxisEl.appendChild(el);
             });
           }
         }
       })
-      .catch(function(err) { console.error('top-models error:', err); });
+      .catch(function(err) { console.error(config.endpoint + ' error:', err); });
   }
 
-  loadTopModels();
+  createTopModelsSection({
+    sectionId: 'top-models-30d',
+    chartId: 'top-models-30d-chart',
+    barsId: 'top-models-30d-bars',
+    axisId: 'top-models-30d-axis',
+    yAxisId: 'top-models-30d-y-axis',
+    leaderboardId: 'top-models-30d-leaderboard',
+    endpoint: '/api/top-models-30d',
+    rangeKey: '30D'
+  });
+
+  createTopModelsSection({
+    sectionId: 'top-models',
+    chartId: 'top-models-chart',
+    barsId: 'top-bars',
+    axisId: 'top-axis',
+    yAxisId: 'top-y-axis',
+    leaderboardId: 'leaderboard',
+    endpoint: '/api/top-models',
+    rangeKey: '12M'
+  });
 
   // --- Activity (weekly timeseries) ---
   var activityCanvas = document.getElementById('activity-chart');
@@ -689,7 +765,7 @@ if (document.getElementById('sessions-tbody')) {
 
   function loadSessions() {
     var tbody = document.getElementById('sessions-tbody');
-    tbody.innerHTML = '<tr><td colspan="8" class="loading-row">Cargando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="loading-row">Cargando...</td></tr>';
     var url = '/api/sessions?limit=' + limit + '&offset=' + offset;
     if (sourceFilter) url += '&source=' + sourceFilter;
 
@@ -704,7 +780,7 @@ if (document.getElementById('sessions-tbody')) {
         document.getElementById('next-page').disabled = (offset + limit) >= total;
 
         if (data.sessions.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="8" class="loading-row">Sin resultados</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="9" class="loading-row">Sin resultados</td></tr>';
           return;
         }
 
@@ -713,7 +789,7 @@ if (document.getElementById('sessions-tbody')) {
           var totalT = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_tokens || 0);
           tr.innerHTML =
             '<td title="' + (s.id || '') + '">' + (s.id ? s.id.slice(0, 24) + '...' : '—') + '</td>' +
-            '<td>' + (s.date || '—') + '</td>' +
+            '<td>' + fmtDateTimeArt(s.timestamp, s.date) + '</td>' +
             '<td>' + (s.source || '—') + '</td>' +
             '<td class="num">' + fmt(s.requests) + '</td>' +
             '<td class="num">' + fmt(s.input_tokens) + '</td>' +
@@ -724,7 +800,7 @@ if (document.getElementById('sessions-tbody')) {
         });
       })
       .catch(function() {
-        tbody.innerHTML = '<tr><td colspan="8" class="loading-row">Error al cargar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="loading-row">Error al cargar</td></tr>';
       });
   }
 
