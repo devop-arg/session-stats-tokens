@@ -104,6 +104,7 @@
   "qwen3.6-plus-preview-free": "qwen3.6-plus",
   "step-3.5-flash": "step-3.5-flash",
   "step-3.5-flash-free": "step-3.5-flash",
+  "stepfun/step-3.7-flash": "step-3.7-flash",
   "tab_flash_lite_preview": "gemini-3-flash",
   "trinity-large-preview": "trinity-large-preview",
   "trinity-large-preview-free": "trinity-large-preview",

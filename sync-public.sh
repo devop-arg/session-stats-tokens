@@ -18,6 +18,7 @@ git merge main --no-commit
 
 echo "=== 4. Excluir datos sensibles ==="
 git rm --cached session_history.json session_history.db session_history_legacy_freeze.json 2>/dev/null || true
+git rm --cached codex_sub_costs.json 2>/dev/null || true
 git rm --cached db_backups/session_history_*.db 2>/dev/null || true
 
 echo "=== 5. Commit merge ==="

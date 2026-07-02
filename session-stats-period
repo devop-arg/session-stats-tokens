@@ -16,7 +16,7 @@ import sys
 import datetime
 from pathlib import Path
 from io import StringIO
-from stats_common import normalize_model_name
+from stats_common import normalize_model_name, effective_billable_tokens
 import sqlite3
 
 STATS_DIR = Path("/home/capw/scripts/session-stats")
@@ -86,7 +86,8 @@ def render_stats(label, total_sessions, total_requests, total_input, total_cache
     print_header(out)
     print_box(label, out)
     print_box(f"Sesiones: {fmt_commas(total_sessions)} | Requests: {fmt_commas(total_requests)} | Costo: {fmt_cost(total_cost)}", out)
-    print_box(f"Tokens {fmt_num(total_input + total_cache + total_output)} Input {fmt_num(total_input)} Cache {fmt_num(total_cache)} Output {fmt_num(total_output)}", out)
+    total_billable = effective_billable_tokens("unknown", total_input, total_output, total_cache, 0)
+    print_box(f"Tokens {fmt_num(total_input + total_cache + total_output)} (billable: {fmt_num(total_billable)}) Input {fmt_num(total_input)} Cache {fmt_num(total_cache)} Output {fmt_num(total_output)}", out)
     print_sep(out)
     print_box(f"{'#':>2}  {'Modelo':<22} {'Requests':>9} {'Input':>8} {'Cache':>7} {'Output':>7} {'Costo':>9}", out)
     print_sep(out)
@@ -138,7 +139,7 @@ def _load_sqlite_sessions():
     conn.row_factory = sqlite3.Row
     result = {}
     srows = conn.execute(
-        "SELECT id, date, requests, input_tokens, output_tokens, cache_tokens, cost FROM sessions WHERE source != 'legacy'"
+        "SELECT id, date, timestamp, requests, input_tokens, output_tokens, cache_tokens, cost FROM sessions WHERE source != 'legacy'"
     ).fetchall()
     for srow in srows:
         sid = srow["id"]
@@ -154,7 +155,8 @@ def _load_sqlite_sessions():
                 "cost": mr["cost"]
             }
         result[sid] = {
-            "date": srow["date"], "requests": srow["requests"],
+            "date": srow["date"], "timestamp": srow["timestamp"],
+            "requests": srow["requests"],
             "input": srow["input_tokens"], "output": srow["output_tokens"],
             "cache": srow["cache_tokens"], "cost": srow["cost"],
             "by_model": by_model
@@ -216,11 +218,13 @@ def main():
         mon_name = MONTH_NAMES.get(month, month)
         label = f"PERÍODO: {mon_name} {year}"
 
-        filtered = []
-        for ses in sessions.values():
-            date_str = ses.get("date", "")
-            if date_str.startswith(year) and date_str[5:7] == month:
-                filtered.append(ses)
+        ts_start = int(datetime.datetime(int(year), int(month), 1, tzinfo=datetime.timezone(datetime.timedelta(hours=-3))).timestamp())
+        if month == '12':
+            ts_end = int(datetime.datetime(int(year)+1, 1, 1, tzinfo=datetime.timezone(datetime.timedelta(hours=-3))).timestamp())
+        else:
+            ts_end = int(datetime.datetime(int(year), int(month)+1, 1, tzinfo=datetime.timezone(datetime.timedelta(hours=-3))).timestamp())
+
+        filtered = [s for s in sessions.values() if s.get("timestamp") is not None and ts_start <= s["timestamp"] < ts_end]
 
         if not filtered:
             print(f"No hay sesiones para el período {period}")
@@ -237,37 +241,26 @@ def main():
         return
 
     from collections import defaultdict
-    now = datetime.datetime.now()
+    art_tz = datetime.timezone(datetime.timedelta(hours=-3))
+    now = datetime.datetime.now(art_tz)
 
     if period == "dia":
-        threshold = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        threshold_epoch = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         label = "PERÍODO: HOY"
     elif period == "semana":
         delta = datetime.timedelta(days=7)
-        threshold = (now - delta).replace(hour=0, minute=0, second=0, microsecond=0)
+        threshold_epoch = int((now - delta).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         label = "PERÍODO: ÚLTIMOS 7 DÍAS"
     elif period == "mes":
         delta = datetime.timedelta(days=30)
-        threshold = (now - delta).replace(hour=0, minute=0, second=0, microsecond=0)
+        threshold_epoch = int((now - delta).replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
         label = "PERÍODO: ÚLTIMOS 30 DÍAS"
     else:
         print(f"Error: Período '{period}' no reconocido.")
         print("Usá: dia, semana, mes, YYMM o list")
         return
 
-    filtered = []
-    for ses in sessions.values():
-        date_str = ses.get("date")
-        if not date_str:
-            continue
-        try:
-            sdate = datetime.datetime.fromisoformat(date_str)
-            if sdate.tzinfo is not None:
-                sdate = sdate.replace(tzinfo=None)
-        except Exception:
-            continue
-        if sdate >= threshold:
-            filtered.append(ses)
+    filtered = [s for s in sessions.values() if s.get("timestamp") is not None and s["timestamp"] >= threshold_epoch]
 
     if not filtered:
         print(f"No hay actividad registrada en el período")

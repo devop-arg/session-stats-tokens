@@ -31,6 +31,18 @@ function fmtTokens(n) {
   return String(n);
 }
 
+function displayModelName(model) {
+  // Strip known provider prefixes for display (keep data-model raw for highlighting)
+  return model.replace(/^(stepfun|deepseek-ai|deepseek|openrouter|arcee-ai|nvidia|x-ai|zai-org|nex-agi)\//, '');
+}
+
+function getPPMColor(price) {
+  if (price <= 0.10) return '#4ade80';   // verde
+  if (price <= 0.20) return '#facc15';   // amarillo
+  if (price <= 0.50) return '#fb923c';   // naranja
+  return '#f87171';                       // naranja rojizo
+}
+
 function fmtDateTimeArt(ts, fallback) {
   if (!ts) return fallback || '—';
   try {
@@ -69,7 +81,8 @@ if (document.querySelector('.stats-grid')) {
       var to = cli ? cli.output_tokens : d.total_output_tokens;
       var tca = cli ? cli.cache_tokens : d.total_cache_tokens;
       document.querySelector('[data-stat="total-cost"]').textContent = fmtCost(tc);
-      document.querySelector('[data-stat="total-tokens"]').textContent = fmt(ti + to + tca);
+      var totalTk = cli ? cli.total_tokens : d.total_tokens;
+      document.querySelector('[data-stat="total-tokens"]').textContent = fmt(totalTk);
       document.querySelector('[data-stat="total-sessions"]').textContent = fmt(ts);
       document.querySelector('[data-stat="cache-ratio"]').textContent = fmtPct(cli ? cli.cache_ratio : d.cache_ratio);
       document.querySelector('[data-stat="total-requests"]').textContent = fmt(tr);
@@ -103,11 +116,18 @@ if (document.querySelector('.stats-grid')) {
         var barPct = m.percent;
         row.innerHTML =
           '<span class="today-model-rank">' + String(i + 1).padStart(2, '0') + '</span>' +
-          '<span class="today-model-name">' + m.model + '</span>' +
-          '<div class="today-model-bar"><div class="today-model-bar-fill" style="width:' + barPct + '%"></div></div>' +
+          '<span class="today-model-name">' + displayModelName(m.model) + '</span>' +
           '<span class="today-model-reqs">' + fmt(m.requests) + ' req</span>' +
-          '<span class="today-model-cost">' + fmtCost(m.cost) + '</span>' +
-          '<span class="today-model-tokens">' + fmtTokens(m.tokens) + '</span>' +
+          '<span class="today-model-ioc i">In ' + fmtTokens(m.input_tokens) + '</span>' +
+          '<span class="today-model-sep">-</span>' +
+          '<span class="today-model-ioc o">Out ' + fmtTokens(m.output_tokens) + '</span>' +
+          '<span class="today-model-sep">-</span>' +
+          '<span class="today-model-ioc c">Cache ' + fmtTokens(m.cache_tokens) + '</span>' +
+          '<span class="today-model-sep">-</span>' +
+          '<span class="today-model-total">Total ' + fmtTokens(m.tokens) + '</span>' +
+          '<span class="today-model-sep">-</span>' +
+          '<span class="today-model-cost">Costo ' + fmtCost(m.cost) + '</span>' +
+          '<span class="today-model-sep">-</span>' +
           '<span class="today-model-pct">' + barPct + '%</span>';
         todayModels.appendChild(row);
       });
@@ -193,7 +213,7 @@ if (document.querySelector('.stats-grid')) {
     sorted.forEach(function(s) {
       var el = document.createElement('i');
       el.setAttribute('data-model', s.model);
-      el.setAttribute('title', s.model);
+      el.setAttribute('title', displayModelName(s.model));
       el.style.background = getModelColor(s.model);
       stack.appendChild(el);
     });
@@ -228,7 +248,7 @@ if (document.querySelector('.stats-grid')) {
       dot.style.background = getModelColor(s.model);
       label.appendChild(dot);
       var nameSpan = document.createElement('span');
-      nameSpan.textContent = s.model;
+      nameSpan.textContent = displayModelName(s.model);
       label.appendChild(nameSpan);
       p.appendChild(label);
       var b = document.createElement('b');
@@ -251,35 +271,49 @@ if (document.querySelector('.stats-grid')) {
     rank.textContent = String(entry.rank).padStart(2, '0');
     card.appendChild(rank);
 
-    var body = document.createElement('div');
-    body.className = 'leader-body';
+    var inner = document.createElement('div');
+    inner.className = 'leader-inner';
+
+    var row1 = document.createElement('div');
+    row1.className = 'leader-row1';
 
     var name = document.createElement('span');
     name.className = 'leader-name';
-    name.textContent = entry.model;
-    body.appendChild(name);
-
-    var meta = document.createElement('span');
-    meta.className = 'leader-meta';
-    meta.textContent = entry.author;
-    body.appendChild(meta);
-
-    var tokens = document.createElement('span');
-    tokens.className = 'leader-tokens';
-    tokens.textContent = fmtTokens(entry.tokens);
-    body.appendChild(tokens);
-
-    card.appendChild(body);
-
-    var cost = document.createElement('span');
-    cost.className = 'leader-cost';
-    cost.textContent = fmtCost(entry.cost);
-    card.appendChild(cost);
+    name.textContent = displayModelName(entry.model);
+    row1.appendChild(name);
 
     var pct = document.createElement('span');
     pct.className = 'leader-percent';
     pct.textContent = entry.percent.toFixed(1) + '%';
-    card.appendChild(pct);
+    row1.appendChild(pct);
+
+    var cost = document.createElement('span');
+    cost.className = 'leader-cost';
+    cost.textContent = fmtCost(entry.cost);
+    row1.appendChild(cost);
+
+    var ppm = document.createElement('span');
+    ppm.className = 'leader-ppm';
+    ppm.textContent = '$' + (entry.price_per_1m || 0).toFixed(2) + '/M';
+    ppm.style.color = getPPMColor(entry.price_per_1m || 0);
+    row1.appendChild(ppm);
+
+    inner.appendChild(row1);
+
+    var row2 = document.createElement('div');
+    row2.className = 'leader-row2';
+
+    var tokens = document.createElement('span');
+    tokens.className = 'leader-tokens';
+    tokens.textContent = 'I ' + fmtTokens(entry.input_tokens || 0).replace('.0', '') +
+                         '  O ' + fmtTokens(entry.output_tokens || 0).replace('.0', '') +
+                         '  C ' + fmtTokens(entry.cache_tokens || 0).replace('.0', '') +
+                         '  T ' + fmtTokens(entry.tokens).replace('.0', '') +
+                         '  R ' + fmt(entry.requests || 0);
+    row2.appendChild(tokens);
+
+    inner.appendChild(row2);
+    card.appendChild(inner);
 
     card.addEventListener('click', function() {
       onToggle(entry.model);
@@ -838,6 +872,386 @@ if (document.getElementById('models-tbody')) {
           '<td class="num">' + fmtCost(m.cost) + '</td>';
         tbody.appendChild(tr);
       });
+    });
+}
+// --- Subscription estimate table with calculator & sorting (standalone block) ---
+if (document.getElementById('subscription-tbody')) {
+  var subSection = document.getElementById('subscription-section');
+  var subTbody = document.getElementById('subscription-tbody');
+  var subData = null;  // raw server data
+  var subModels = [];  // computed models (after calculator adjustments)
+  var subSortField = 'cost_sub';
+  var subSortDir = 1;  // 1=asc (cheapest first), -1=desc
+
+  function subSortCompare(a, b) {
+    var av, bv;
+    if (subSortField === 'name') {
+      av = (a.model || '').toLowerCase();
+      bv = (b.model || '').toLowerCase();
+      return av < bv ? -subSortDir : av > bv ? subSortDir : 0;
+    }
+    if (subSortField === 'cost_sub') {
+      av = a.cost_sub != null ? a.cost_sub : 999;
+      bv = b.cost_sub != null ? b.cost_sub : 999;
+    } else if (subSortField === 'savings') {
+      av = a.savings_pct != null ? a.savings_pct : -1;
+      bv = b.savings_pct != null ? b.savings_pct : -1;
+    } else if (subSortField === 'tokens') {
+      av = a.tokens || 0;
+      bv = b.tokens || 0;
+    } else if (subSortField === 'cost_api') {
+      av = a.cost_api != null ? a.cost_api : 999;
+      bv = b.cost_api != null ? b.cost_api : 999;
+    }
+    return av < bv ? -subSortDir : av > bv ? subSortDir : 0;
+  }
+
+  function subApplyCalculator() {
+    if (!subData || !subData.models) return;
+
+    var codexCost = parseFloat(document.getElementById('calc-codex-cost').value) || 20;
+    var ocgCost = parseFloat(document.getElementById('calc-ocg-cost').value) || 10;
+    var ocgCredit = parseFloat(document.getElementById('calc-ocg-credit').value) || 60;
+    var ocgMultiplier = ocgCost > 0 ? ocgCredit / ocgCost : 6;
+
+    subModels = subData.models.map(function(m) {
+      var item = Object.assign({}, m);
+
+      // For Codex models, keep server's cost_sub and update plan label
+      if (item.plan && item.plan.indexOf('Codex') !== -1) {
+        item.plan = 'Codex ($' + codexCost.toFixed(0) + '/mes)';
+      } else if (item.plan && item.plan.indexOf('OpenCode Go') !== -1) {
+        // OCG models: divide by multiplier
+        item.cost_sub = item.cost_api / ocgMultiplier;
+        item.multiplier = ocgMultiplier;
+        item.plan = 'OpenCode Go ($' + ocgCost.toFixed(0) + ' → $' + ocgCredit.toFixed(0) + ')';
+      }
+
+      // Recalculate savings_pct
+      if (item.cost_sub != null && item.cost_api > 0) {
+        item.savings_pct = Math.round((1 - item.cost_sub / item.cost_api) * 100);
+      }
+
+      return item;
+    });
+
+    subRenderTable();
+  }
+
+  function subRenderTable() {
+    if (!subTbody) return;
+
+    var sorted = subModels.slice().sort(subSortCompare);
+    subTbody.innerHTML = '';
+
+    sorted.forEach(function(m, i) {
+      var tr = document.createElement('tr');
+
+      var costSubTxt = m.cost_sub != null ? '$' + m.cost_sub.toFixed(4) : '—';
+      var planTxt = m.plan || '—';
+      var vsTxt = m.vs_gpt54 || '—';
+      var savingsTxt = '—';
+      var savingsClass = '';
+
+      if (m.savings_pct != null) {
+        savingsTxt = m.savings_pct.toFixed(0) + '%';
+        savingsClass = m.savings_pct > 50 ? ' saving-high' : (m.savings_pct > 20 ? ' saving-med' : '');
+      }
+
+      var vsClass = '';
+      if (m.vs_gpt54 && m.vs_gpt54.indexOf('barato') !== -1) {
+        vsClass = ' cheaper';
+      } else if (m.vs_gpt54 && m.vs_gpt54.indexOf('caro') !== -1) {
+        vsClass = ' pricier';
+      }
+
+      tr.innerHTML =
+        '<td class="num"><span class="rank' + (i < 3 ? ' top-3' : '') + '">' + (i + 1) + '</span></td>' +
+        '<td><span class="model-name">' + m.model + '</span></td>' +
+        '<td class="num">' + fmt(m.tokens) + '</td>' +
+        '<td class="num">' + fmtCost(m.cost_api) + '</td>' +
+        '<td>' + planTxt + '</td>' +
+        '<td class="num' + (m.cost_sub != null ? ' cost-sub' : '') + '">' + costSubTxt + '</td>' +
+        '<td class="num' + savingsClass + '">' + savingsTxt + '</td>' +
+        '<td class="num' + vsClass + '">' + vsTxt + '</td>';
+
+      subTbody.appendChild(tr);
+    });
+  }
+
+  fetch('/api/subscription-estimate')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.models || data.models.length === 0) {
+        if (subSection) subSection.style.display = 'none';
+        return;
+      }
+      subData = data;
+
+      // Populate reference model selector with GPT models only
+      var refSelect = document.getElementById('calc-ref-model');
+      var refCostInput = document.getElementById('calc-ref-cost');
+      var refColHeader = document.getElementById('ref-col-header');
+
+      var gptModels = subData.models.filter(function(m) {
+        return m.plan && m.model.toLowerCase().indexOf('gpt') !== -1;
+      });
+      gptModels.sort(function(a, b) { return (a.model < b.model ? -1 : 1); });
+
+      if (refSelect) {
+        refSelect.innerHTML = '<option value="">— Seleccionar —</option>';
+        gptModels.forEach(function(m) {
+          var opt = document.createElement('option');
+          opt.value = m.model;
+          opt.textContent = m.model + ' — $' + (m.cost_sub != null ? m.cost_sub.toFixed(4) : '?') + '/1M';
+          refSelect.appendChild(opt);
+        });
+
+        // Select gpt-5.4 by default if available
+        var defaultRef = 'gpt-5.4';
+        for (var i = 0; i < gptModels.length; i++) {
+          if (gptModels[i].model === defaultRef) {
+            refSelect.value = defaultRef;
+            break;
+          }
+        }
+        // If no gpt-5.4, select first available
+        if (!refSelect.value && gptModels.length > 0) {
+          refSelect.value = gptModels[0].model;
+        }
+      }
+
+      // Get the currently selected reference model data
+      function getRefModel() {
+        var val = refSelect ? refSelect.value : '';
+        for (var i = 0; i < gptModels.length; i++) {
+          if (gptModels[i].model === val) return gptModels[i];
+        }
+        return null;
+      }
+
+      // Recalculate table with dynamic reference
+      function recalcAll() {
+        var refModel = getRefModel();
+        var refPrice = parseFloat(refCostInput ? refCostInput.value : 0.0183) || 0.0183;
+
+        // Update header
+        if (refColHeader) {
+          refColHeader.textContent = refModel ? refModel.model : 'gpt-5.4';
+        }
+
+        // Update results header
+        function setTxt(id, val) { var e = document.getElementById(id); if (e) e.textContent = val; }
+        setTxt('res-ref-model-name', refModel ? refModel.model : '—');
+        setTxt('res-ref-ppm', refModel ? '$' + (refModel.cost_sub || 0).toFixed(4) + '/1M' : '—');
+
+        // Recalculate vs_gpt54 for all models
+        subData.models.forEach(function(m) {
+          if (m.cost_sub != null) {
+            var ratio = m.cost_sub / refPrice;
+            if (ratio < 0.99) {
+              m.vs_gpt54 = (1 / ratio).toFixed(1) + '× más barato';
+            } else if (ratio > 1.01) {
+              m.vs_gpt54 = ratio.toFixed(1) + '× más caro';
+            } else {
+              m.vs_gpt54 = '— (referencia)';
+            }
+          } else {
+            m.vs_gpt54 = '—';
+          }
+        });
+
+        // Update plan labels with current reference model name
+        subData.models.forEach(function(m) {
+          if (m.plan && m.plan.indexOf('Codex') !== -1) {
+            var codexCost = parseFloat(document.getElementById('calc-codex-cost').value) || 20;
+            m.plan = 'Codex ($' + codexCost.toFixed(0) + '/mes)';
+          }
+        });
+
+        subApplyCalculator();
+        updateCodexUsageCalc();
+      }
+
+      // Update Codex usage calculator
+      function updateCodexUsageCalc() {
+        var el = function(id) { return document.getElementById(id); };
+        var planCost = parseFloat(el('calc-codex-cost').value) || 20;
+        var pct = parseFloat(el('calc-codex-pct').value) || 0;
+        var inpM = parseFloat(el('calc-codex-in').value) || 0;
+        var outM = parseFloat(el('calc-codex-out').value) || 0;
+        var cacheM = parseFloat(el('calc-codex-cache').value) || 0;
+        var refModel = getRefModel();
+
+        var usedM = inpM + outM + cacheM;
+        var weekPct = pct / 100;
+
+        var weekCost = weekPct > 0 ? (planCost / 4) * weekPct : 0;
+        var monthCost = planCost;
+        var weekFullM = weekPct > 0 ? usedM / weekPct : 0;
+        var monthTokensM = weekFullM * 4;
+
+        var effActual = usedM > 0 ? (weekCost / usedM) : 0;
+        var effFull = monthTokensM > 0 ? (monthCost / monthTokensM) : 0;
+
+        // API direct cost vs subscription cost for entered tokens
+        var refSubPpm = refModel ? (refModel.cost_sub || 0) : (parseFloat(el('calc-ref-cost').value) || 0.0183);
+        var refInputPrice = refModel ? refModel.input_price : null;
+        var refOutputPrice = refModel ? refModel.output_price : null;
+        var refCachePrice = refModel ? refModel.cache_price : null;
+
+        var uncachedInpM = inpM;
+        var apiWeekCost;
+        if (refInputPrice != null && refOutputPrice != null) {
+            uncachedInpM = cacheM >= inpM ? inpM : inpM - cacheM;
+            apiWeekCost = uncachedInpM * refInputPrice + outM * refOutputPrice + cacheM * (refCachePrice || 0);
+        } else {
+            var fallbackPpm = refModel ? (refModel.cost_api || 0) : 0;
+            apiWeekCost = usedM * fallbackPpm;
+        }
+        var effBillableM = uncachedInpM + outM + cacheM;
+        var apiBlendedPpm = effBillableM > 0 ? apiWeekCost / effBillableM : 0;
+        var subWeekCost = usedM * refSubPpm;
+        var savingsWeek = apiWeekCost - subWeekCost;
+        var savingsPct = apiWeekCost > 0 ? Math.round((1 - subWeekCost / apiWeekCost) * 100) : 0;
+
+        function setTxt(id, val) { var e = el(id); if (e) e.textContent = val; }
+        setTxt('res-ref-api-ppm', apiBlendedPpm > 0 ? '$' + apiBlendedPpm.toFixed(4) + '/1M' : '—');
+        setTxt('res-codex-api-week', usedM > 0 ? '$' + apiWeekCost.toFixed(2) : '$—');
+        setTxt('res-codex-savings-week', usedM > 0 ? (savingsPct >= 0 ? savingsPct + '% ($' + savingsWeek.toFixed(2) + ')' : '0% ($0)') : '—');
+        setTxt('res-codex-week-tokens', weekFullM > 0 ? weekFullM.toFixed(1) + 'M' : '—');
+        setTxt('res-codex-eff-actual', usedM > 0 ? '$' + effActual.toFixed(4) + '/1M' : '—');
+        setTxt('res-codex-eff-full', monthTokensM > 0 ? '$' + effFull.toFixed(4) + '/1M' : '—');
+      }
+
+      // --- localStorage save/restore for calc-ref-cost only ---
+      var STORAGE_KEY = 'session-stats-costos';
+
+      function saveCalcState() {
+        var el = document.getElementById('calc-ref-cost');
+        if (!el || !el.id) return;
+        var state = {};
+        state[el.id] = el.value;
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch(e) {}
+      }
+
+      function restoreCalcState() {
+        try {
+          var raw = localStorage.getItem(STORAGE_KEY);
+          if (!raw) return;
+          var state = JSON.parse(raw);
+          Object.keys(state).forEach(function(id) {
+            if (id === 'calc-ref-cost') {
+              var el = document.getElementById(id);
+              if (el) el.value = state[id];
+            }
+          });
+        } catch(e) {}
+      }
+
+      // Restore saved state BEFORE first calculation
+      restoreCalcState();
+
+      // When reference model changes
+      if (refSelect) {
+        refSelect.addEventListener('change', function() {
+          var model = getRefModel();
+          if (model) {
+            // Auto-fill token fields
+            document.getElementById('calc-codex-in').value = Math.round((model.input_tokens || 0) / 1e6);
+            document.getElementById('calc-codex-out').value = Math.round((model.output_tokens || 0) / 1e6);
+            document.getElementById('calc-codex-cache').value = Math.round((model.cache_tokens || 0) / 1e6);
+            // Set reference cost from model's subscription price
+            if (refCostInput && model.cost_sub != null) {
+              refCostInput.value = model.cost_sub;
+            }
+          }
+          recalcAll();
+          });
+      }
+
+      // When reference cost is manually edited — solo localStorage
+      if (refCostInput) {
+        refCostInput.addEventListener('input', function() { recalcAll(); saveCalcState(); });
+      }
+
+      // Guardar button: persiste calc-ref-cost en el backend
+      var saveBtn = document.getElementById('save-cost-btn');
+      var saveBadge = document.getElementById('save-badge');
+      if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+          var model = refSelect ? refSelect.value : '';
+          var cost = parseFloat(refCostInput ? refCostInput.value : 0) || 0;
+          if (!model) { alert('Seleccioná un modelo de referencia primero.'); return; }
+          fetch('/api/subscription-cost/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: model, cost_sub: cost })
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            saveCalcState();
+            if (data.success && saveBadge) {
+              saveBadge.style.display = 'inline';
+              setTimeout(function(){ saveBadge.style.display = 'none'; }, 3000);
+            }
+          })
+          .catch(function(err) {
+            console.error('Error saving cost:', err);
+            alert('Error al guardar: ' + err.message);
+          });
+        });
+      }
+
+      // Wire up calculator inputs (plan cost and usage fields) — no auto-save
+      var codexInputs = ['calc-codex-cost', 'calc-codex-pct', 'calc-codex-in', 'calc-codex-out', 'calc-codex-cache'];
+      codexInputs.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { recalcAll(); });
+      });
+
+      // Wire up OCG inputs — no auto-save
+      var ocgInputs = ['calc-ocg-cost', 'calc-ocg-credit'];
+      ocgInputs.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', function() { subApplyCalculator(); });
+      });
+
+      // Initial calculation
+      recalcAll();
+
+      // Wire up sort buttons
+      var sortBtns = document.querySelectorAll('[data-sub-sort], [data-sub-sort-dir]');
+      sortBtns.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var field = btn.getAttribute('data-sub-sort');
+          if (field) {
+            subSortField = field;
+            sortBtns.forEach(function(b) {
+              if (b.getAttribute('data-sub-sort')) {
+                b.removeAttribute('data-active');
+                b.setAttribute('aria-pressed', 'false');
+              }
+            });
+            btn.setAttribute('data-active', 'true');
+            btn.setAttribute('aria-pressed', 'true');
+          } else {
+            // toggle direction button
+            subSortDir = subSortDir === 1 ? -1 : 1;
+            btn.textContent = subSortDir === 1 ? '↑' : '↓';
+            var allDir = document.querySelectorAll('[data-sub-sort-dir]');
+            allDir.forEach(function(d) {
+              d.setAttribute('data-active', 'true');
+              d.setAttribute('aria-pressed', 'true');
+            });
+          }
+          subRenderTable();
+        });
+      });
+    })
+    .catch(function(err) {
+      console.error('subscription-estimate error:', err);
+      if (subTbody) subTbody.innerHTML = '<tr><td colspan="8" class="loading-row">Error al cargar</td></tr>';
     });
 }
 

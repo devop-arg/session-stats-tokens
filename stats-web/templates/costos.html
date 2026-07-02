@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="page-head">
+  <h1 class="section-title"><strong>Costos con suscripciones.</strong> Estimación de costo real /1M tokens vs costo si aplicara una suscripción paga.</h1>
+  <p style="color:#808080;font-size:12px;margin:12px 0 0 0;font-family:var(--mono);line-height:1.6;">
+    <strong>OpenCode Go:</strong> $10/mes → $60 crédito (6×). Cubre deepseek, glm, mimo, minimax, nex-agi, nemotron.<br>
+    <strong>Codex:</strong> $20/mes → precios reducidos en modelos GPT. Seleccioná el modelo de referencia abajo.
+  </p>
+</section>
+
+<section class="section-block" id="subscription-section" style="padding-top:24px;border-bottom:none;">
+  <div class="calc-grid" id="calc-grid">
+    <div class="calc-card calc-card-wide" id="codex-calc-card">
+      <h3 class="calc-title">Calculadora Codex</h3>
+
+      <div class="calc-cols">
+        <div class="calc-col">
+          <div class="calc-subtitle">Parámetros del plan</div>
+          <label class="calc-label">Costo suscripción ($/mes)
+            <input type="number" class="calc-input" id="calc-codex-cost" value="20" min="0" step="1">
+          </label>
+          <label class="calc-label">Modelo de referencia
+            <select class="calc-input calc-select" id="calc-ref-model">
+              <option value="">— Cargando —</option>
+            </select>
+          </label>
+          <label class="calc-label">Costo efectivo ($/1M)
+            <input type="number" class="calc-input calc-save" id="calc-ref-cost" value="0.0183" min="0" step="0.0001">
+            <button type="button" class="save-btn" id="save-cost-btn" style="margin-left:6px;padding:2px 8px;font-size:11px;border:1px solid var(--stats-line);border-radius:4px;background:var(--stats-bg);color:var(--stats-text);cursor:pointer;vertical-align:middle;">Guardar</button>
+            <span id="save-badge" class="badge-saved" style="display:none;font-size:9px;margin-left:6px;color:var(--stats-accent-text);vertical-align:middle;">✓ guardado en servidor</span>
+          </label>
+        </div>
+
+        <div class="calc-col">
+          <div class="calc-subtitle">Uso semanal estimado</div>
+          <label class="calc-label">% del cupo semanal usado
+            <input type="number" class="calc-input" id="calc-codex-pct" value="50" min="0" max="100" step="1">
+          </label>
+          <label class="calc-label">Input tokens usados (M)
+            <input type="number" class="calc-input" id="calc-codex-in" value="0" min="0" step="1">
+          </label>
+          <label class="calc-label">Output tokens usados (M)
+            <input type="number" class="calc-input" id="calc-codex-out" value="0" min="0" step="1">
+          </label>
+          <label class="calc-label">Cache tokens usados (M)
+            <input type="number" class="calc-input" id="calc-codex-cache" value="0" min="0" step="1">
+          </label>
+        </div>
+      </div>
+
+      <div class="calc-results" id="codex-results">
+        <div class="calc-result-row">
+          <span class="calc-result-label">Modelo de referencia</span>
+          <span class="calc-result-value" id="res-ref-model-name" style="color:var(--stats-accent-text);">—</span>
+        </div>
+        <div class="calc-result-row">
+          <span class="calc-result-label">Costo/1M con sub</span>
+          <span class="calc-result-value" id="res-ref-ppm">—</span>
+        </div>
+        <div class="calc-result-row">
+          <span class="calc-result-label">Costo/1M API directa</span>
+          <span class="calc-result-value" id="res-ref-api-ppm">—</span>
+        </div>
+        <div class="calc-result-row" style="border-top:1px solid var(--stats-line);padding-top:6px;margin-top:2px;">
+          <span class="calc-result-label">Costo API directo (sin sub) semanal</span>
+          <span class="calc-result-value" id="res-codex-api-week">$—</span>
+        </div>
+        <div class="calc-result-row">
+          <span class="calc-result-label">Ahorro vs API directa</span>
+          <span class="calc-result-value" id="res-codex-savings-week">—</span>
+        </div>
+        <div class="calc-result-row">
+          <span class="calc-result-label">Tokens/semana estimados (100%)</span>
+          <span class="calc-result-value" id="res-codex-week-tokens">—</span>
+        </div>
+        <div class="calc-result-row">
+          <span class="calc-result-label">Costo efectivo /1M (uso actual)</span>
+          <span class="calc-result-value" id="res-codex-eff-actual">—</span>
+        </div>
+        <div class="calc-result-row calc-result-highlight">
+          <span class="calc-result-label">Costo efectivo /1M (100% uso)</span>
+          <span class="calc-result-value" id="res-codex-eff-full">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="calc-card">
+      <h3 class="calc-title">Calculadora OpenCode Go</h3>
+      <label class="calc-label">Costo suscripción ($/mes)
+        <input type="number" class="calc-input" id="calc-ocg-cost" value="10" min="0" step="1">
+      </label>
+      <label class="calc-label">Crédito ($)
+        <input type="number" class="calc-input" id="calc-ocg-credit" value="60" min="0" step="5">
+      </label>
+    </div>
+  </div>
+
+  <div class="sort-controls" role="group" aria-label="Ordenar tabla suscripciones" style="margin-bottom:12px;">
+    <span class="sort-label">Ordenar:</span>
+    <button type="button" class="sort-btn" data-sub-sort="cost_sub" data-active="true" aria-pressed="true">Costo con sub</button>
+    <button type="button" class="sort-btn" data-sub-sort="savings">Ahorro</button>
+    <button type="button" class="sort-btn" data-sub-sort="tokens">Tokens</button>
+    <button type="button" class="sort-btn" data-sub-sort="cost_api">Costo API</button>
+    <button type="button" class="sort-btn" data-sub-sort="name">Modelo</button>
+    <button type="button" class="sort-btn" data-sub-sort-dir="asc" id="sub-sort-dir" data-active="true" aria-pressed="true">↑</button>
+  </div>
+
+  <div class="table-wrap" id="subscription-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Modelo</th>
+          <th class="num">Tokens totales</th>
+          <th class="num">Costo/1M (API real)</th>
+          <th>Plan</th>
+          <th class="num">Costo/1M (con sub)</th>
+          <th class="num">Ahorro</th>
+          <th>vs <span id="ref-col-header">gpt-5.4</span> sub</th>
+        </tr>
+      </thead>
+      <tbody id="subscription-tbody">
+        <tr><td colspan="8" class="loading-row">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

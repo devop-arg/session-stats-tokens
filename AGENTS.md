@@ -15,3 +15,14 @@ cp session_history.db /tmp/session_history.db.bak
 ```
 
 **Si ya se borró:** restaurar desde `db_backups/` + `session-stats --capture-all`.
+
+## Migraciones SQLite
+
+`session-stats` y `stats-web` deben ejecutar `init_db()` al arrancar para aplicar
+migraciones no destructivas sobre bases existentes. Si una DB restaurada falla
+con `no such column: cache_read_tokens`, ejecutar:
+
+```bash
+python3 -c 'import stats_common; stats_common.init_db()'
+session-stats --capture-all
+```

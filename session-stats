@@ -275,13 +275,19 @@ def get_session_stats_sqlite(session_id, db_path=None):
                     "input": 0,
                     "output": 0,
                     "reasoning": 0,
-                    "cache": 0
+                    "cache": 0,
+                    "cache_read": 0,
+                    "cache_write": 0,
                 }
 
             stats["by_model"][model]["requests"] += 1
-            cache_read = (tokens.get("cache") or {}).get("read", 0)
+            cache_obj = tokens.get("cache") or {}
+            cache_read = cache_obj.get("read", 0)
+            cache_write = cache_obj.get("write", 0)
             stats["by_model"][model]["input"] += abs(tokens.get("input", 0) or 0)
-            stats["by_model"][model]["cache"] += abs(cache_read or 0)
+            stats["by_model"][model]["cache"] += abs(cache_read or 0) + abs(cache_write or 0)
+            stats["by_model"][model]["cache_read"] += abs(cache_read or 0)
+            stats["by_model"][model]["cache_write"] += abs(cache_write or 0)
             stats["by_model"][model]["output"] += abs(tokens.get("output", 0) or 0)
             stats["by_model"][model]["reasoning"] += abs(tokens.get("reasoning", 0) or 0)
         
@@ -313,12 +319,17 @@ def merge_model_stats(by_model):
     for model, data in by_model.items():
         normalized = normalize_model_name(model)
         if normalized not in merged:
-            merged[normalized] = {"requests": 0, "input": 0, "output": 0, "reasoning": 0, "cache": 0}
+            merged[normalized] = {
+                "requests": 0, "input": 0, "output": 0, "reasoning": 0,
+                "cache": 0, "cache_read": 0, "cache_write": 0,
+            }
         merged[normalized]["requests"] += data.get("requests", 0)
         merged[normalized]["input"] += data.get("input", 0)
         merged[normalized]["output"] += data.get("output", 0)
         merged[normalized]["reasoning"] += data.get("reasoning", 0)
         merged[normalized]["cache"] += data.get("cache", 0)
+        merged[normalized]["cache_read"] += data.get("cache_read", data.get("cache", 0))
+        merged[normalized]["cache_write"] += data.get("cache_write", 0)
     return merged
 
 def update_history(session_id, requests, input_tokens, output_tokens, cost, by_model, date=None):
@@ -419,7 +430,10 @@ def capture_all_sessions():
             "cost": cost,
             "by_model": {normalized: {
                 "requests": stats["requests"], "input": stats["input"],
-                "output": stats["output"], "cache": stats["cache"], "cost": cost
+                "output": stats["output"], "cache": stats["cache"],
+                "cache_read": stats.get("cache_read", stats["cache"]),
+                "cache_write": stats.get("cache_write", 0),
+                "cost": cost
             }}
         })
 
@@ -514,6 +528,8 @@ def _build_session_entry(by_model, timestamp):
 
 
 def main():
+    init_db()
+
     if len(sys.argv) > 1 and sys.argv[1] == "--capture-all":
         new = capture_all_sessions()
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -550,7 +566,9 @@ def main():
                     "input": codex_stats["input"],
                     "output": codex_stats["output"],
                     "reasoning": codex_stats["reasoning"],
-                    "cache": codex_stats["cache"]
+                    "cache": codex_stats.get("cache", codex_stats.get("cache_read", 0)),
+                    "cache_read": codex_stats.get("cache_read", codex_stats.get("cache", 0)),
+                    "cache_write": codex_stats.get("cache_write", 0),
                 }
             }
         }
@@ -594,6 +612,8 @@ def main():
             "input": data["input"],
             "output": data["output"],
             "cache": data["cache"],
+            "cache_read": data.get("cache_read", data["cache"]),
+            "cache_write": data.get("cache_write", 0),
             "cost": model_cost
         }
     

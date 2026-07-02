@@ -19,6 +19,7 @@ Thumbs.db
 session_history.json
 session_history.db
 session_history_legacy_freeze.json
+codex_sub_costs.json
 
 # Old backups (not tracked)
 *.bak.*

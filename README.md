@@ -67,6 +67,21 @@ Prevents data loss when chat sessions are deleted:
 - **Diario 6 AM**: backup SQLite con rotación de 7 días en `db_backups/`
 - Cron configurado localmente, no trackeado en el repo
 
+### SQLite Schema Migrations
+
+`session-stats` and the web dashboard call `init_db()` on startup. This creates
+missing tables and applies non-destructive schema migrations, including the
+`cache_read_tokens` and `cache_write_tokens` columns used to separate cache
+reads from cache writes.
+
+If a restored or old `session_history.db` fails with `no such column:
+cache_read_tokens`, run:
+
+```bash
+python3 -c 'import stats_common; stats_common.init_db()'
+session-stats --capture-all
+```
+
 ## Repository Strategy
 
 Este proyecto mantiene **dos remotos** con contenido diferente:
@@ -94,6 +109,7 @@ Este proyecto mantiene **dos remotos** con contenido diferente:
 Los siguientes archivos están en `.gitignore` del branch `public`:
 - `session_history.json` — historial con nombres de sesiones, costos, tokens
 - `session_history.db` — misma información en SQLite
+- `codex_sub_costs.json` — costos locales de suscripción Codex
 - `db_backups/` — backups de la DB
 - `capture.log` — log de capturas
 
@@ -120,6 +136,7 @@ En el branch `main` (privado) estos archivos **sí** están trackeados para back
 | `model_aliases.json` | Model name aliases (managed by `session-stats-models`) | ✅ ambos |
 | `session_history.json` | Persistent history con nombres, costos, tokens | ✅ privado ❌ público |
 | `session_history.db` | Historial en SQLite | ✅ privado ❌ público |
+| `codex_sub_costs.json` | Costos locales de suscripción Codex | ✅ privado ❌ público |
 | `db_backups/` | Backups diarios de la DB (rotación 7 días) | ✅ privado ❌ público |
 | `capture.log` | Log de capturas cron | ❌ ninguno |
 

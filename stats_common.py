@@ -196,6 +196,17 @@ MODEL_ALIASES = {
 }
 
 
+# Semántica de cache por fuente (derivada, no persistida)
+SOURCE_CACHE_SEMANTICS = {
+    "codex":    {"input_includes_cache_read": True,  "cache_write_billable": True},
+    "opencode": {"input_includes_cache_read": False, "cache_write_billable": False},
+    "hermes":   {"input_includes_cache_read": False, "cache_write_billable": True},
+    "kilocode": {"input_includes_cache_read": False, "cache_write_billable": False},
+    "cursor":   {"input_includes_cache_read": False, "cache_write_billable": False},
+    "unknown":  {"input_includes_cache_read": False, "cache_write_billable": False},
+}
+
+
 def _load_model_overrides():
     """Pisa MODEL_COSTS y MODEL_ALIASES desde JSON si los archivos existen."""
     for var_name, file_path in [
@@ -449,7 +460,10 @@ def get_codex_session_stats(session_file):
     if last_token_count:
         result["input"] = last_token_count.get("input_tokens", 0)
         result["output"] = last_token_count.get("output_tokens", 0)
-        result["cache"] = last_token_count.get("cached_input_tokens", 0)
+        cached = last_token_count.get("cached_input_tokens", 0)
+        result["cache"] = cached
+        result["cache_read"] = cached
+        result["cache_write"] = 0
         result["reasoning"] = last_token_count.get("reasoning_output_tokens", 0)
 
     result["requests"] = request_count if request_count > 0 else 1
@@ -505,13 +519,19 @@ def get_opencode_sqlite_sessions():
                         "input": 0,
                         "output": 0,
                         "cache": 0,
+                        "cache_read": 0,
+                        "cache_write": 0,
                     }
 
                 by_model[model]["requests"] += 1
                 requests += 1
-                cache_read = (tokens.get("cache") or {}).get("read", 0)
+                cache_obj = tokens.get("cache") or {}
+                cache_read = cache_obj.get("read", 0)
+                cache_write = cache_obj.get("write", 0)
                 by_model[model]["input"] += abs(tokens.get("input", 0) or 0)
-                by_model[model]["cache"] += abs(cache_read or 0)
+                by_model[model]["cache"] += abs(cache_read or 0) + abs(cache_write or 0)
+                by_model[model]["cache_read"] += abs(cache_read or 0)
+                by_model[model]["cache_write"] += abs(cache_write or 0)
                 by_model[model]["output"] += abs(tokens.get("output", 0) or 0)
 
             if requests > 0:
@@ -601,7 +621,9 @@ def get_hermes_sessions():
                     "requests": requests,
                     "input": input_tokens,
                     "output": output_tokens,
-                    "cache": cache_read,
+                    "cache": cache_read + cache_write,
+                    "cache_read": cache_read,
+                    "cache_write": cache_write,
                     "reasoning": reasoning,
                 }
             }
@@ -697,7 +719,9 @@ def get_hermes_session_stats(session_id):
                 "requests": requests,
                 "input": input_tokens,
                 "output": output_tokens,
-                "cache": cache_read,
+                "cache": cache_read + cache_write,
+                "cache_read": cache_read,
+                "cache_write": cache_write,
                 "reasoning": reasoning,
             }
         }
@@ -845,14 +869,18 @@ def _aggregate_cursor_session(conversation_id, events):
         model = normalize_model_name(ev.get("model") or "unknown")
         if model not in by_model:
             by_model[model] = {
-                "requests": 0, "input": 0, "output": 0, "cache": 0, "reasoning": 0,
+                "requests": 0, "input": 0, "output": 0,
+                "cache": 0, "cache_read": 0, "cache_write": 0,
+                "reasoning": 0,
             }
+        ev_cache_read = ev.get("cache_read_tokens") or 0
+        ev_cache_write = ev.get("cache_write_tokens") or 0
         by_model[model]["requests"] += 1
         by_model[model]["input"] += ev.get("input_tokens") or 0
         by_model[model]["output"] += ev.get("output_tokens") or 0
-        by_model[model]["cache"] += (
-            (ev.get("cache_read_tokens") or 0) + (ev.get("cache_write_tokens") or 0)
-        )
+        by_model[model]["cache"] += ev_cache_read + ev_cache_write
+        by_model[model]["cache_read"] += ev_cache_read
+        by_model[model]["cache_write"] += ev_cache_write
 
     meta = _get_cursor_meta(conversation_id)
     title = meta.get("title") or ""
@@ -978,10 +1006,34 @@ def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0):
     if not costs:
         return 0
 
-    input_cost = (input_tokens / 1000000) * costs["input"]
+    if cache_tokens >= input_tokens:
+        input_cost = (input_tokens / 1000000) * costs["input"]
+    else:
+        uncached = input_tokens - cache_tokens
+        input_cost = (uncached / 1000000) * costs["input"]
     output_cost = (output_tokens / 1000000) * costs["output"]
     cache_cost = (cache_tokens / 1000000) * costs.get("cache", 0)
     return input_cost + output_cost + cache_cost
+
+
+def effective_billable_tokens(source, input_tokens, output_tokens,
+                              cache_read_tokens=0, cache_write_tokens=0):
+    """Tokens efectivamente facturables según semántica de la fuente."""
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    total = (input_tokens or 0) + (output_tokens or 0)
+    if not sem["input_includes_cache_read"]:
+        total += cache_read_tokens or 0
+    if sem["cache_write_billable"]:
+        total += cache_write_tokens or 0
+    return total
+
+
+def effective_cache_ratio_input(source, input_tokens, cache_read_tokens=0):
+    """Input total considerado para el cálculo de cache ratio."""
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    if sem["input_includes_cache_read"]:
+        return input_tokens or 0
+    return (input_tokens or 0) + (cache_read_tokens or 0)
 
 
 def recalculate_historical_cost():
@@ -1002,6 +1054,8 @@ def recalculate_historical_cost():
             "total_requests": 0,
             "total_input": 0,
             "total_output": 0,
+            "total_tokens": 0,
+            "cache_ratio": 0,
             "models_totals": {},
         }
 
@@ -1033,12 +1087,14 @@ def recalculate_historical_cost():
                 if normalized not in models_totals:
                     models_totals[normalized] = {
                         "requests": 0, "input": 0, "output": 0,
-                        "cache": 0, "stored_cost": 0.0,
+                        "cache": 0, "cache_read": 0, "cache_write": 0,
+                        "stored_cost": 0.0,
                     }
                 models_totals[normalized]["requests"] += m_req
                 models_totals[normalized]["input"] += m_in
                 models_totals[normalized]["output"] += m_out
                 models_totals[normalized]["cache"] += m_cache
+                models_totals[normalized]["cache_read"] += m_cache
                 historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache)
             continue
         if sid == "legacy_price_adjustment":
@@ -1050,35 +1106,46 @@ def recalculate_historical_cost():
     total_requests = 0
     total_input = 0
     total_output = 0
+    total_tokens = 0
+    cache_ratio_input = 0
+    total_cache_read = 0
 
     if session_keys:
         placeholders = ",".join("?" for _ in session_keys)
         mrows = conn.execute(
-            f"SELECT mu.model, mu.requests, mu.input_tokens, mu.output_tokens, mu.cache_tokens "
+            f"SELECT mu.model, mu.requests, mu.input_tokens, mu.output_tokens, "
+            f"mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens "
             f"FROM model_usage mu WHERE mu.session_id IN ({placeholders})",
             session_keys,
         ).fetchall()
-        for model, reqs, inp, out, cache in mrows:
+        for model, reqs, inp, out, cache, cache_read, cache_write in mrows:
             normalized = normalize_model_name(model)
             if normalized not in models_totals:
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
-                    "cache": 0, "stored_cost": 0.0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0,
                 }
             models_totals[normalized]["requests"] += reqs
             models_totals[normalized]["input"] += inp
             models_totals[normalized]["output"] += out
             models_totals[normalized]["cache"] += cache
+            models_totals[normalized]["cache_read"] += cache_read
+            models_totals[normalized]["cache_write"] += cache_write
 
         # Totales de sesión desde la tabla sessions
         srows_agg = conn.execute(
-            f"SELECT requests, input_tokens, output_tokens FROM sessions WHERE id IN ({placeholders})",
+            f"SELECT source, requests, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens "
+            f"FROM sessions WHERE id IN ({placeholders})",
             session_keys,
         ).fetchall()
-        for reqs, inp, out in srows_agg:
+        for source, reqs, inp, out, cache_read, cache_write in srows_agg:
             total_requests += reqs
             total_input += inp
             total_output += out
+            total_tokens += effective_billable_tokens(source, inp, out, cache_read, cache_write)
+            cache_ratio_input += effective_cache_ratio_input(source, inp, cache_read)
+            total_cache_read += cache_read
 
     conn.close()
 
@@ -1110,7 +1177,8 @@ def recalculate_historical_cost():
             if normalized not in models_totals:
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
-                    "cache": 0, "stored_cost": 0.0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0,
                 }
             models_totals[normalized]["requests"] += stats["requests"]
             models_totals[normalized]["input"] += stats["input"]
@@ -1119,6 +1187,11 @@ def recalculate_historical_cost():
             total_requests += stats["requests"]
             total_input += stats["input"]
             total_output += stats["output"]
+            cache_read = stats.get("cache_read", stats.get("cache", 0))
+            cache_write = stats.get("cache_write", 0)
+            total_tokens += effective_billable_tokens("codex", stats["input"], stats["output"], cache_read, cache_write)
+            cache_ratio_input += effective_cache_ratio_input("codex", stats["input"], cache_read)
+            total_cache_read += cache_read
             total_sessions += 1
 
     # 4. Agregar sesiones de OpenCode SQLite (v1.3.0+) que NO estan en SQLite
@@ -1132,15 +1205,25 @@ def recalculate_historical_cost():
             if normalized not in models_totals:
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
-                    "cache": 0, "stored_cost": 0.0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0,
                 }
             models_totals[normalized]["requests"] += model_data.get("requests", 0)
             models_totals[normalized]["input"] += model_data.get("input", 0)
             models_totals[normalized]["output"] += model_data.get("output", 0)
+            cache_read = model_data.get("cache_read", model_data.get("cache", 0))
+            cache_write = model_data.get("cache_write", 0)
             models_totals[normalized]["cache"] += model_data.get("cache", 0)
+            models_totals[normalized]["cache_read"] += cache_read
+            models_totals[normalized]["cache_write"] += cache_write
+        cache_read = stats.get("cache_read", stats.get("cache", 0))
+        cache_write = stats.get("cache_write", 0)
         total_requests += stats["requests"]
         total_input += stats["input"]
         total_output += stats["output"]
+        total_tokens += effective_billable_tokens("opencode", stats["input"], stats["output"], cache_read, cache_write)
+        cache_ratio_input += effective_cache_ratio_input("opencode", stats["input"], cache_read)
+        total_cache_read += cache_read
         total_sessions += 1
 
     # 5. Agregar sesiones de Hermes que NO estan en SQLite
@@ -1154,15 +1237,25 @@ def recalculate_historical_cost():
             if normalized not in models_totals:
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
-                    "cache": 0, "stored_cost": 0.0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0,
                 }
             models_totals[normalized]["requests"] += model_data.get("requests", 0)
             models_totals[normalized]["input"] += model_data.get("input", 0)
             models_totals[normalized]["output"] += model_data.get("output", 0)
+            cache_read = model_data.get("cache_read", model_data.get("cache", 0))
+            cache_write = model_data.get("cache_write", 0)
             models_totals[normalized]["cache"] += model_data.get("cache", 0)
+            models_totals[normalized]["cache_read"] += cache_read
+            models_totals[normalized]["cache_write"] += cache_write
+        cache_read = sess.get("cache_read", sess.get("cache", 0))
+        cache_write = sess.get("cache_write", 0)
         total_requests += sess.get("requests", 0)
         total_input += sess.get("input", 0)
         total_output += sess.get("output", 0)
+        total_tokens += effective_billable_tokens("hermes", sess.get("input", 0), sess.get("output", 0), cache_read, cache_write)
+        cache_ratio_input += effective_cache_ratio_input("hermes", sess.get("input", 0), cache_read)
+        total_cache_read += cache_read
         total_sessions += 1
 
     # 6. Calcular costo total desde tokens + ajuste histórico
@@ -1183,6 +1276,8 @@ def recalculate_historical_cost():
         "total_requests": total_requests,
         "total_input": total_input,
         "total_output": total_output,
+        "total_tokens": total_tokens,
+        "cache_ratio": round(total_cache_read / cache_ratio_input * 100, 1) if cache_ratio_input > 0 else 0,
         "models_totals": models_totals,
     }
 
@@ -1208,6 +1303,12 @@ def _detect_source(session_id):
         return "legacy"
     if session_id.startswith("codex_"):
         return "codex"
+    if re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", session_id):
+        try:
+            if any(session_id in Path(p).name for p in get_codex_sessions()):
+                return "codex"
+        except Exception:
+            pass
     if session_id.startswith("kilocode_") or session_id.startswith("kilo_"):
         return "kilocode"
     if session_id.startswith("hermes_"):
@@ -1262,23 +1363,38 @@ def init_db(db_path=None):
         CREATE INDEX IF NOT EXISTS idx_model_usage_model ON model_usage(model);
         CREATE INDEX IF NOT EXISTS idx_model_usage_session ON model_usage(session_id);
     """)
+    _ensure_column(conn, "sessions", "cache_read_tokens", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "sessions", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "model_usage", "cache_read_tokens", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "model_usage", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0")
     conn.commit()
     conn.close()
 
 
+def _ensure_column(conn, table, column, definition):
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def save_session(sid, source, date, timestamp, requests, input_tokens,
                  output_tokens, cache_tokens, reasoning_tokens, cost,
-                 by_model, db_path=None):
+                 by_model, db_path=None,
+                 cache_read_tokens=None, cache_write_tokens=None):
     """Persiste/actualiza estadísticas de una sesión en session_history.db.
 
     NOTA: El 2025-06-25 se cambió INSERT OR REPLACE por INSERT ... ON CONFLICT
     DO UPDATE SET con MAX() para evitar que borrar conversaciones en OpenCode
     (o cualquier fuente) pisé valores históricos altos con datos más bajos.
 
-    Ver stats_common.py.bak.(fecha) para el código original.
-
     Rollback: copiar el .bak sobre este archivo y reiniciar.
+
+    2026-07-01: se agregaron cache_read_tokens, cache_write_tokens y MIN() en timestamp.
     """
+    if cache_read_tokens is None:
+        cache_read_tokens = sum((m.get("cache_read", m.get("cache", 0)) or 0) for m in by_model.values())
+    if cache_write_tokens is None:
+        cache_write_tokens = sum((m.get("cache_write", 0) or 0) for m in by_model.values())
     path = Path(db_path or DB_PATH)
     conn = sqlite3.connect(str(path))
     conn.execute("PRAGMA foreign_keys=ON")
@@ -1286,40 +1402,51 @@ def save_session(sid, source, date, timestamp, requests, input_tokens,
     conn.execute(
         """INSERT INTO sessions
         (id, source, date, timestamp, requests, input_tokens, output_tokens,
-         cache_tokens, reasoning_tokens, cost)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         cache_tokens, reasoning_tokens, cost,
+         cache_read_tokens, cache_write_tokens)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
-          date = excluded.date,
-          timestamp = excluded.timestamp,
+          date = MIN(date, excluded.date),
+          timestamp = MIN(timestamp, excluded.timestamp),
           requests = MAX(requests, excluded.requests),
           input_tokens = MAX(input_tokens, excluded.input_tokens),
           output_tokens = MAX(output_tokens, excluded.output_tokens),
           cache_tokens = MAX(cache_tokens, excluded.cache_tokens),
           reasoning_tokens = MAX(reasoning_tokens, excluded.reasoning_tokens),
-          cost = MAX(cost, excluded.cost)""",
+          cost = MAX(cost, excluded.cost),
+          cache_read_tokens = MAX(cache_read_tokens, excluded.cache_read_tokens),
+          cache_write_tokens = MAX(cache_write_tokens, excluded.cache_write_tokens)""",
         (sid, source, date, timestamp, requests, input_tokens, output_tokens,
-         cache_tokens, reasoning_tokens, cost)
+         cache_tokens, reasoning_tokens, cost,
+         cache_read_tokens, cache_write_tokens)
     )
     for model, mdata in by_model.items():
+        mu_cache_read = mdata.get("cache_read", mdata.get("cache", 0))
+        mu_cache_write = mdata.get("cache_write", 0)
         conn.execute(
             """INSERT INTO model_usage
             (session_id, model, requests, input_tokens, output_tokens,
-             cache_tokens, reasoning_tokens, cost)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             cache_tokens, reasoning_tokens, cost,
+             cache_read_tokens, cache_write_tokens)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id, model) DO UPDATE SET
               requests = MAX(requests, excluded.requests),
               input_tokens = MAX(input_tokens, excluded.input_tokens),
               output_tokens = MAX(output_tokens, excluded.output_tokens),
               cache_tokens = MAX(cache_tokens, excluded.cache_tokens),
               reasoning_tokens = MAX(reasoning_tokens, excluded.reasoning_tokens),
-              cost = MAX(cost, excluded.cost)""",
+              cost = MAX(cost, excluded.cost),
+              cache_read_tokens = MAX(cache_read_tokens, excluded.cache_read_tokens),
+              cache_write_tokens = MAX(cache_write_tokens, excluded.cache_write_tokens)""",
             (sid, model,
              mdata.get("requests", 0),
              mdata.get("input", 0),
              mdata.get("output", 0),
-             mdata.get("cache", 0),
+             mdata.get("cache", mdata.get("cache_read", 0) + mdata.get("cache_write", 0)),
              mdata.get("reasoning", 0),
-             mdata.get("cost", 0.0))
+             mdata.get("cost", 0.0),
+             mu_cache_read,
+             mu_cache_write)
         )
     conn.commit()
     conn.close()
