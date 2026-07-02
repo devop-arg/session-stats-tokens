@@ -12,7 +12,7 @@ from fastapi import FastAPI, Request, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from stats_common import DB_PATH, get_monthly_data, recalculate_historical_cost, effective_billable_tokens, effective_cache_ratio_input, SOURCE_CACHE_SEMANTICS, init_db
+from stats_common import DB_PATH, get_monthly_data, recalculate_historical_cost, effective_billable_tokens, effective_cache_read_tokens, effective_cache_ratio_input, SOURCE_CACHE_SEMANTICS, init_db, normalize_model_name
 from pydantic import BaseModel
 
 app = FastAPI(title="session-stats dashboard")
@@ -63,24 +63,40 @@ def _row_billable_tokens(row):
         row["source"],
         row["input_tokens"],
         row["output_tokens"],
-        row["cache_read_tokens"],
+        _row_cache_read_tokens(row),
         row["cache_write_tokens"],
     )
 
 
+def _row_cache_read_tokens(row):
+    return effective_cache_read_tokens(
+        row["cache_tokens"], row["cache_read_tokens"], row["cache_write_tokens"]
+    )
+
+
+def _sql_effective_cache_read(cache_col: str, cache_read_col: str, cache_write_col: str) -> str:
+    return (
+        f"CASE WHEN ({cache_read_col}) = 0 AND ({cache_write_col}) = 0 AND ({cache_col}) > 0 "
+        f"THEN ({cache_col}) ELSE ({cache_read_col}) END"
+    )
+
+
 def _sql_effective_tokens(source_col: str, input_col: str, output_col: str,
-                          cache_read_col: str, cache_write_col: str) -> str:
+                          cache_col: str, cache_read_col: str, cache_write_col: str) -> str:
+    effective_cache_read = _sql_effective_cache_read(cache_col, cache_read_col, cache_write_col)
     return (
         f"COALESCE(SUM(({input_col}) + ({output_col}) + "
-        f"CASE WHEN {source_col} = 'codex' THEN 0 ELSE ({cache_read_col}) END + "
+        f"CASE WHEN {source_col} = 'codex' THEN 0 ELSE ({effective_cache_read}) END + "
         f"CASE WHEN {source_col} IN ('codex', 'hermes') THEN ({cache_write_col}) ELSE 0 END),0)"
     )
 
 
-def _sql_cache_ratio_input(source_col: str, input_col: str, cache_read_col: str) -> str:
+def _sql_cache_ratio_input(source_col: str, input_col: str,
+                           cache_col: str, cache_read_col: str, cache_write_col: str) -> str:
+    effective_cache_read = _sql_effective_cache_read(cache_col, cache_read_col, cache_write_col)
     return (
         f"COALESCE(SUM(({input_col}) + "
-        f"CASE WHEN {source_col} = 'codex' THEN 0 ELSE ({cache_read_col}) END),0)"
+        f"CASE WHEN {source_col} = 'codex' THEN 0 ELSE ({effective_cache_read}) END),0)"
     )
 
 
@@ -183,9 +199,12 @@ def api_summary():
     window_7d = _art_window_days(7)
     window_30d = _art_window_days(30)
     total_tokens_sql = _sql_effective_tokens(
-        "source", "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"
+        "source", "input_tokens", "output_tokens", "cache_tokens", "cache_read_tokens", "cache_write_tokens"
     )
-    cache_ratio_input_sql = _sql_cache_ratio_input("source", "input_tokens", "cache_read_tokens")
+    effective_cache_read_sql = _sql_effective_cache_read("cache_tokens", "cache_read_tokens", "cache_write_tokens")
+    cache_ratio_input_sql = _sql_cache_ratio_input(
+        "source", "input_tokens", "cache_tokens", "cache_read_tokens", "cache_write_tokens"
+    )
 
     overall = conn.execute(f"""
         SELECT COUNT(*) as total_sessions,
@@ -193,7 +212,7 @@ def api_summary():
                COALESCE(SUM(input_tokens),0) as total_input_tokens,
                COALESCE(SUM(output_tokens),0) as total_output_tokens,
                COALESCE(SUM(cache_tokens),0) as total_cache_tokens,
-               COALESCE(SUM(cache_read_tokens),0) as total_cache_read_tokens,
+               COALESCE(SUM({effective_cache_read_sql}),0) as total_cache_read_tokens,
                {cache_ratio_input_sql} as cache_ratio_input_tokens,
                {total_tokens_sql} as total_tokens,
                COALESCE(SUM(cost),0) as total_cost
@@ -252,10 +271,13 @@ def api_today_summary():
 
     conn = _db()
     session_total_sql = _sql_effective_tokens(
-        "source", "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"
+        "source", "input_tokens", "output_tokens", "cache_tokens", "cache_read_tokens", "cache_write_tokens"
     )
     model_total_sql = _sql_effective_tokens(
-        "s.source", "mu.input_tokens", "mu.output_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens"
+        "s.source", "mu.input_tokens", "mu.output_tokens", "mu.cache_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens"
+    )
+    model_effective_cache_read_sql = _sql_effective_cache_read(
+        "mu.cache_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens"
     )
 
     sess = conn.execute(f"""
@@ -278,8 +300,8 @@ def api_today_summary():
                COALESCE(SUM(mu.input_tokens),0) as input_tokens,
                COALESCE(SUM(mu.output_tokens),0) as output_tokens,
                COALESCE(SUM(mu.cache_tokens),0) as cache_tokens,
-               COALESCE(SUM(mu.cache_read_tokens),0) as cache_read_tokens,
-               {_sql_cache_ratio_input("s.source", "mu.input_tokens", "mu.cache_read_tokens")} as cache_ratio_input_tokens,
+               COALESCE(SUM({model_effective_cache_read_sql}),0) as cache_read_tokens,
+               {_sql_cache_ratio_input("s.source", "mu.input_tokens", "mu.cache_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens")} as cache_ratio_input_tokens,
                {model_total_sql} as tokens
         FROM model_usage mu
         JOIN sessions s ON s.id = mu.session_id
@@ -508,23 +530,10 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
     _, _, _, end_ts = _art_day_bounds(today)
     conn = _db()
     model_total_sql = _sql_effective_tokens(
-        "s.source", "mu.input_tokens", "mu.output_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens"
+        "s.source", "mu.input_tokens", "mu.output_tokens", "mu.cache_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens"
     )
 
-    top_rows = conn.execute(f"""
-        SELECT mu.model,
-               {model_total_sql} as total_tokens
-        FROM model_usage mu
-        JOIN sessions s ON s.id = mu.session_id
-        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
-        GROUP BY mu.model
-        ORDER BY total_tokens DESC
-        LIMIT ?
-    """, (start_ts, end_ts, limit)).fetchall()
-    top_models = [r["model"] for r in top_rows]
-    top_set = set(top_models)
-
-    leaderboard_rows = conn.execute(f"""
+    model_rows = conn.execute(f"""
         SELECT mu.model,
                {model_total_sql} as total_tokens,
                COALESCE(SUM(mu.input_tokens),0) as input_tokens,
@@ -537,8 +546,30 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
         WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
         GROUP BY mu.model
         ORDER BY total_tokens DESC
-        LIMIT ?
-    """, (start_ts, end_ts, limit)).fetchall()
+    """, (start_ts, end_ts)).fetchall()
+
+    model_totals = {}
+    for row in model_rows:
+        model = normalize_model_name(row["model"])
+        acc = model_totals.setdefault(model, {
+            "model": model,
+            "total_tokens": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_tokens": 0,
+            "requests": 0,
+            "total_cost": 0.0,
+        })
+        acc["total_tokens"] += row["total_tokens"] or 0
+        acc["input_tokens"] += row["input_tokens"] or 0
+        acc["output_tokens"] += row["output_tokens"] or 0
+        acc["cache_tokens"] += row["cache_tokens"] or 0
+        acc["requests"] += row["requests"] or 0
+        acc["total_cost"] += row["total_cost"] or 0.0
+
+    top_rows = sorted(model_totals.values(), key=lambda r: r["total_tokens"], reverse=True)[:limit]
+    top_models = [r["model"] for r in top_rows]
+    top_set = set(top_models)
 
     total_row = conn.execute(f"""
         SELECT {model_total_sql} as total
@@ -564,7 +595,8 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
     grouped_by_model: dict[str, dict[str, dict]] = {}
     for row in grouped_rows:
         period_data = grouped_by_model.setdefault(row["period"], {})
-        model_data = period_data.setdefault(row["model"], {"tokens": 0, "cost": 0})
+        model = normalize_model_name(row["model"])
+        model_data = period_data.setdefault(model, {"tokens": 0, "cost": 0})
         model_data["tokens"] += row["tokens"]
         model_data["cost"] += row["cost"]
 
@@ -591,7 +623,7 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
         })
 
     leaderboard = []
-    for i, row in enumerate(leaderboard_rows):
+    for i, row in enumerate(top_rows):
         author = _author(row["model"])
         tokens = row["total_tokens"]
         tt = tokens
@@ -667,7 +699,7 @@ def api_token_cost():
     overall_cost = 0.0
     overall_tokens = 0
     for r in rows:
-        model = r["model"]
+        model = normalize_model_name(r["model"])
         billable = _row_billable_tokens(r)
         a = agg[model]
         a["cost"] += r["cost"]
@@ -708,10 +740,11 @@ def api_cache_ratio():
     conn = _db()
     rows = conn.execute("""
         SELECT s.source, mu.model,
-               mu.input_tokens, mu.cache_read_tokens, mu.cache_write_tokens
+               mu.input_tokens, mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens
         FROM model_usage mu
         JOIN sessions s ON s.id = mu.session_id
-        WHERE s.source != 'legacy' AND mu.cache_read_tokens > 0
+        WHERE s.source != 'legacy'
+          AND (mu.cache_read_tokens > 0 OR (mu.cache_tokens > 0 AND mu.cache_write_tokens = 0))
     """).fetchall()
     conn.close()
 
@@ -720,13 +753,15 @@ def api_cache_ratio():
     overall_input = 0
     overall_cache_read = 0
     for r in rows:
+        model = normalize_model_name(r["model"])
+        cache_read = _row_cache_read_tokens(r)
         eff_input = effective_cache_ratio_input(
-            r["source"], r["input_tokens"], r["cache_read_tokens"]
+            r["source"], r["input_tokens"], cache_read
         )
-        agg[r["model"]]["input"] += eff_input
-        agg[r["model"]]["cache_read"] += r["cache_read_tokens"]
+        agg[model]["input"] += eff_input
+        agg[model]["cache_read"] += cache_read
         overall_input += eff_input
-        overall_cache_read += r["cache_read_tokens"]
+        overall_cache_read += cache_read
 
     models = []
     for model, d in sorted(agg.items(), key=lambda x: x[1]["cache_read"] / max(1, x[1]["input"]), reverse=True):
@@ -767,7 +802,7 @@ def api_subscription_estimate():
     agg = defaultdict(lambda: {"cost": 0.0, "billable": 0, "requests": 0,
                                "raw_input": 0, "raw_output": 0, "raw_cache": 0})
     for r in rows:
-        model = r["model"]
+        model = normalize_model_name(r["model"])
         billable = _row_billable_tokens(r)
         a = agg[model]
         a["cost"] += r["cost"]
