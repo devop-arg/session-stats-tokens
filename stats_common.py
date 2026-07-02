@@ -1028,6 +1028,16 @@ def effective_billable_tokens(source, input_tokens, output_tokens,
     return total
 
 
+def effective_cache_read_tokens(cache_tokens=0, cache_read_tokens=0, cache_write_tokens=0):
+    """Cache read efectivo con fallback para filas legacy sin split read/write."""
+    cache_read_tokens = cache_read_tokens or 0
+    cache_write_tokens = cache_write_tokens or 0
+    cache_tokens = cache_tokens or 0
+    if cache_read_tokens == 0 and cache_write_tokens == 0 and cache_tokens > 0:
+        return cache_tokens
+    return cache_read_tokens
+
+
 def effective_cache_ratio_input(source, input_tokens, cache_read_tokens=0):
     """Input total considerado para el cálculo de cache ratio."""
     sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
@@ -1119,6 +1129,7 @@ def recalculate_historical_cost():
             session_keys,
         ).fetchall()
         for model, reqs, inp, out, cache, cache_read, cache_write in mrows:
+            effective_cache_read = effective_cache_read_tokens(cache, cache_read, cache_write)
             normalized = normalize_model_name(model)
             if normalized not in models_totals:
                 models_totals[normalized] = {
@@ -1130,22 +1141,23 @@ def recalculate_historical_cost():
             models_totals[normalized]["input"] += inp
             models_totals[normalized]["output"] += out
             models_totals[normalized]["cache"] += cache
-            models_totals[normalized]["cache_read"] += cache_read
+            models_totals[normalized]["cache_read"] += effective_cache_read
             models_totals[normalized]["cache_write"] += cache_write
 
         # Totales de sesión desde la tabla sessions
         srows_agg = conn.execute(
-            f"SELECT source, requests, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens "
+            f"SELECT source, requests, input_tokens, output_tokens, cache_tokens, cache_read_tokens, cache_write_tokens "
             f"FROM sessions WHERE id IN ({placeholders})",
             session_keys,
         ).fetchall()
-        for source, reqs, inp, out, cache_read, cache_write in srows_agg:
+        for source, reqs, inp, out, cache, cache_read, cache_write in srows_agg:
+            effective_cache_read = effective_cache_read_tokens(cache, cache_read, cache_write)
             total_requests += reqs
             total_input += inp
             total_output += out
-            total_tokens += effective_billable_tokens(source, inp, out, cache_read, cache_write)
-            cache_ratio_input += effective_cache_ratio_input(source, inp, cache_read)
-            total_cache_read += cache_read
+            total_tokens += effective_billable_tokens(source, inp, out, effective_cache_read, cache_write)
+            cache_ratio_input += effective_cache_ratio_input(source, inp, effective_cache_read)
+            total_cache_read += effective_cache_read
 
     conn.close()
 
