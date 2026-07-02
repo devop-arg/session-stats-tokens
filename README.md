@@ -82,6 +82,21 @@ python3 -c 'import stats_common; stats_common.init_db()'
 session-stats --capture-all
 ```
 
+### Cache Ratios en la Web
+
+El dashboard muestra dos métricas de cache con alcances distintos:
+
+- **Cache Ratio** del encabezado: ratio global histórico calculado con todas las
+  sesiones y la semántica de cache de cada fuente.
+- **Proporción de cache — modelos con cache**: ratio sólo sobre modelos/filas que
+  tuvieron `cache_read_tokens > 0`; sirve para comparar qué modelos aprovechan
+  más cache y puede ser mayor que el ratio global.
+
+En la tabla **Uso diario de modelos y costos**, cada modelo muestra `Cache`,
+`Ratio`, `Total` y `Costo`. El `Ratio` diario usa el mismo denominador semántico:
+si la fuente ya incluye cache en input no duplica esos tokens; si no lo incluye,
+usa input efectivo más cache read.
+
 ## Repository Strategy
 
 Este proyecto mantiene **dos remotos** con contenido diferente:

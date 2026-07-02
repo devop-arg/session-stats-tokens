@@ -227,6 +227,12 @@ a:hover { text-decoration: underline; }
 .today-model-ioc.c {
   color: #a78bfa;
 }
+.today-model-cache-ratio {
+  flex: 0 0 auto;
+  color: #c4b5fd;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 .today-model-cost {
   flex: 0 0 auto;
   color: var(--stats-text);

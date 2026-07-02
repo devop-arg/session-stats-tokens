@@ -278,6 +278,8 @@ def api_today_summary():
                COALESCE(SUM(mu.input_tokens),0) as input_tokens,
                COALESCE(SUM(mu.output_tokens),0) as output_tokens,
                COALESCE(SUM(mu.cache_tokens),0) as cache_tokens,
+               COALESCE(SUM(mu.cache_read_tokens),0) as cache_read_tokens,
+               {_sql_cache_ratio_input("s.source", "mu.input_tokens", "mu.cache_read_tokens")} as cache_ratio_input_tokens,
                {model_total_sql} as tokens
         FROM model_usage mu
         JOIN sessions s ON s.id = mu.session_id
@@ -299,6 +301,11 @@ def api_today_summary():
             "input_tokens": m["input_tokens"],
             "output_tokens": m["output_tokens"],
             "cache_tokens": m["cache_tokens"],
+            "cache_ratio": round(
+                (m["cache_read_tokens"] / m["cache_ratio_input_tokens"] * 100)
+                if m["cache_ratio_input_tokens"] > 0 else 0,
+                1,
+            ),
             "percent": round(m["tokens"] / total_tokens * 100, 1),
         })
 

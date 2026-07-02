@@ -114,6 +114,7 @@ if (document.querySelector('.stats-grid')) {
         var row = document.createElement('div');
         row.className = 'today-model-row';
         var barPct = m.percent;
+        var cacheRatio = typeof m.cache_ratio === 'number' ? m.cache_ratio : 0;
         row.innerHTML =
           '<span class="today-model-rank">' + String(i + 1).padStart(2, '0') + '</span>' +
           '<span class="today-model-name">' + displayModelName(m.model) + '</span>' +
@@ -123,6 +124,8 @@ if (document.querySelector('.stats-grid')) {
           '<span class="today-model-ioc o">Out ' + fmtTokens(m.output_tokens) + '</span>' +
           '<span class="today-model-sep">-</span>' +
           '<span class="today-model-ioc c">Cache ' + fmtTokens(m.cache_tokens) + '</span>' +
+          '<span class="today-model-sep">-</span>' +
+          '<span class="today-model-cache-ratio">Ratio ' + fmtPct(cacheRatio) + '</span>' +
           '<span class="today-model-sep">-</span>' +
           '<span class="today-model-total">Total ' + fmtTokens(m.tokens) + '</span>' +
           '<span class="today-model-sep">-</span>' +
