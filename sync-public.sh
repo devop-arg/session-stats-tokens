@@ -14,12 +14,18 @@ echo "=== 2. Checkout public (force) ==="
 git checkout public --force
 
 echo "=== 3. Merge main --no-commit ==="
-git merge main --no-commit
+git merge main --no-commit || true
 
 echo "=== 4. Excluir datos sensibles ==="
 git rm --cached session_history.json session_history.db session_history_legacy_freeze.json 2>/dev/null || true
 git rm --cached codex_sub_costs.json 2>/dev/null || true
 git rm --cached db_backups/session_history_*.db 2>/dev/null || true
+
+if git diff --name-only --diff-filter=U | grep -q .; then
+  echo "ERROR: quedan conflictos no resueltos después de excluir datos sensibles"
+  git diff --name-only --diff-filter=U
+  exit 1
+fi
 
 echo "=== 5. Commit merge ==="
 git commit --no-edit -m "$MSG"
