@@ -94,48 +94,80 @@ if (document.querySelector('.stats-grid')) {
 
   // --- Today Summary (hora Argentina) ---
   var todaySection = document.getElementById('today-section');
-  var todayStats = document.getElementById('today-stats');
   var todayModels = document.getElementById('today-models');
+  var todayRangeTabs = document.querySelectorAll('.today-range-tab');
+  var todayTitle = todaySection.querySelector('.section-title-sm');
+  var RANGE_LABELS = { today: 'Hoy', yesterday: 'Ayer', '48h': 'Últimas 48hs', '7d': 'Últimos 7 días' };
 
-  fetch('/api/today-summary')
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (!d || !d.top_models || d.top_models.length === 0) {
-        todaySection.classList.remove('has-data');
-        return;
-      }
-      todaySection.classList.add('has-data');
-      document.getElementById('today-tokens').textContent = fmt(d.total_tokens);
-      document.getElementById('today-requests').textContent = fmt(d.total_requests);
-      document.getElementById('today-cost').textContent = fmtCost(d.total_cost);
+  function loadTodaySummary(range) {
+    fetch('/api/today-summary?range=' + range)
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        if (!d || !d.top_models || d.top_models.length === 0) {
+          if (range === 'today') {
+            todayRangeTabs.forEach(function(t) {
+              t.removeAttribute('data-active');
+              t.setAttribute('aria-selected', 'false');
+            });
+            var yesterdayTab = todaySection.querySelector('[data-range="yesterday"]');
+            if (yesterdayTab) {
+              yesterdayTab.setAttribute('data-active', 'true');
+              yesterdayTab.setAttribute('aria-selected', 'true');
+            }
+            loadTodaySummary('yesterday');
+            return;
+          }
+          todaySection.classList.remove('has-data');
+          return;
+        }
+        todaySection.classList.add('has-data');
+        todayTitle.textContent = 'Uso de modelos y costos \u2014 ' + (RANGE_LABELS[range] || range);
+        document.getElementById('today-tokens').textContent = fmt(d.total_tokens);
+        document.getElementById('today-requests').textContent = fmt(d.total_requests);
+        document.getElementById('today-cost').textContent = fmtCost(d.total_cost);
 
-      todayModels.innerHTML = '';
-      d.top_models.forEach(function(m, i) {
-        var row = document.createElement('div');
-        row.className = 'today-model-row';
-        var barPct = m.percent;
-        var cacheRatio = typeof m.cache_ratio === 'number' ? m.cache_ratio : 0;
-        row.innerHTML =
-          '<span class="today-model-rank">' + String(i + 1).padStart(2, '0') + '</span>' +
-          '<span class="today-model-name">' + displayModelName(m.model) + '</span>' +
-          '<span class="today-model-reqs">' + fmt(m.requests) + ' req</span>' +
-          '<span class="today-model-ioc i">In ' + fmtTokens(m.input_tokens) + '</span>' +
-          '<span class="today-model-sep">-</span>' +
-          '<span class="today-model-ioc o">Out ' + fmtTokens(m.output_tokens) + '</span>' +
-          '<span class="today-model-sep">-</span>' +
-          '<span class="today-model-ioc c">Cache ' + fmtTokens(m.cache_tokens) + '</span>' +
-          '<span class="today-model-sep">-</span>' +
-          '<span class="today-model-cache-ratio">Ratio ' + fmtPct(cacheRatio) + '</span>' +
-          '<span class="today-model-sep">-</span>' +
-          '<span class="today-model-total">Total ' + fmtTokens(m.tokens) + '</span>' +
-          '<span class="today-model-sep">-</span>' +
-          '<span class="today-model-cost">Costo ' + fmtCost(m.cost) + '</span>' +
-          '<span class="today-model-sep">-</span>' +
-          '<span class="today-model-pct">' + barPct + '%</span>';
-        todayModels.appendChild(row);
+        todayModels.innerHTML = '';
+        d.top_models.forEach(function(m, i) {
+          var row = document.createElement('div');
+          row.className = 'today-model-row';
+          var barPct = m.percent;
+          var cacheRatio = typeof m.cache_ratio === 'number' ? m.cache_ratio : 0;
+          row.innerHTML =
+            '<span class="today-model-rank">' + String(i + 1).padStart(2, '0') + '</span>' +
+            '<span class="today-model-name">' + displayModelName(m.model) + '</span>' +
+            '<span class="today-model-reqs">' + fmt(m.requests) + ' req</span>' +
+            '<span class="today-model-ioc i">In ' + fmtTokens(m.input_tokens) + '</span>' +
+            '<span class="today-model-sep">-</span>' +
+            '<span class="today-model-ioc o">Out ' + fmtTokens(m.output_tokens) + '</span>' +
+            '<span class="today-model-sep">-</span>' +
+            '<span class="today-model-ioc c">Cache ' + fmtTokens(m.cache_tokens) + '</span>' +
+            '<span class="today-model-sep">-</span>' +
+            '<span class="today-model-cache-ratio">Ratio ' + fmtPct(cacheRatio) + '</span>' +
+            '<span class="today-model-sep">-</span>' +
+            '<span class="today-model-total">Total ' + fmtTokens(m.tokens) + '</span>' +
+            '<span class="today-model-sep">-</span>' +
+            '<span class="today-model-cost">Costo ' + fmtCost(m.cost) + '</span>' +
+            '<span class="today-model-sep">-</span>' +
+            '<span class="today-model-pct">' + barPct + '%</span>';
+          todayModels.appendChild(row);
+        });
+      })
+      .catch(function(err) { console.error('today-summary error:', err); });
+  }
+
+  loadTodaySummary('today');
+
+  todayRangeTabs.forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      todayRangeTabs.forEach(function(t) {
+        t.removeAttribute('data-active');
+        t.setAttribute('aria-selected', 'false');
       });
-    })
-    .catch(function(err) { console.error('today-summary error:', err); });
+      tab.setAttribute('data-active', 'true');
+      tab.setAttribute('aria-selected', 'true');
+      loadTodaySummary(tab.getAttribute('data-range'));
+    });
+  });
 
   // --- Top Models (12 meses semanal, colores por modelo) ---
   // 20 colores distinguibles para los top 20 modelos

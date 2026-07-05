@@ -265,9 +265,23 @@ def api_summary():
 
 
 @app.get("/api/today-summary")
-def api_today_summary():
-    """Métricas del día actual en hora Argentina (00:00 a 23:59 ART)."""
-    _, _, start_utc, end_utc = _art_day_bounds(_art_today())
+def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48h|7d)$")):
+    """Métricas de uso de modelos para un rango dado (hora Argentina)."""
+    now_utc = int(datetime.datetime.utcnow().timestamp())
+
+    if range == "today":
+        _, _, start_utc, end_utc = _art_day_bounds(_art_today())
+    elif range == "yesterday":
+        yesterday = _art_today() - datetime.timedelta(days=1)
+        _, _, start_utc, end_utc = _art_day_bounds(yesterday)
+    elif range == "48h":
+        start_utc = now_utc - 48 * 3600
+        end_utc = now_utc
+    elif range == "7d":
+        start_utc = now_utc - 7 * 86400
+        end_utc = now_utc
+    else:
+        _, _, start_utc, end_utc = _art_day_bounds(_art_today())
 
     conn = _db()
     session_total_sql = _sql_effective_tokens(
@@ -332,6 +346,7 @@ def api_today_summary():
         })
 
     return {
+        "range": range,
         "total_requests": sess["total_requests"],
         "total_tokens": total_tokens,
         "total_cost": round(sess["total_cost"], 4),

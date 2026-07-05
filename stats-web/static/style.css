@@ -154,6 +154,30 @@ a:hover { text-decoration: underline; }
 .today-section.has-data {
   display: block;
 }
+.today-range-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.today-range-tab {
+  color: var(--stats-faint);
+  background: transparent;
+  border: 1px solid var(--stats-line);
+  padding: 6px 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.today-range-tab:hover {
+  color: var(--stats-text);
+  border-color: var(--stats-line-strong);
+}
+.today-range-tab[data-active="true"] {
+  color: var(--stats-text);
+  background: var(--stats-layer-2);
+  border-color: var(--stats-line-strong);
+}
 .today-stats {
   display: flex;
   gap: 6px;

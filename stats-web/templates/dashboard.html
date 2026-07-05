@@ -32,7 +32,13 @@
 </div>
 
 <section class="today-section" id="today-section">
-  <h2 class="section-title-sm">Uso diario de modelos y costos</h2>
+  <h2 class="section-title-sm">Uso de modelos y costos</h2>
+  <div class="today-range-tabs" role="tablist" aria-label="Rango de tiempo">
+    <button type="button" class="today-range-tab" data-range="today" data-active="true" role="tab" aria-selected="true">Hoy</button>
+    <button type="button" class="today-range-tab" data-range="yesterday" role="tab" aria-selected="false">Ayer</button>
+    <button type="button" class="today-range-tab" data-range="48h" role="tab" aria-selected="false">48hs</button>
+    <button type="button" class="today-range-tab" data-range="7d" role="tab" aria-selected="false">7 días</button>
+  </div>
   <div class="today-stats" id="today-stats">
     <div class="today-stat">
       <div class="today-stat-label">Tokens Totales</div>
