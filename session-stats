@@ -332,12 +332,12 @@ def merge_model_stats(by_model):
         merged[normalized]["cache_write"] += data.get("cache_write", 0)
     return merged
 
-def update_history(session_id, requests, input_tokens, output_tokens, cost, by_model, date=None):
+def update_history(session_id, requests, input_tokens, output_tokens, cost, by_model, date=None, source=None):
     """Saves session to SQLite history (read-only from SQLite store)."""
     ts = _parse_timestamp(date) if date else int(datetime.datetime.now().timestamp())
     cache_tokens = sum(m.get("cache", 0) for m in by_model.values())
     reasoning_tokens = sum(m.get("reasoning", 0) for m in by_model.values())
-    source = _detect_source(session_id)
+    source = source or _detect_source(session_id)
     try:
         save_session(session_id, source, date or datetime.datetime.now().isoformat(),
                      ts, requests, input_tokens, output_tokens,
@@ -364,7 +364,7 @@ def capture_all_sessions():
 
     new_count = 0
 
-    def _save_if_new(sid, entry):
+    def _save_if_new(sid, entry, source=None):
         nonlocal new_count
         if not entry:
             return
@@ -378,7 +378,7 @@ def capture_all_sessions():
             cache_tokens = sum(m.get("cache", 0) for m in by_model.values())
             reasoning_tokens = sum(m.get("reasoning", 0) for m in by_model.values())
             save_session(
-                sid, _detect_source(sid),
+                sid, source or _detect_source(sid),
                 entry.get("date", ""), ts,
                 entry.get("requests", 0),
                 entry.get("input", 0),
@@ -399,7 +399,7 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid)
         if stats["by_model"]:
-            _save_if_new(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000))
+            _save_if_new(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000), source="kilo")
 
     # --- OpenCode SQLite ---
     for sess in get_opencode_sessions():
@@ -620,7 +620,7 @@ def main():
     # Guardar sesión actual en historial (para tracking)
     update_history(
         session_id, total_requests, total_input, total_output, 
-        total_session_cost, by_model_with_cost, date=session_date
+        total_session_cost, by_model_with_cost, date=session_date, source=source
     )
     
     # Recalcular TODO desde tokens (misma lógica que session-stats-history)
