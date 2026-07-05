@@ -423,6 +423,15 @@ if (document.querySelector('.stats-grid')) {
         renderLeaderboard(leaderboardContainer, leaders, toggleModel);
         syncHighlightState();
 
+        var sc = config.statsContainerId ? document.getElementById(config.statsContainerId) : null;
+        if (sc && data.total_cost != null) {
+          sc.querySelector('[data-stat-30d="total-cost"]').textContent = fmtCost(data.total_cost);
+          sc.querySelector('[data-stat-30d="total-tokens"]').textContent = fmt(data.total_tokens);
+          sc.querySelector('[data-stat-30d="total-sessions"]').textContent = fmt(data.total_sessions);
+          sc.querySelector('[data-stat-30d="cache-ratio"]').textContent = fmtPct(data.cache_ratio);
+          sc.querySelector('[data-stat-30d="total-requests"]').textContent = fmt(data.total_requests);
+        }
+
         if (yAxisEl) {
           yAxisEl.innerHTML = '';
           var maxVal = maxTotal;
@@ -453,7 +462,8 @@ if (document.querySelector('.stats-grid')) {
     yAxisId: 'top-models-30d-y-axis',
     leaderboardId: 'top-models-30d-leaderboard',
     endpoint: '/api/top-models-30d',
-    rangeKey: '30D'
+    rangeKey: '30D',
+    statsContainerId: 'thirty-stats'
   });
 
   createTopModelsSection({

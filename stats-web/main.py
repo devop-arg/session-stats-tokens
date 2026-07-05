@@ -590,6 +590,18 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
         ORDER BY period ASC
     """, (start_ts, end_ts)).fetchall()
 
+    agg = conn.execute(f"""
+        SELECT COUNT(DISTINCT s.id) as sessions,
+               COALESCE(SUM(mu.requests),0) as requests,
+               COALESCE(SUM(mu.cost),0) as cost,
+               {_sql_effective_tokens('s.source','mu.input_tokens','mu.output_tokens','mu.cache_tokens','mu.cache_read_tokens','mu.cache_write_tokens')} as tokens,
+               {_sql_cache_ratio_input('s.source','mu.input_tokens','mu.cache_tokens','mu.cache_read_tokens','mu.cache_write_tokens')} as cache_input,
+               COALESCE(SUM({_sql_effective_cache_read('mu.cache_tokens','mu.cache_read_tokens','mu.cache_write_tokens')}),0) as cache_read
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
+    """, (start_ts, end_ts)).fetchone()
+
     conn.close()
 
     grouped_by_model: dict[str, dict[str, dict]] = {}
@@ -649,6 +661,11 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
         },
         "leaderboard": leaderboard,
         "topModels": top_models,
+        "total_cost": round(agg["cost"], 2),
+        "total_tokens": agg["tokens"],
+        "total_sessions": agg["sessions"],
+        "total_requests": agg["requests"],
+        "cache_ratio": round((agg["cache_read"] / agg["cache_input"] * 100) if agg["cache_input"] > 0 else 0, 1),
     }
 
 

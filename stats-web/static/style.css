@@ -103,14 +103,14 @@ a:hover { text-decoration: underline; }
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
+  gap: 4px;
   padding: 20px 0;
 }
 .stat-card {
   background: var(--stats-layer);
   border: 1px solid var(--stats-line);
   padding: 8px 10px;
-  display: flex; flex-direction: column; gap: 1px;
+  display: flex; flex-direction: column; gap: 1px; align-items: center; text-align: center;
 }
 .stat-card:hover { border-color: var(--stats-line-strong); }
 .stat-card.accent { border-color: var(--stats-accent); }
