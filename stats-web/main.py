@@ -417,6 +417,18 @@ def api_timeseries_sources(
 
 @app.get("/api/models")
 def api_models(limit: int = Query(20, ge=1, le=200)):
+    # Cargar aliases para unificar variantes (p.ej. tencent-hy3, tencent/hy3:free -> tencent/hy3)
+    aliases = {}
+    if MODEL_ALIASES_PATH.exists():
+        try:
+            aliases = _json.loads(MODEL_ALIASES_PATH.read_text())
+        except Exception:
+            pass
+
+    def canon_model(raw: str) -> str:
+        n = normalize_model_name(raw)
+        return aliases.get(n, n)
+
     conn = _db()
     rows = conn.execute("""
         SELECT mu.model,
@@ -429,17 +441,38 @@ def api_models(limit: int = Query(20, ge=1, le=200)):
         JOIN sessions s ON s.id = mu.session_id
         WHERE s.source != 'legacy'
         GROUP BY mu.model
-        ORDER BY cost DESC
-        LIMIT ?
-    """, (limit,)).fetchall()
+    """, ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+
+    # Reagrupar por nombre canónico (aplica normalize + aliases) sin mutar la DB
+    agg = {}
+    for r in rows:
+        key = canon_model(r["model"])
+        bucket = agg.setdefault(key, {
+            "model": key,
+            "requests": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_tokens": 0,
+            "cost": 0.0,
+        })
+        bucket["requests"] += r["requests"]
+        bucket["input_tokens"] += r["input_tokens"]
+        bucket["output_tokens"] += r["output_tokens"]
+        bucket["cache_tokens"] += r["cache_tokens"]
+        bucket["cost"] += r["cost"]
+
+    result = sorted(agg.values(), key=lambda m: m["cost"], reverse=True)
+    if limit:
+        result = result[:limit]
+    return result
 
 
 class SaveModelPriceRequest(BaseModel):
     model: str
     field: str
     value: float | None
+    create: bool = False
 
 
 def _backup_model_files():
@@ -489,9 +522,6 @@ def api_save_model_price(req: SaveModelPriceRequest):
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
 
-    if req.model not in costs:
-        return JSONResponse({"success": False, "error": f"Model '{req.model}' not found"}, status_code=404)
-
     if req.field not in ("input", "output", "cache"):
         return JSONResponse({"success": False, "error": f"Invalid field '{req.field}'"}, status_code=400)
 
@@ -505,8 +535,19 @@ def api_save_model_price(req: SaveModelPriceRequest):
         if name == req.model:
             canonical_name = name
             break
+
+    # Crear modelo nuevo si no existe (permite dar de alta modelos huérfanos)
+    created = False
     if not canonical_name:
-        return JSONResponse({"success": False, "error": "Model not found in costs"}, status_code=404)
+        if req.create is not True:
+            return JSONResponse({"success": False, "error": f"Model '{req.model}' not found"}, status_code=404)
+        if req.field not in ("input", "output"):
+            return JSONResponse({"success": False, "error": "Para crear un modelo se requiere input y output"}, status_code=400)
+        if req.value is None:
+            return JSONResponse({"success": False, "error": "input and output cannot be null"}, status_code=400)
+        canonical_name = req.model
+        costs[canonical_name] = {}
+        created = True
 
     if req.value is None:
         if req.field == "cache":
@@ -524,6 +565,63 @@ def api_save_model_price(req: SaveModelPriceRequest):
         return {"success": True, "model": req.model, "field": req.field, "value": req.value}
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/model-prices/orphans")
+def api_model_price_orphans():
+    """Modelos usados en la DB que aún no tienen precio ni son target de un alias.
+
+    Reutiliza la misma noción que el CLI session-stats-models: modelos en
+    model_usage que no aparecen en model_costs.json ni como destino de un alias.
+    """
+    costs = {}
+    if MODEL_COSTS_PATH.exists():
+        try:
+            costs = _json.loads(MODEL_COSTS_PATH.read_text())
+        except Exception:
+            pass
+    aliases = {}
+    if MODEL_ALIASES_PATH.exists():
+        try:
+            aliases = _json.loads(MODEL_ALIASES_PATH.read_text())
+        except Exception:
+            pass
+
+    alias_targets = set(aliases.values())
+    priced = set(costs.keys()) | alias_targets
+
+    orphans = []
+    conn = _db()
+    rows = conn.execute("""
+        SELECT mu.model,
+               COALESCE(SUM(mu.requests),0) as requests,
+               COALESCE(SUM(mu.cost),0) as cost
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy'
+        GROUP BY mu.model
+    """).fetchall()
+    conn.close()
+
+    for r in rows:
+        canon = normalize_model_name(r["model"])
+        if canon in priced:
+            continue
+        orphans.append({
+            "model": r["model"],
+            "canonical": canon,
+            "requests": r["requests"],
+            "cost": r["cost"],
+        })
+
+    # Deduplicar por canónico, sumando requests/cost
+    agg = {}
+    for o in orphans:
+        b = agg.setdefault(o["canonical"], {"model": o["model"], "canonical": o["canonical"], "requests": 0, "cost": 0.0})
+        b["requests"] += o["requests"]
+        b["cost"] += o["cost"]
+    result = sorted(agg.values(), key=lambda x: x["cost"], reverse=True)
+    return result
 
 
 @app.get("/api/model-prices/recalculate")
