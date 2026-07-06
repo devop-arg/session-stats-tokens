@@ -569,10 +569,11 @@ def api_save_model_price(req: SaveModelPriceRequest):
 
 @app.get("/api/model-prices/orphans")
 def api_model_price_orphans():
-    """Modelos usados en la DB que aún no tienen precio ni son target de un alias.
+    """Modelos usados en la DB que aún no tienen precio en model_costs.json.
 
-    Reutiliza la misma noción que el CLI session-stats-models: modelos en
-    model_usage que no aparecen en model_costs.json ni como destino de un alias.
+    Un modelo es huérfano si no aparece como clave en model_costs.json, sin
+    importar si es destino de un alias (un alias puede apuntar a un modelo que
+    todavía no tiene precio, p.ej. tencent/hy3 es target de tencent/hy3:free).
     """
     costs = {}
     if MODEL_COSTS_PATH.exists():
@@ -587,8 +588,7 @@ def api_model_price_orphans():
         except Exception:
             pass
 
-    alias_targets = set(aliases.values())
-    priced = set(costs.keys()) | alias_targets
+    priced = set(costs.keys())
 
     orphans = []
     conn = _db()

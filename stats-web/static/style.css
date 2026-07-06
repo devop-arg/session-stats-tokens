@@ -1591,3 +1591,97 @@ td .model-name { color: var(--stats-text); font-weight: 500; }
   color: var(--stats-faint);
   display: none;
 }
+
+/* --- Panel Agregar modelo --- */
+.add-model-panel {
+  margin: 14px 0 4px;
+  padding: 18px 20px;
+  background: var(--stats-layer);
+  border: 1px solid var(--stats-line);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+  animation: addPanelIn 0.15s ease-out;
+}
+@keyframes addPanelIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.add-model-panel label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--stats-muted);
+  display: block;
+  margin-bottom: 5px;
+}
+.add-model-panel select,
+.add-model-panel input[type="text"],
+.add-model-panel input[type="number"] {
+  width: 100%;
+  padding: 9px 11px;
+  background: var(--stats-bg);
+  border: 1px solid var(--stats-line-strong);
+  border-radius: 8px;
+  color: var(--stats-text);
+  font-size: 13px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.add-model-panel select:focus,
+.add-model-panel input:focus {
+  outline: none;
+  border-color: var(--stats-accent);
+  box-shadow: 0 0 0 3px rgba(59,92,246,0.25);
+}
+.add-model-prices {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.add-model-prices label {
+  margin-bottom: 0;
+}
+.add-model-prices label input {
+  margin-top: 5px;
+}
+.add-model-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.btn-primary {
+  background: var(--stats-accent);
+  color: #fff;
+  border: none;
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.05s;
+}
+.btn-primary:hover { filter: brightness(1.1); }
+.btn-primary:active { transform: translateY(1px); }
+.btn-secondary {
+  background: var(--stats-layer-2);
+  color: var(--stats-text);
+  border: 1px solid var(--stats-line-strong);
+  padding: 9px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.05s;
+}
+.btn-secondary:hover { background: var(--stats-line); }
+.btn-secondary:active { transform: translateY(1px); }
+#add-model-btn {
+  background: var(--stats-accent);
+  color: #fff;
+  border: none;
+}
+#add-model-btn:hover { filter: brightness(1.1); }
+

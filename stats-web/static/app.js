@@ -1215,10 +1215,11 @@ if (document.getElementById('models-tbody')) {
       var inp = parseFloat(inEl.value);
       var out = parseFloat(outEl.value);
       var cache = cacheEl.value === '' ? null : parseFloat(cacheEl.value);
+      badge.style.display = 'none';
       badge.style.color = 'var(--stats-faint)';
-      if (!model) { badge.textContent = '⚠ Elegí un modelo'; return; }
-      if (isNaN(inp) || isNaN(out)) { badge.textContent = '⚠ Input y Output requeridos'; return; }
-      if (cache !== null && isNaN(cache)) { badge.textContent = '⚠ Cache inválido'; return; }
+      if (!model) { badge.style.display = 'inline'; badge.textContent = '⚠ Elegí un modelo'; return; }
+      if (isNaN(inp) || isNaN(out)) { badge.style.display = 'inline'; badge.textContent = '⚠ Input y Output requeridos'; return; }
+      if (cache !== null && isNaN(cache)) { badge.style.display = 'inline'; badge.textContent = '⚠ Cache inválido'; return; }
 
       // Crear input y luego output (y cache si corresponde) vía save con create:true
       function doCreate(field, value, done) {
@@ -1230,9 +1231,9 @@ if (document.getElementById('models-tbody')) {
           .then(function(res) { done(res); });
       }
       doCreate('input', inp, function(res1) {
-        if (!res1.ok) { badge.style.color = 'var(--stats-danger, #f55)'; badge.textContent = '✗ ' + (res1.j.error || 'error input'); return; }
+        if (!res1.ok) { badge.style.display = 'inline'; badge.style.color = 'var(--stats-danger, #f55)'; badge.textContent = '✗ ' + (res1.j.error || 'error input'); return; }
         doCreate('output', out, function(res2) {
-          if (!res2.ok) { badge.style.color = 'var(--stats-danger, #f55)'; badge.textContent = '✗ ' + (res2.j.error || 'error output'); return; }
+          if (!res2.ok) { badge.style.display = 'inline'; badge.style.color = 'var(--stats-danger, #f55)'; badge.textContent = '✗ ' + (res2.j.error || 'error output'); return; }
           if (cache !== null) {
             doCreate('cache', cache, function() { finishCreate(); });
           } else {
@@ -1241,6 +1242,7 @@ if (document.getElementById('models-tbody')) {
         });
       });
       function finishCreate() {
+        badge.style.display = 'inline';
         badge.style.color = 'var(--stats-ok, #0c0)';
         badge.textContent = '✓ ' + model + ' creado';
         nameInput.value = '';
