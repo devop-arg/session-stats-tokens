@@ -1,11 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1 class="section-title"><strong>Modelos.</strong> Ranking de modelos por costo. Datos agregados de todas las fuentes.</h1>
+  <h1 class="section-title"><strong>Modelos.</strong> Ranking de modelos por costo. Precios editables.</h1>
+  <div class="model-prices-actions">
+    <button type="button" id="recalc-historical-btn" class="btn-secondary">Recalcular costos históricos</button>
+    <span id="recalc-badge" class="badge-msg"></span>
+    <span id="save-global-badge" class="badge-msg"></span>
+  </div>
 </section>
 
+<div class="sort-controls" role="group" aria-label="Ordenar tabla modelos">
+  <span class="sort-label">Ordenar:</span>
+  <button type="button" class="sort-btn" data-sort="cost" data-active="true" aria-pressed="true">Costo</button>
+  <button type="button" class="sort-btn" data-sort="total" aria-pressed="false">Total tokens</button>
+  <button type="button" class="sort-btn" data-sort="requests" aria-pressed="false">Requests</button>
+  <button type="button" class="sort-btn" data-sort="name" aria-pressed="false">Modelo</button>
+  <button type="button" class="sort-btn" data-sort-dir="desc" data-active="true" aria-pressed="true">↓</button>
+</div>
+
 <div class="table-wrap">
-  <table>
+  <table id="models-table">
     <thead>
       <tr>
         <th>#</th>
@@ -16,10 +30,14 @@
         <th class="num">Cache</th>
         <th class="num">Total</th>
         <th class="num">Costo</th>
+        <th class="num price-col">Input</th>
+        <th class="num price-col">Output</th>
+        <th class="num price-col">Cache</th>
+        <th class="price-col"></th>
       </tr>
     </thead>
     <tbody id="models-tbody">
-      <tr><td colspan="8" class="loading-row">Cargando...</td></tr>
+      <tr><td colspan="12" class="loading-row">Cargando...</td></tr>
     </tbody>
   </table>
 </div>

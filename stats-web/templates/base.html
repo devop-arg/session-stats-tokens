@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=8">
+<link rel="stylesheet" href="/static/style.css?v=17">
 <script src="/vendor/chart.umd.min.js"></script>
 </head>
 <body>
@@ -17,12 +17,18 @@
       <span class="brand-mark">S</span>
       <span class="brand-name">session-stats</span>
     </a>
-    <nav class="nav">
+    <button class="menu-toggle" id="menu-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-nav">
+      <span class="menu-toggle-bar"></span>
+      <span class="menu-toggle-bar"></span>
+      <span class="menu-toggle-bar"></span>
+    </button>
+    <nav class="nav" id="main-nav" role="navigation">
       <a href="/" class="nav-link{% if request.url.path == '/' %} active{% endif %}">Dashboard</a>
       <a href="/sessions" class="nav-link{% if request.url.path == '/sessions' %} active{% endif %}">Sesiones</a>
       <a href="/models" class="nav-link{% if request.url.path == '/models' %} active{% endif %}">Modelos</a>
       <a href="/costos" class="nav-link{% if request.url.path == '/costos' %} active{% endif %}">Costos</a>
     </nav>
+    <div class="nav-overlay" id="nav-overlay"></div>
   </div>
 </header>
 <main class="container main-content">
@@ -39,6 +45,11 @@
     </div>
   </div>
 </footer>
-<script src="/static/app.js?v=12"></script>
+<button class="scroll-top" id="scroll-top" aria-label="Volver arriba">
+  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+    <path d="M10 16V4M10 4L4 10M10 4L16 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+</button>
+<script src="/static/app.js?v=20"></script>
 </body>
 </html>

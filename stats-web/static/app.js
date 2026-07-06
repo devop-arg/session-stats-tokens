@@ -895,29 +895,315 @@ if (document.getElementById('sessions-tbody')) {
   loadSessions();
 }
 
-// --- Models page ---
+// --- Models page with sort + edit button ---
 if (document.getElementById('models-tbody')) {
-  fetch('/api/models?limit=200')
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      var tbody = document.getElementById('models-tbody');
-      tbody.innerHTML = '';
+  var MODEL_COLORS = ['#ff8904','#ffb900','#00bc7d','#00d3f2','#51a2ff','#7c86ff','#ed6aff','#ff5e5e','#9ae600','#c77dff','#ffd23f','#00d5be','#a684ff','#f15bb5','#7fb069','#ff073a','#0eb7c0','#b8d12a','#ff6b9d','#8b5cf6'];
+  var modelPrices = {};
+  var modelsData = [];
+  var sortField = 'cost';
+  var sortDir = -1; // -1 = desc
 
-      data.forEach(function(m, i) {
-        var tr = document.createElement('tr');
-        var totalT = (m.input_tokens || 0) + (m.output_tokens || 0) + (m.cache_tokens || 0);
-        tr.innerHTML =
-          '<td class="num"><span class="rank' + (i < 3 ? ' top-3' : '') + '">' + (i + 1) + '</span></td>' +
-          '<td><span class="model-name">' + m.model + '</span></td>' +
-          '<td class="num">' + fmt(m.requests) + '</td>' +
-          '<td class="num">' + fmt(m.input_tokens) + '</td>' +
-          '<td class="num">' + fmt(m.output_tokens) + '</td>' +
-          '<td class="num">' + fmt(m.cache_tokens) + '</td>' +
-          '<td class="num">' + fmt(totalT) + '</td>' +
-          '<td class="num">' + fmtCost(m.cost) + '</td>';
-        tbody.appendChild(tr);
+  function loadModelPrices() {
+    return fetch('/api/model-prices')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        modelPrices = {};
+        data.forEach(function(p) { modelPrices[p.model] = p; });
       });
+  }
+
+  function escHtml(s) {
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function modelSortCompare(a, b) {
+    var av, bv;
+    if (sortField === 'name') {
+      av = (a.model || '').toLowerCase();
+      bv = (b.model || '').toLowerCase();
+      return av < bv ? -sortDir : av > bv ? sortDir : 0;
+    }
+    if (sortField === 'total') {
+      av = (a.input_tokens || 0) + (a.output_tokens || 0) + (a.cache_tokens || 0);
+      bv = (b.input_tokens || 0) + (b.output_tokens || 0) + (b.cache_tokens || 0);
+    } else if (sortField === 'requests') {
+      av = a.requests || 0;
+      bv = b.requests || 0;
+    } else {
+      av = a.cost || 0;
+      bv = b.cost || 0;
+    }
+    return av < bv ? -sortDir : av > bv ? sortDir : 0;
+  }
+
+  function renderModels() {
+    var sorted = modelsData.slice().sort(modelSortCompare);
+    var tbody = document.getElementById('models-tbody');
+    tbody.innerHTML = '';
+    sorted.forEach(function(m, i) {
+      var totalT = (m.input_tokens || 0) + (m.output_tokens || 0) + (m.cache_tokens || 0);
+      var price = modelPrices[m.model] || {};
+      var inpPrice = price.input;
+      var outPrice = price.output;
+      var cachePrice = price.cache;
+      var hasPrice = modelPrices.hasOwnProperty(m.model);
+      var colorIdx = i % MODEL_COLORS.length;
+      var dotColor = MODEL_COLORS[colorIdx];
+
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-model', m.model);
+      tr.innerHTML =
+        '<td class="num"><span class="rank' + (i < 3 ? ' top-3' : '') + '">' + (i + 1) + '</span></td>' +
+        '<td><span class="model-color-dot" style="background:' + dotColor + '"></span><span class="model-name">' + escHtml(m.model) + '</span></td>' +
+        '<td class="num">' + fmt(m.requests) + '</td>' +
+        '<td class="num col-input">' + fmt(m.input_tokens) + '</td>' +
+        '<td class="num col-output">' + fmt(m.output_tokens) + '</td>' +
+        '<td class="num col-cache">' + fmt(m.cache_tokens) + '</td>' +
+        '<td class="num col-total">' + fmt(totalT) + '</td>' +
+        '<td class="num col-cost">' + fmtCost(m.cost) + '</td>' +
+        '<td class="num price-cell">' + formatPriceDisplay(inpPrice) + '</td>' +
+        '<td class="num price-cell">' + formatPriceDisplay(outPrice) + '</td>' +
+        '<td class="num price-cell">' + formatPriceDisplay(cachePrice) + '</td>' +
+        '<td class="action-cell"><button type="button" class="btn-edit" data-action="edit">Editar</button></td>';
+      tbody.appendChild(tr);
     });
+
+    tbody.querySelectorAll('.btn-edit').forEach(function(btn) {
+      btn.addEventListener('click', onEditClick);
+    });
+  }
+
+  function formatPriceDisplay(val) {
+    if (val == null) return '<span class="no-price">—</span>';
+    return '<span class="price-value">' + val.toFixed(4) + '</span>';
+  }
+
+  function onEditClick(e) {
+    var btn = e.target;
+    var tr = btn.closest('tr');
+    var model = tr.getAttribute('data-model');
+    var price = modelPrices[model] || {};
+    var origInp = price.input != null ? price.input.toString() : '';
+    var origOut = price.output != null ? price.output.toString() : '';
+    var origCache = price.cache != null ? price.cache.toString() : '';
+
+    var cells = tr.querySelectorAll('.price-cell');
+    cells.forEach(function(td, idx) {
+      var field = idx === 0 ? 'input' : (idx === 1 ? 'output' : 'cache');
+      var origVal = idx === 0 ? origInp : (idx === 1 ? origOut : origCache);
+      td.innerHTML = '<span class="editable-price" contenteditable="true" data-field="' + field + '" data-original="' + origVal + '">' + (origVal || '') + '</span>';
+      td.classList.add('price-cell-editing');
+    });
+
+    btn.textContent = 'Guardar';
+    btn.setAttribute('data-action', 'save');
+    btn.classList.remove('btn-edit');
+    btn.classList.add('btn-save');
+
+    var cancelBtn = document.createElement('button');
+    cancelBtn.type = 'button';
+    cancelBtn.className = 'btn-cancel';
+    cancelBtn.textContent = 'Cancelar';
+    cancelBtn.addEventListener('click', function() { onCancelEdit(tr, model); });
+    btn.parentElement.appendChild(cancelBtn);
+
+    btn.removeEventListener('click', onEditClick);
+    btn.addEventListener('click', function() { onSaveRow(tr, model); });
+  }
+
+  function onCancelEdit(tr, model) {
+    var price = modelPrices[model] || {};
+    var cells = tr.querySelectorAll('.price-cell');
+    cells[0].innerHTML = formatPriceDisplay(price.input);
+    cells[1].innerHTML = formatPriceDisplay(price.output);
+    cells[2].innerHTML = formatPriceDisplay(price.cache);
+    cells.forEach(function(td) { td.classList.remove('price-cell-editing'); });
+
+    var actionCell = tr.querySelector('.action-cell');
+    var saveBtn = actionCell.querySelector('.btn-save');
+    var cancelBtn = actionCell.querySelector('.btn-cancel');
+    if (cancelBtn) cancelBtn.remove();
+    if (saveBtn) {
+      saveBtn.textContent = 'Editar';
+      saveBtn.setAttribute('data-action', 'edit');
+      saveBtn.classList.remove('btn-save');
+      saveBtn.classList.add('btn-edit');
+      saveBtn.removeEventListener('click', onSaveRow);
+      saveBtn.addEventListener('click', onEditClick);
+    }
+  }
+
+  function onSaveRow(tr, model) {
+    var cells = tr.querySelectorAll('.price-cell');
+    var fields = ['input', 'output', 'cache'];
+    var originals = {};
+    var newValues = {};
+    var hasChanges = false;
+
+    var price = modelPrices[model] || {};
+    originals.input = price.input != null ? price.input.toString() : '';
+    originals.output = price.output != null ? price.output.toString() : '';
+    originals.cache = price.cache != null ? price.cache.toString() : '';
+
+    cells.forEach(function(td, idx) {
+      var el = td.querySelector('.editable-price');
+      var field = fields[idx];
+      var raw = el.textContent.trim();
+      var orig = el.getAttribute('data-original');
+      newValues[field] = raw;
+      if (raw !== orig) hasChanges = true;
+    });
+
+    if (!hasChanges) {
+      onCancelEdit(tr, model);
+      return;
+    }
+
+    var actionCell = tr.querySelector('.action-cell');
+    var saveBtn = actionCell.querySelector('.btn-save');
+    var cancelBtn = actionCell.querySelector('.btn-cancel');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Guardando...';
+
+    var promises = [];
+    fields.forEach(function(field) {
+      var raw = newValues[field];
+      var orig = originals[field];
+      if (raw === orig) return;
+      var value = raw !== '' ? parseFloat(raw) : null;
+      if (raw !== '' && (isNaN(value) || value < 0)) {
+        showSaveFeedback(cells[fields.indexOf(field)], 'invalid', 'Número inválido');
+        return;
+      }
+      promises.push(
+        fetch('/api/model-prices/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: model, field: field, value: value })
+        }).then(function(r) { return r.json(); })
+      );
+    });
+
+    if (promises.length === 0) {
+      onCancelEdit(tr, model);
+      return;
+    }
+
+    Promise.all(promises).then(function(results) {
+      var allOk = results.every(function(r) { return r.success; });
+      if (allOk) {
+        fields.forEach(function(field) {
+          var raw = newValues[field];
+          if (raw !== originals[field]) {
+            if (!modelPrices[model]) modelPrices[model] = { model: model };
+            modelPrices[model][field] = raw !== '' ? parseFloat(raw) : null;
+          }
+        });
+        var badge = document.getElementById('save-global-badge');
+        if (badge) { badge.textContent = '✓ guardado'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-pos)'; }
+        setTimeout(function() { if (badge) badge.style.display = 'none'; }, 2000);
+        onCancelEdit(tr, model);
+      } else {
+        var err = results.find(function(r) { return !r.success; });
+        showSaveFeedback(cells[0], 'error', 'Error: ' + (err ? err.error : 'desconocido'));
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Guardar';
+      }
+    }).catch(function() {
+      showSaveFeedback(cells[0], 'error', 'Error de red');
+      saveBtn.disabled = false;
+      saveBtn.textContent = 'Guardar';
+    });
+  }
+
+  function showSaveFeedback(td, type, msg) {
+    var existing = td.querySelector('.save-feedback');
+    if (existing) existing.remove();
+    var fb = document.createElement('span');
+    fb.className = 'save-feedback save-feedback--' + type;
+    fb.textContent = msg;
+    td.style.position = 'relative';
+    td.appendChild(fb);
+    setTimeout(function() { fb.remove(); }, 2500);
+  }
+
+  // Sort controls
+  document.querySelectorAll('.sort-btn[data-sort]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var field = btn.getAttribute('data-sort');
+      if (sortField === field) {
+        sortDir = sortDir === -1 ? 1 : -1;
+      } else {
+        sortField = field;
+        sortDir = field === 'name' ? 1 : -1;
+      }
+      document.querySelectorAll('.sort-btn[data-sort]').forEach(function(b) {
+        b.removeAttribute('data-active');
+        b.setAttribute('aria-pressed', 'false');
+      });
+      btn.setAttribute('data-active', 'true');
+      btn.setAttribute('aria-pressed', 'true');
+      var dirBtn = document.querySelector('.sort-btn[data-sort-dir]');
+      if (dirBtn) {
+        dirBtn.textContent = sortDir === -1 ? '↓' : '↑';
+        dirBtn.setAttribute('data-active', 'true');
+        dirBtn.setAttribute('aria-pressed', 'true');
+      }
+      renderModels();
+    });
+  });
+
+  var dirBtnEl = document.querySelector('.sort-btn[data-sort-dir]');
+  if (dirBtnEl) {
+    dirBtnEl.addEventListener('click', function() {
+      sortDir = sortDir === -1 ? 1 : -1;
+      this.textContent = sortDir === -1 ? '↓' : '↑';
+      renderModels();
+    });
+  }
+
+  Promise.all([
+    fetch('/api/models?limit=200').then(function(r) { return r.json(); }),
+    loadModelPrices()
+  ]).then(function(results) {
+    modelsData = results[0];
+    renderModels();
+  });
+}
+
+// --- Recalculate historical costs button ---
+if (document.getElementById('recalc-historical-btn')) {
+  document.getElementById('recalc-historical-btn').addEventListener('click', function() {
+    var btn = this;
+    var badge = document.getElementById('recalc-badge');
+    btn.disabled = true;
+    btn.textContent = 'Recalculando...';
+    badge.style.display = 'inline';
+    badge.textContent = '⌛';
+    badge.style.color = 'var(--stats-faint)';
+    fetch('/api/model-prices/recalculate')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success) {
+          badge.textContent = '✓ ' + data.updated + ' costos recalculados';
+          badge.style.color = 'var(--stats-pos)';
+        } else {
+          badge.textContent = 'Error: ' + (data.error || 'desconocido');
+          badge.style.color = 'var(--stats-neg)';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Recalcular costos históricos';
+        setTimeout(function() { badge.style.display = 'none'; }, 4000);
+      })
+      .catch(function() {
+        badge.textContent = 'Error de red';
+        badge.style.color = 'var(--stats-neg)';
+        btn.disabled = false;
+        btn.textContent = 'Recalcular costos históricos';
+      });
+  });
 }
 // --- Subscription estimate table with calculator & sorting (standalone block) ---
 if (document.getElementById('subscription-tbody')) {
@@ -1298,6 +1584,109 @@ if (document.getElementById('subscription-tbody')) {
       console.error('subscription-estimate error:', err);
       if (subTbody) subTbody.innerHTML = '<tr><td colspan="8" class="loading-row">Error al cargar</td></tr>';
     });
+}
+
+// --- Responsive: hamburger toggle ---
+var menuToggle = document.getElementById('menu-toggle');
+var mainNav = document.getElementById('main-nav');
+var navOverlay = document.getElementById('nav-overlay');
+
+if (menuToggle && mainNav) {
+  function closeMenu() {
+    mainNav.classList.remove('is-open');
+    if (navOverlay) navOverlay.classList.remove('is-visible');
+    menuToggle.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+  }
+  function openMenu() {
+    mainNav.classList.add('is-open');
+    if (navOverlay) navOverlay.classList.add('is-visible');
+    menuToggle.setAttribute('aria-expanded', 'true');
+    document.body.style.overflow = 'hidden';
+  }
+  menuToggle.addEventListener('click', function() {
+    var isOpen = mainNav.classList.contains('is-open');
+    isOpen ? closeMenu() : openMenu();
+  });
+  if (navOverlay) {
+    navOverlay.addEventListener('click', closeMenu);
+  }
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && mainNav.classList.contains('is-open')) closeMenu();
+  });
+}
+
+// --- Responsive: inject data-label on tables (sessions, models, costos) ---
+function injectTableLabels() {
+  var tables = document.querySelectorAll('.table-wrap table');
+  tables.forEach(function(table) {
+    var headers = [];
+    table.querySelectorAll('thead th').forEach(function(th) {
+      headers.push(th.textContent.trim());
+    });
+    if (headers.length === 0) return;
+    table.querySelectorAll('tbody tr').forEach(function(tr) {
+      tr.querySelectorAll('td').forEach(function(td, i) {
+        if (i < headers.length && !td.getAttribute('data-label')) {
+          td.setAttribute('data-label', headers[i]);
+        }
+      });
+    });
+  });
+}
+// Run once on load, then observe for dynamic content
+injectTableLabels();
+var tableObserver = new MutationObserver(function() { injectTableLabels(); });
+document.querySelectorAll('.table-wrap').forEach(function(wrap) {
+  tableObserver.observe(wrap, { childList: true, subtree: true });
+});
+
+// --- Responsive: inject data-label on today-model-row spans ---
+function injectTodayModelLabels() {
+  var LABELS = {
+    'today-model-rank': '#',
+    'today-model-name': 'Modelo',
+    'today-model-reqs': 'Requests',
+    'today-model-ioc i': 'Input',
+    'today-model-ioc o': 'Output',
+    'today-model-ioc c': 'Cache',
+    'today-model-cache-ratio': 'Cache %',
+    'today-model-total': 'Total',
+    'today-model-cost': 'Costo',
+    'today-model-pct': '%'
+  };
+  document.querySelectorAll('.today-model-row').forEach(function(row) {
+    row.querySelectorAll('span').forEach(function(span) {
+      var cls = span.className;
+      if (LABELS[cls] && !span.getAttribute('data-label')) {
+        span.setAttribute('data-label', LABELS[cls]);
+      }
+    });
+  });
+}
+injectTodayModelLabels();
+var todayObserver = new MutationObserver(function() { injectTodayModelLabels(); });
+var todayModelsEl = document.getElementById('today-models');
+if (todayModelsEl) {
+  todayObserver.observe(todayModelsEl, { childList: true, subtree: true });
+}
+
+// --- Scroll to top button ---
+var scrollTopBtn = document.getElementById('scroll-top');
+if (scrollTopBtn) {
+  var scrollTicking = false;
+  window.addEventListener('scroll', function() {
+    if (!scrollTicking) {
+      requestAnimationFrame(function() {
+        scrollTopBtn.classList.toggle('is-visible', window.scrollY > 300);
+        scrollTicking = false;
+      });
+      scrollTicking = true;
+    }
+  }, { passive: true });
+  scrollTopBtn.addEventListener('click', function() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 }
 
 })();

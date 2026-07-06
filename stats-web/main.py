@@ -147,6 +147,9 @@ def _author(model_name: str) -> str:
 
 
 CODEX_SUB_COST_PATH = SCRIPT_DIR / "codex_sub_costs.json"
+MODEL_COSTS_PATH = SCRIPT_DIR / "model_costs.json"
+MODEL_ALIASES_PATH = SCRIPT_DIR / "model_aliases.json"
+MODEL_BACKUP_DIR = SCRIPT_DIR / "model_backups"
 
 
 def _load_codex_sub_costs() -> dict:
@@ -431,6 +434,130 @@ def api_models(limit: int = Query(20, ge=1, le=200)):
     """, (limit,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+class SaveModelPriceRequest(BaseModel):
+    model: str
+    field: str
+    value: float | None
+
+
+def _backup_model_files():
+    MODEL_BACKUP_DIR.mkdir(exist_ok=True)
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    for f in [MODEL_COSTS_PATH, MODEL_ALIASES_PATH]:
+        if f.exists():
+            dest = MODEL_BACKUP_DIR / f"{f.stem}_{ts}.json"
+            dest.write_text(f.read_text())
+
+
+@app.get("/api/model-prices")
+def api_model_prices():
+    costs = {}
+    if MODEL_COSTS_PATH.exists():
+        try:
+            costs = _json.loads(MODEL_COSTS_PATH.read_text())
+        except Exception:
+            pass
+    aliases = {}
+    if MODEL_ALIASES_PATH.exists():
+        try:
+            aliases = _json.loads(MODEL_ALIASES_PATH.read_text())
+        except Exception:
+            pass
+    alias_count = {}
+    for alias, target in aliases.items():
+        alias_count[target] = alias_count.get(target, 0) + 1
+    result = []
+    for model, c in sorted(costs.items()):
+        result.append({
+            "model": model,
+            "input": c.get("input"),
+            "output": c.get("output"),
+            "cache": c.get("cache"),
+            "aliases": alias_count.get(model, 0),
+        })
+    return result
+
+
+@app.post("/api/model-prices/save")
+def api_save_model_price(req: SaveModelPriceRequest):
+    if not MODEL_COSTS_PATH.exists():
+        return JSONResponse({"success": False, "error": "model_costs.json not found"}, status_code=500)
+    try:
+        costs = _json.loads(MODEL_COSTS_PATH.read_text())
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+    if req.model not in costs:
+        return JSONResponse({"success": False, "error": f"Model '{req.model}' not found"}, status_code=404)
+
+    if req.field not in ("input", "output", "cache"):
+        return JSONResponse({"success": False, "error": f"Invalid field '{req.field}'"}, status_code=400)
+
+    if req.value is not None and req.value < 0:
+        return JSONResponse({"success": False, "error": "Price cannot be negative"}, status_code=400)
+
+    _backup_model_files()
+
+    canonical_name = None
+    for name in costs:
+        if name == req.model:
+            canonical_name = name
+            break
+    if not canonical_name:
+        return JSONResponse({"success": False, "error": "Model not found in costs"}, status_code=404)
+
+    if req.value is None:
+        if req.field == "cache":
+            costs[canonical_name].pop("cache", None)
+        else:
+            return JSONResponse({"success": False, "error": "input and output cannot be null"}, status_code=400)
+    else:
+        costs[canonical_name][req.field] = req.value
+
+    if "cache" in costs[canonical_name] and costs[canonical_name]["cache"] is None:
+        costs[canonical_name].pop("cache", None)
+
+    try:
+        MODEL_COSTS_PATH.write_text(_json.dumps(costs, indent=2) + "\n")
+        return {"success": True, "model": req.model, "field": req.field, "value": req.value}
+    except Exception as e:
+        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+
+
+@app.get("/api/model-prices/recalculate")
+def api_recalculate_history():
+    """Recalcula costos históricos usando precios actuales."""
+    try:
+        from stats_common import normalize_model_name, calculate_cost
+    except ImportError:
+        return JSONResponse({"success": False, "error": "stats_common import failed"}, status_code=500)
+
+    conn = sqlite3.connect(str(DB_PATH))
+    mrows = conn.execute(
+        "SELECT id, session_id, model, input_tokens, output_tokens, cache_tokens, cost FROM model_usage"
+    ).fetchall()
+    updated = 0
+    for mr in mrows:
+        mu_id = mr[0]
+        model = mr[2]
+        inp = mr[3]
+        out = mr[4]
+        cache = mr[5]
+        old_cost = mr[6]
+        new_cost = calculate_cost(model, inp, out, cache)
+        if abs(new_cost - old_cost) > 0.0001:
+            conn.execute("UPDATE model_usage SET cost=? WHERE id=?", (new_cost, mu_id))
+            updated += 1
+    if updated:
+        conn.commit()
+        conn.execute(
+            "UPDATE sessions SET cost = (SELECT COALESCE(SUM(cost), 0) FROM model_usage WHERE session_id = sessions.id)"
+        )
+        conn.commit()
+    conn.close()
+    return {"success": True, "updated": updated}
 
 
 @app.get("/api/sessions")
