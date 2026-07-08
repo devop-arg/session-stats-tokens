@@ -3,28 +3,11 @@
 <section class="page-head">
   <h1 class="section-title"><strong>Modelos.</strong> Ranking de modelos por costo. Precios editables.</h1>
   <div class="model-prices-actions">
-    <button type="button" id="add-model-btn" class="btn-secondary">+ Agregar modelo</button>
     <span id="recalc-badge" class="badge-msg"></span>
     <span id="save-global-badge" class="badge-msg"></span>
   </div>
-
-  <div id="add-model-panel" class="add-model-panel" style="display:none">
-    <label for="orphan-select">Modelo huérfano (usado en sesiones, sin precio):</label>
-    <select id="orphan-select"></select>
-    <label for="new-model-input">O nombre exacto:</label>
-    <input id="new-model-input" type="text" placeholder="p.ej. tencent/hy3" />
-    <div class="add-model-prices">
-      <label>Input $/1M <input id="new-input" type="number" step="0.0001" min="0" /></label>
-      <label>Output $/1M <input id="new-output" type="number" step="0.0001" min="0" /></label>
-      <label>Cache $/1M <input id="new-cache" type="number" step="0.0001" min="0" placeholder="opcional" /></label>
-    </div>
-    <div class="add-model-actions">
-      <button type="button" id="add-model-confirm" class="btn-primary">Crear</button>
-      <button type="button" id="add-model-cancel" class="btn-secondary">Cancelar</button>
-      <span id="add-model-badge" class="badge-msg"></span>
-    </div>
-  </div>
 </section>
+
 
 <div class="sort-controls" role="group" aria-label="Ordenar tabla modelos">
   <span class="sort-label">Ordenar:</span>

@@ -51,7 +51,8 @@
   },
   "gemini-3-flash": {
     "input": 0.5,
-    "output": 3
+    "output": 3,
+    "cache": 0.0
   },
   "gemini-3-pro": {
     "input": 2,
@@ -78,11 +79,13 @@
   },
   "gemma-4-26b": {
     "input": 0.15,
-    "output": 0.6
+    "output": 0.6,
+    "cache": 0.0
   },
   "gemma-4-31b": {
     "input": 0.15,
-    "output": 0.4
+    "output": 0.4,
+    "cache": 0.0
   },
   "gemma-4-31b-it": {
     "cache": 0.09,
@@ -116,7 +119,8 @@
   },
   "gpt-5-mini": {
     "input": 0.25,
-    "output": 2
+    "output": 2,
+    "cache": 0.0
   },
   "gpt-5.1-codex-max": {
     "input": 1.25,
@@ -128,7 +132,8 @@
   },
   "gpt-5.2-codex": {
     "input": 1.75,
-    "output": 14
+    "output": 14,
+    "cache": 0.0
   },
   "gpt-5.3-codex": {
     "cache": 0.175,
@@ -172,7 +177,8 @@
   },
   "mimo-v2-pro": {
     "input": 1,
-    "output": 3
+    "output": 3,
+    "cache": 0.0
   },
   "mimo-v2.5": {
     "cache": 0.003,
@@ -186,7 +192,8 @@
   },
   "minimax-m2.1": {
     "input": 0.27,
-    "output": 0.95
+    "output": 0.95,
+    "cache": 0.0
   },
   "minimax-m2.5": {
     "cache": 0.03,
@@ -235,11 +242,77 @@
   },
   "trinity-large-preview": {
     "input": 0.25,
-    "output": 1.0
+    "output": 1.0,
+    "cache": 0.0
   },
   "x-ai/grok-4.1-fast": {
     "cache": 0.05,
     "input": 0.2,
     "output": 0.5
+  },
+  "tencent/hy3": {
+    "input": 0.14,
+    "output": 0.56,
+    "cache": 0.014
+  },
+  "big-pickle": {
+    "input": 0.0,
+    "cache": 0.0,
+    "output": 0.0
+  },
+  "free": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "gemini-3.1-flash-lite-preview": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "gemini-3.5-flash": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "giga-potato": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "kilo-auto/balanced": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "kilo-auto/free": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "kimi-k2.7-code": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "owl-alpha": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "taste-1": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "trinity": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "trinity-large-thinking": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
   }
 }

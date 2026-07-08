@@ -167,13 +167,21 @@ En el branch `main` (privado) estos archivos **sí** están trackeados para back
 
 ## Model Pricing
 
-Costs per 1M tokens (USD). Some models include cache pricing. Managed interactively via:
+Costs per 1M tokens (USD). Some models include cache pricing.
 
-```bash
-session-stats-models
-```
+- **Auto-seed**: `session-stats --capture-all` siembra automáticamente en
+  `model_costs.json` los modelos usados en la DB que aún no tienen precio, con
+  `0/0/0` (idempotente). Ya no hace falta darlos de alta a mano.
+- **Edición**: la UI web (`/models`) permite editar los precios de los modelos
+  ya presentes (input/output/cache). No se pueden crear modelos desde la UI;
+  los nuevos aparecen solos vía auto-seed al ser usados.
+- **Gestión alternativa**: el CLI `session-stats-models` permite
+  agregar/editar/borrar modelos y aliases, y listar huérfanos/sin uso.
+  Precios en `model_costs.json`, aliases en `model_aliases.json`.
 
-Features: add/edit/delete models, manage aliases, detect orphan models without pricing, list unused models. Prices stored in `model_costs.json`, aliases in `model_aliases.json`.
+El costo se calcula en `stats_common.calculate_cost` como
+`input·price_in + output·price_out + cache_tokens·price_cache` (si el modelo no
+registra cache tokens, el término cache es 0 da igual el precio).
 
 ### Siempre muestra Hermes aunque esté cerrado
 
