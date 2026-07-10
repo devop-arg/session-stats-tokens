@@ -7,6 +7,30 @@ set -e
 BRANCH_CURRENT=$(git rev-parse --abbrev-ref HEAD)
 MSG="${1:-chore: sync main -> public}"
 
+CODEX_SUB_COSTS_FILE="codex_sub_costs.json"
+CODEX_SUB_COSTS_BACKUP=""
+CODEX_SUB_COSTS_EXISTS=0
+
+# NOTA PROVISORIA: sync-public necesita sacar este archivo del branch publico.
+# Como esta ignorado y no trackeado en main, lo respaldamos/restauramos localmente.
+# Queda asi por ahora, hasta definir un manejo mejor para datos privados locales.
+restore_codex_sub_costs() {
+  if [[ "$CODEX_SUB_COSTS_EXISTS" -eq 1 && -n "$CODEX_SUB_COSTS_BACKUP" && -f "$CODEX_SUB_COSTS_BACKUP" ]]; then
+    cp -p "$CODEX_SUB_COSTS_BACKUP" "$CODEX_SUB_COSTS_FILE"
+    echo "=== Restaurado $CODEX_SUB_COSTS_FILE local ==="
+  fi
+  if [[ -n "$CODEX_SUB_COSTS_BACKUP" ]]; then
+    rm -f "$CODEX_SUB_COSTS_BACKUP"
+  fi
+}
+trap restore_codex_sub_costs EXIT
+
+if [[ -f "$CODEX_SUB_COSTS_FILE" ]]; then
+  CODEX_SUB_COSTS_EXISTS=1
+  CODEX_SUB_COSTS_BACKUP=$(mktemp)
+  cp -p "$CODEX_SUB_COSTS_FILE" "$CODEX_SUB_COSTS_BACKUP"
+fi
+
 echo "=== 1. Push main a private ==="
 git push private main
 
