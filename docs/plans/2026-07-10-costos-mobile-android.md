@@ -73,45 +73,45 @@
 
 ## Tarea 4 — Integración del comparador mobile
 
-- [ ] Agregar panel del modelo elegido con costo API, costo efectivo por suscripción, diferencia, multiplicador y punto de equilibrio.
-- [ ] Agregar lista de cinco más baratos.
-- [ ] Destacar el modelo elegido.
-- [ ] Agregar lista de cinco más caros.
-- [ ] Marcar los fallback con `precio pendiente`.
-- [ ] Recalcular al cambiar el modelo de referencia, precio manual o datos de la calculadora.
-- [ ] Mantener guardado explícito mediante el botón `Guardar`.
-- [ ] Ocultar tabla completa y controles de ordenamiento solo en mobile.
-- [ ] Mantener comparador oculto y tabla intacta en desktop.
+- [x] Agregar panel del modelo elegido con costo API, costo efectivo por suscripción, diferencia, multiplicador y punto de equilibrio.
+- [x] Agregar lista de cinco más baratos.
+- [x] Destacar el modelo elegido.
+- [x] Agregar lista de cinco más caros.
+- [x] Marcar los fallback con `precio pendiente`.
+- [x] Recalcular al cambiar el modelo de referencia, precio manual o datos de la calculadora.
+- [x] Mantener guardado explícito mediante el botón `Guardar`.
+- [x] Ocultar tabla completa y controles de ordenamiento solo en mobile.
+- [x] Mantener comparador oculto y tabla intacta en desktop.
 
 ## Tarea 5 — CSS Android mobile
 
-- [ ] Diseñar filas compactas para 360, 390 y 430 px.
-- [ ] Mantener targets táctiles compatibles con Chrome/Firefox Android.
-- [ ] Evitar scroll horizontal.
-- [ ] Evitar reglas específicas de Safari/iOS.
-- [ ] Preservar los cambios responsive preexistentes del working tree.
+- [x] Diseñar filas compactas para 360, 390 y 430 px.
+- [x] Mantener targets táctiles compatibles con Chrome/Firefox Android.
+- [x] Evitar scroll horizontal.
+- [x] Evitar reglas específicas de Safari/iOS.
+- [x] Preservar los cambios responsive preexistentes del working tree.
 
 ## Tarea 6 — Verificación
 
-- [ ] Ejecutar `node --test stats-web/tests/costos-logic.test.js`.
-- [ ] Verificar sintaxis JavaScript.
-- [ ] Verificar endpoints y healthcheck.
-- [ ] Renderizar 360/390/430 px con Chromium usando user-agent Android Chrome.
-- [ ] Renderizar 360/390/430 px con Firefox usando user-agent Android Firefox.
-- [ ] Confirmar elegido +5/-5, fallback pendiente y punto de equilibrio.
-- [ ] Confirmar ausencia de errores de consola.
-- [ ] Confirmar ausencia de overflow horizontal.
-- [ ] Verificar desktop 1280 px sin regresiones.
+- [x] Ejecutar `node --test stats-web/tests/costos-logic.test.js` (8/8 PASS).
+- [x] Verificar sintaxis JavaScript.
+- [x] Verificar endpoints y healthcheck.
+- [x] Renderizar 360/390/430 px con Chromium usando user-agent Android Chrome.
+- [x] Renderizar 360/390/430 px con Firefox usando user-agent Android Firefox.
+- [x] Confirmar elegido +5/-5, fallback pendiente y punto de equilibrio.
+- [x] Confirmar ausencia de errores de consola.
+- [x] Confirmar ausencia de overflow horizontal.
+- [x] Verificar desktop 1280 px sin regresiones.
 
 ## Tarea 7 — Documentación, deploy y cierre
 
-- [ ] Documentar el comparador y fallback en `README.md`.
-- [ ] Incrementar cache-bust de assets.
+- [x] Documentar el comparador y fallback en `README.md` y `stats-web/README.md`.
+- [x] Incrementar cache-bust de assets.
 - [ ] Revisar diff completo y preservar cambios ajenos/preexistentes.
 - [ ] Reiniciar `session-stats-web.service` solo si la aplicación no recarga los archivos o si cambia código Python.
 - [ ] Verificar nuevamente `/healthz`, `/costos`, API y logs después del deploy.
 - [ ] Commit atómico y push al remoto privado; sincronizar público únicamente sin datos privados.
-- [ ] Conservar el backup hasta autorización explícita para eliminarlo.
+- [x] Conservar el backup hasta autorización explícita para eliminarlo.
 
 ## Criterios de aceptación
 

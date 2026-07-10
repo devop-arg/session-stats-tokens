@@ -54,11 +54,11 @@
           <span class="calc-result-value" id="res-ref-model-name" style="color:var(--stats-accent-text);">—</span>
         </div>
         <div class="calc-result-row">
-          <span class="calc-result-label">Costo/1M con sub</span>
+          <span class="calc-result-label">Costo efectivo ingresado</span>
           <span class="calc-result-value" id="res-ref-ppm">—</span>
         </div>
         <div class="calc-result-row">
-          <span class="calc-result-label">Costo/1M API directa</span>
+          <span class="calc-result-label">Costo por API</span>
           <span class="calc-result-value" id="res-ref-api-ppm">—</span>
         </div>
         <div class="calc-result-row" style="border-top:1px solid var(--stats-line);padding-top:6px;margin-top:2px;">
@@ -73,12 +73,8 @@
           <span class="calc-result-label">Tokens/semana estimados (100%)</span>
           <span class="calc-result-value" id="res-codex-week-tokens">—</span>
         </div>
-        <div class="calc-result-row">
-          <span class="calc-result-label">Costo efectivo /1M (uso actual)</span>
-          <span class="calc-result-value" id="res-codex-eff-actual">—</span>
-        </div>
         <div class="calc-result-row calc-result-highlight">
-          <span class="calc-result-label">Costo efectivo /1M (100% uso)</span>
+          <span class="calc-result-label">Costo efectivo por suscripción</span>
           <span class="calc-result-value" id="res-codex-eff-full">—</span>
         </div>
       </div>
@@ -94,6 +90,30 @@
       </label>
     </div>
   </div>
+
+  <section class="mobile-cost-comparison" id="mobile-cost-comparison" aria-live="polite" aria-label="Comparación de costos por modelo">
+    <div class="mobile-cost-comparison-head">
+      <div>
+        <span class="mobile-cost-eyebrow">Comparación por costo efectivo</span>
+        <h2 class="mobile-cost-title">Modelo elegido y costos cercanos</h2>
+      </div>
+      <span class="mobile-cost-count" id="mobile-cost-count">—</span>
+    </div>
+
+    <div class="mobile-cost-selected" id="mobile-cost-selected">
+      <div class="mobile-cost-loading">Calculando comparación…</div>
+    </div>
+
+    <div class="mobile-cost-neighbor-group">
+      <h3 class="mobile-cost-neighbor-title">5 más baratos</h3>
+      <div class="mobile-cost-neighbor-list" id="mobile-cost-cheaper"></div>
+    </div>
+
+    <div class="mobile-cost-neighbor-group">
+      <h3 class="mobile-cost-neighbor-title">5 más caros</h3>
+      <div class="mobile-cost-neighbor-list" id="mobile-cost-pricier"></div>
+    </div>
+  </section>
 
   <div class="sort-controls" role="group" aria-label="Ordenar tabla suscripciones" style="margin-bottom:12px;">
     <span class="sort-label">Ordenar:</span>

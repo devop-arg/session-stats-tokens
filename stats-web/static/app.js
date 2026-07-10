@@ -230,6 +230,7 @@ if (document.querySelector('.stats-grid')) {
     barEl.className = 'top-models-bar';
     barEl.setAttribute('role', 'button');
     barEl.setAttribute('tabindex', '0');
+    barEl.setAttribute('aria-expanded', 'false');
     barEl.setAttribute('aria-label', point.date + ': ' + fmtTokens(total) + ' tokens');
     barEl.style.setProperty('--bar-height', getBarHeight(total, maxTotal) + '%');
 
@@ -293,13 +294,46 @@ if (document.querySelector('.stats-grid')) {
     });
 
     barEl.appendChild(tip);
+
+    var tooltipTimer = null;
+    function closeTooltip() {
+      barEl.setAttribute('data-tooltip-open', 'false');
+      barEl.setAttribute('aria-expanded', 'false');
+    }
+    function toggleTooltip() {
+      var shouldOpen = barEl.getAttribute('data-tooltip-open') !== 'true';
+      if (tooltipTimer) window.clearTimeout(tooltipTimer);
+      document.querySelectorAll('.top-models-bar[data-tooltip-open="true"]').forEach(function(other) {
+        other.setAttribute('data-tooltip-open', 'false');
+        other.setAttribute('aria-expanded', 'false');
+      });
+      barEl.setAttribute('data-tooltip-open', shouldOpen ? 'true' : 'false');
+      barEl.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+      if (shouldOpen) {
+        tooltipTimer = window.setTimeout(closeTooltip, 3500);
+      }
+    }
+
+    barEl.addEventListener('click', function() {
+      if (window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches) {
+        toggleTooltip();
+      }
+    });
+    barEl.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggleTooltip();
+      }
+    });
   }
 
   function buildLeaderCard(entry, onToggle) {
     var card = document.createElement('div');
     card.className = 'leader-card';
     card.setAttribute('data-model', entry.model);
-    card.setAttribute('role', 'listitem');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-pressed', 'false');
 
     var rank = document.createElement('span');
     rank.className = 'leader-rank';
@@ -353,6 +387,12 @@ if (document.querySelector('.stats-grid')) {
     card.addEventListener('click', function() {
       onToggle(entry.model);
     });
+    card.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onToggle(entry.model);
+      }
+    });
 
     return card;
   }
@@ -373,8 +413,10 @@ if (document.querySelector('.stats-grid')) {
     var axisEl = document.getElementById(config.axisId);
     var yAxisEl = document.getElementById(config.yAxisId);
     var leaderboardContainer = document.getElementById(config.leaderboardId);
-    var activeModel = '';
+    var selectedModels = new Set();
     var modelColorMap = {};
+    var selectionLabel = config.selectionLabelId ? document.getElementById(config.selectionLabelId) : null;
+    var clearButton = config.clearButtonId ? document.getElementById(config.clearButtonId) : null;
 
     if (!barsEl || !axisEl || !leaderboardContainer) return;
 
@@ -383,20 +425,36 @@ if (document.querySelector('.stats-grid')) {
     }
 
     function syncHighlightState() {
+      var hasSelection = selectedModels.size > 0;
       barsEl.querySelectorAll('.top-models-stack i').forEach(function(seg) {
-        var matches = !activeModel || seg.getAttribute('data-model') === activeModel;
+        var matches = !hasSelection || selectedModels.has(seg.getAttribute('data-model'));
         seg.setAttribute('data-dimmed', matches ? 'false' : 'true');
       });
       leaderboardContainer.querySelectorAll('.leader-card').forEach(function(card) {
-        var selected = activeModel && card.getAttribute('data-model') === activeModel;
+        var selected = selectedModels.has(card.getAttribute('data-model'));
         card.setAttribute('data-selected', selected ? 'true' : 'false');
-        card.setAttribute('data-dimmed', activeModel && !selected ? 'true' : 'false');
+        card.setAttribute('data-dimmed', hasSelection && !selected ? 'true' : 'false');
+        card.setAttribute('aria-pressed', selected ? 'true' : 'false');
       });
+      if (selectionLabel) {
+        selectionLabel.textContent = hasSelection
+          ? selectedModels.size + (selectedModels.size === 1 ? ' modelo seleccionado' : ' modelos seleccionados')
+          : 'Todos los modelos';
+      }
+      if (clearButton) clearButton.disabled = !hasSelection;
     }
 
     function toggleModel(model) {
-      activeModel = activeModel === model ? '' : model;
+      if (selectedModels.has(model)) selectedModels.delete(model);
+      else selectedModels.add(model);
       syncHighlightState();
+    }
+
+    if (clearButton) {
+      clearButton.addEventListener('click', function() {
+        selectedModels.clear();
+        syncHighlightState();
+      });
     }
 
     fetch(config.endpoint)
@@ -493,6 +551,8 @@ if (document.querySelector('.stats-grid')) {
     axisId: 'top-models-30d-axis',
     yAxisId: 'top-models-30d-y-axis',
     leaderboardId: 'top-models-30d-leaderboard',
+    selectionLabelId: 'top-models-30d-selection',
+    clearButtonId: 'top-models-30d-clear',
     endpoint: '/api/top-models-30d',
     rangeKey: '30D',
     statsContainerId: 'thirty-stats'
@@ -505,6 +565,8 @@ if (document.querySelector('.stats-grid')) {
     axisId: 'top-axis',
     yAxisId: 'top-y-axis',
     leaderboardId: 'leaderboard',
+    selectionLabelId: 'top-models-selection',
+    clearButtonId: 'top-models-clear',
     endpoint: '/api/top-models',
     rangeKey: '12M'
   });
@@ -1377,10 +1439,157 @@ if (document.getElementById('subscription-tbody')) {
         return null;
       }
 
+      function formatComparisonCost(value) {
+        return Number.isFinite(value) ? '$' + value.toFixed(4) + '/M' : '—';
+      }
+
+      function createComparisonMetric(label, value) {
+        var metric = document.createElement('div');
+        metric.className = 'mobile-cost-metric';
+        var metricLabel = document.createElement('span');
+        metricLabel.className = 'mobile-cost-metric-label';
+        metricLabel.textContent = label;
+        var metricValue = document.createElement('strong');
+        metricValue.className = 'mobile-cost-metric-value';
+        metricValue.textContent = value;
+        metric.appendChild(metricLabel);
+        metric.appendChild(metricValue);
+        return metric;
+      }
+
+      function renderNeighborList(container, items, selectedCost, relation) {
+        if (!container) return;
+        container.innerHTML = '';
+        if (!items.length) {
+          var empty = document.createElement('div');
+          empty.className = 'mobile-cost-empty';
+          empty.textContent = 'No hay modelos comparables.';
+          container.appendChild(empty);
+          return;
+        }
+
+        items.forEach(function(item) {
+          var row = document.createElement('div');
+          row.className = 'mobile-cost-neighbor';
+
+          var identity = document.createElement('div');
+          identity.className = 'mobile-cost-neighbor-identity';
+          var name = document.createElement('strong');
+          name.className = 'mobile-cost-neighbor-name';
+          name.textContent = displayModelName(item.model);
+          identity.appendChild(name);
+          if (item.pricePending) {
+            var pending = document.createElement('span');
+            pending.className = 'mobile-cost-pending';
+            pending.textContent = 'precio pendiente';
+            identity.appendChild(pending);
+          }
+
+          var values = document.createElement('div');
+          values.className = 'mobile-cost-neighbor-values';
+          var cost = document.createElement('strong');
+          cost.textContent = formatComparisonCost(item.comparisonCost);
+          var ratio = relation === 'cheaper'
+            ? selectedCost / item.comparisonCost
+            : item.comparisonCost / selectedCost;
+          var delta = document.createElement('span');
+          delta.textContent = ratio.toFixed(1) + '× más ' + (relation === 'cheaper' ? 'barato' : 'caro');
+          values.appendChild(cost);
+          values.appendChild(delta);
+
+          row.appendChild(identity);
+          row.appendChild(values);
+          container.appendChild(row);
+        });
+      }
+
+      function renderMobileCostComparison(refModel) {
+        var logic = window.CostosLogic;
+        var selectedContainer = document.getElementById('mobile-cost-selected');
+        if (!logic || !selectedContainer || !refModel) return;
+
+        var currentCost = parseFloat(refCostInput ? refCostInput.value : 0);
+        var comparableModels = subModels.map(function(item) {
+          var copy = Object.assign({}, item);
+          if (copy.model === refModel.model && currentCost > 0) copy.cost_sub = currentCost;
+          return copy;
+        });
+        var comparison = logic.getCostNeighbors(comparableModels, refModel.model, 5);
+        var selected = comparison.selected;
+        if (!selected) {
+          selectedContainer.innerHTML = '<div class="mobile-cost-empty">El modelo elegido no tiene un costo comparable.</div>';
+          return;
+        }
+        if (currentCost > 0 && !(Number(refModel.cost_sub) > 0)) {
+          selected.pricePending = true;
+          selected.comparisonSource = 'draft';
+        }
+
+        selectedContainer.innerHTML = '';
+        var top = document.createElement('div');
+        top.className = 'mobile-cost-selected-top';
+        var selectedName = document.createElement('strong');
+        selectedName.className = 'mobile-cost-selected-name';
+        selectedName.textContent = displayModelName(selected.model);
+        top.appendChild(selectedName);
+        if (selected.pricePending) {
+          var selectedPending = document.createElement('span');
+          selectedPending.className = 'mobile-cost-pending';
+          selectedPending.textContent = 'precio pendiente';
+          top.appendChild(selectedPending);
+        }
+        selectedContainer.appendChild(top);
+
+        var apiCost = Number(selected.cost_api) || 0;
+        var subscriptionCost = selected.comparisonCost;
+        var savingsPct = apiCost > 0 ? (1 - subscriptionCost / apiCost) * 100 : 0;
+        var multiplier = subscriptionCost > 0 ? apiCost / subscriptionCost : 0;
+
+        var pct = parseFloat(document.getElementById('calc-codex-pct').value) || 0;
+        var inpM = parseFloat(document.getElementById('calc-codex-in').value) || 0;
+        var outM = parseFloat(document.getElementById('calc-codex-out').value) || 0;
+        var cacheM = parseFloat(document.getElementById('calc-codex-cache').value) || 0;
+        var usedM = inpM + outM + cacheM;
+        var weekPct = pct / 100;
+        var fullWindowM = weekPct > 0 ? usedM / weekPct : 0;
+        var breakEven = logic.calculateBreakEven({
+          monthlyPlanCost: parseFloat(document.getElementById('calc-codex-cost').value) || 0,
+          apiCostPerMillion: apiCost,
+          fullWindowTokensM: fullWindowM
+        });
+
+        var metrics = document.createElement('div');
+        metrics.className = 'mobile-cost-metrics';
+        metrics.appendChild(createComparisonMetric('Costo por API', formatComparisonCost(apiCost)));
+        metrics.appendChild(createComparisonMetric('Costo efectivo por suscripción', formatComparisonCost(subscriptionCost)));
+        metrics.appendChild(createComparisonMetric(
+          'Diferencia',
+          savingsPct >= 0
+            ? savingsPct.toFixed(1) + '% menos · ' + multiplier.toFixed(1) + '×'
+            : Math.abs(savingsPct).toFixed(1) + '% más'
+        ));
+        metrics.appendChild(createComparisonMetric(
+          'Punto de equilibrio',
+          breakEven
+            ? fmtTokens(breakEven.tokensMillions * 1000000) + (breakEven.windowPercent !== null ? ' · ' + breakEven.windowPercent.toFixed(1) + '%' : '')
+            : '—'
+        ));
+        selectedContainer.appendChild(metrics);
+
+        renderNeighborList(document.getElementById('mobile-cost-cheaper'), comparison.cheaper, subscriptionCost, 'cheaper');
+        renderNeighborList(document.getElementById('mobile-cost-pricier'), comparison.pricier, subscriptionCost, 'pricier');
+        var count = document.getElementById('mobile-cost-count');
+        if (count) count.textContent = comparison.cheaper.length + 1 + comparison.pricier.length + ' modelos';
+      }
+
       // Recalculate table with dynamic reference
       function recalcAll() {
         var refModel = getRefModel();
-        var refPrice = parseFloat(refCostInput ? refCostInput.value : 0.0183) || 0.0183;
+        var typedRefPrice = parseFloat(refCostInput ? refCostInput.value : 0);
+        var fallbackRefPrice = refModel && refModel.plan && refModel.plan.indexOf('Codex') !== -1 && refModel.cost_api > 0
+          ? refModel.cost_api / 20
+          : 0;
+        var refPrice = typedRefPrice > 0 ? typedRefPrice : (fallbackRefPrice || 0.0183);
 
         // Update header
         if (refColHeader) {
@@ -1390,7 +1599,9 @@ if (document.getElementById('subscription-tbody')) {
         // Update results header
         function setTxt(id, val) { var e = document.getElementById(id); if (e) e.textContent = val; }
         setTxt('res-ref-model-name', refModel ? refModel.model : '—');
-        setTxt('res-ref-ppm', refModel ? '$' + (refModel.cost_sub || 0).toFixed(4) + '/1M' : '—');
+        setTxt('res-ref-ppm', refModel
+          ? (typedRefPrice > 0 ? '$' + typedRefPrice.toFixed(4) + '/1M' : '— (precio pendiente)')
+          : '—');
 
         // Recalculate vs_gpt54 for all models
         subData.models.forEach(function(m) {
@@ -1418,6 +1629,7 @@ if (document.getElementById('subscription-tbody')) {
 
         subApplyCalculator();
         updateCodexUsageCalc();
+        renderMobileCostComparison(refModel);
       }
 
       // Update Codex usage calculator
@@ -1467,7 +1679,6 @@ if (document.getElementById('subscription-tbody')) {
         setTxt('res-codex-api-week', usedM > 0 ? '$' + apiWeekCost.toFixed(2) : '$—');
         setTxt('res-codex-savings-week', usedM > 0 ? (savingsPct >= 0 ? savingsPct + '% ($' + savingsWeek.toFixed(2) + ')' : '0% ($0)') : '—');
         setTxt('res-codex-week-tokens', weekFullM > 0 ? weekFullM.toFixed(1) + 'M' : '—');
-        setTxt('res-codex-eff-actual', usedM > 0 ? '$' + effActual.toFixed(4) + '/1M' : '—');
         setTxt('res-codex-eff-full', monthTokensM > 0 ? '$' + effFull.toFixed(4) + '/1M' : '—');
       }
 
@@ -1538,6 +1749,12 @@ if (document.getElementById('subscription-tbody')) {
           .then(function(r) { return r.json(); })
           .then(function(data) {
             saveCalcState();
+            if (data.success && subData && subData.models) {
+              subData.models.forEach(function(item) {
+                if (item.model === model) item.cost_sub = cost;
+              });
+              recalcAll();
+            }
             if (data.success && saveBadge) {
               saveBadge.style.display = 'inline';
               setTimeout(function(){ saveBadge.style.display = 'none'; }, 3000);
@@ -1561,11 +1778,15 @@ if (document.getElementById('subscription-tbody')) {
       var ocgInputs = ['calc-ocg-cost', 'calc-ocg-credit'];
       ocgInputs.forEach(function(id) {
         var el = document.getElementById(id);
-        if (el) el.addEventListener('input', function() { subApplyCalculator(); });
+        if (el) el.addEventListener('input', function() { recalcAll(); });
       });
 
-      // Initial calculation
-      recalcAll();
+      // Initial calculation: cargar la muestra del modelo elegido sin persistir cambios
+      if (refSelect && refSelect.value) {
+        refSelect.dispatchEvent(new Event('change'));
+      } else {
+        recalcAll();
+      }
 
       // Wire up sort buttons
       var sortBtns = document.querySelectorAll('[data-sub-sort], [data-sub-sort-dir]');

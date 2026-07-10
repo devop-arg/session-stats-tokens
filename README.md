@@ -207,6 +207,29 @@ El costo se calcula en `stats_common.calculate_cost` como
 `input·price_in + output·price_out + cache_tokens·price_cache` (si el modelo no
 registra cache tokens, el término cache es 0 da igual el precio).
 
+### Comparador de costos en Android (`/costos`)
+
+En viewports mobile (`≤768px`), la tabla completa se reemplaza por un comparador
+compacto compatible con Chrome y Firefox Android:
+
+- muestra el modelo Codex elegido, los 5 costos efectivos inmediatamente más
+  baratos y los 5 inmediatamente más caros;
+- compara **Costo por API** contra **Costo efectivo por suscripción**;
+- muestra ahorro/multiplicador y el punto de equilibrio en tokens y porcentaje
+  de la capacidad estimada;
+- conserva la tabla y el ordenamiento completos en desktop.
+
+El `cost_sub` guardado manualmente es la fuente de verdad. Un modelo Codex sin
+precio usa `cost_api / 20` únicamente para ubicarlo en la comparación, bajo el
+supuesto `$20 de suscripción ≈ $400 de API`. Ese fallback no se persiste y la
+interfaz mantiene visible `precio pendiente` hasta que se guarde un valor real.
+
+Pruebas de lógica:
+
+```bash
+node --test stats-web/tests/costos-logic.test.js
+```
+
 ### Siempre muestra Hermes aunque esté cerrado
 
 Si `session-stats` siempre muestra `[Hermes]` incluso después de cerrarlo y ya abriste OpenCode/Kilo, es probable que Hermes haya dejado una sesión abierta (sin `ended_at` en `~/.hermes/state.db`).

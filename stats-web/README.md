@@ -15,12 +15,23 @@ Dashboard web para visualizar consumo de APIs LLM desde session-stats.
 | `/` | Dashboard con gráficos |
 | `/sessions` | Tabla paginada de sesiones |
 | `/models` | Ranking de modelos por costo |
+| `/costos` | Comparador API vs costo efectivo por suscripción |
 | `/healthz` | Healthcheck |
 | `/api/summary` | Totales globales (JSON) |
 | `/api/timeseries?range=30d&bucket=day` | Serie temporal (JSON) |
 | `/api/models?limit=20` | Ranking modelos (JSON) |
 | `/api/sessions?limit=50&offset=0` | Sesiones paginadas (JSON) |
 | `/api/sources` | Totales por fuente (JSON) |
+
+## `/costos` en Android
+
+- Chrome y Firefox Android usan un comparador compacto del elegido con sus
+  cinco vecinos inferiores y superiores por costo efectivo.
+- Desktop conserva la tabla completa.
+- Los precios manuales prevalecen; Codex sin precio usa `cost_api / 20` solo
+  como fallback visual y sigue marcado `precio pendiente`.
+- El punto de equilibrio usa el costo semanal del plan (`mensual / 4`) frente
+  al costo API efectivo por millón.
 
 ## Operación diaria
 
