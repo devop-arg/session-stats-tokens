@@ -67,6 +67,23 @@ Prevents data loss when chat sessions are deleted:
 - **Diario 6 AM**: backup SQLite con rotación de 7 días en `db_backups/`
 - Cron configurado localmente, no trackeado en el repo
 
+### Consistencia de capturas por modelo
+
+- **Codex**: las sesiones se actualizan en cada ejecución de
+  `--capture-all`. Sus contadores crecen de forma monotónica, por lo que una
+  captura temprana no congela el uso de una sesión todavía activa.
+- **OpenCode y Kilo**: el desglose se reconstruye desde todos los mensajes de
+  la sesión, conservando los tokens y requests de cada modelo usado. Sólo se
+  eliminan filas de modelos residuales si los totales reconstruidos coinciden
+  exactamente con los de la sesión persistida; ante cualquier diferencia se
+  preservan los datos históricos.
+- **Hermes** registra un modelo por sesión. **Cursor** conserva el desglose que
+  expone su hook local, pero no se depura automáticamente porque esos eventos
+  pueden no contener el historial completo.
+- **Grok CLI** no expone tokens reales locales: `totalTokens` se usa como
+  estimación de contexto y se reparte con una heurística 85/15. Sus tokens y
+  costos son orientativos, no adecuados para comparaciones precisas.
+
 ### SQLite Schema Migrations
 
 `session-stats` and the web dashboard call `init_db()` on startup. This creates
@@ -164,6 +181,8 @@ En el branch `main` (privado) estos archivos **sí** están trackeados para back
 | OpenCode | `~/.local/share/opencode/storage/message/` | JSON (v1.1.x fallback) |
 | Codex | `~/.codex/sessions/**/*.jsonl` | JSONL |
 | Hermes | `~/.hermes/state.db` | SQLite |
+| Cursor | `~/.cursor/usage-events.jsonl` | JSONL (hook local) |
+| Grok CLI | `~/.grok/sessions/**/summary.json` | JSON + estimación de contexto |
 
 ## Model Pricing
 

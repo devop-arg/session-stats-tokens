@@ -1101,10 +1101,25 @@ if (document.getElementById('models-tbody')) {
             modelPrices[model][field] = raw !== '' ? parseFloat(raw) : null;
           }
         });
-        var badge = document.getElementById('save-global-badge');
-        if (badge) { badge.textContent = '✓ guardado'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-pos)'; }
-        setTimeout(function() { if (badge) badge.style.display = 'none'; }, 2000);
         onCancelEdit(tr, model);
+
+        // Recalcular costos históricos y refrescar la tabla de modelos
+        var badge = document.getElementById('save-global-badge');
+        if (badge) { badge.textContent = '✓ guardado — recalculando...'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-faint)'; }
+        fetch('/api/model-prices/recalculate')
+          .then(function(r) { return r.json(); })
+          .then(function() { return fetch('/api/models?limit=200'); })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            modelsData = data;
+            renderModels();
+            if (badge) { badge.textContent = '✓ guardado y recalculado'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-pos)'; }
+            setTimeout(function() { if (badge) badge.style.display = 'none'; }, 2000);
+          })
+          .catch(function() {
+            if (badge) { badge.textContent = '✓ guardado (recálculo pendiente)'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-accent-text)'; }
+            setTimeout(function() { if (badge) badge.style.display = 'none'; }, 3000);
+          });
       } else {
         var err = results.find(function(r) { return !r.success; });
         showSaveFeedback(cells[0], 'error', 'Error: ' + (err ? err.error : 'desconocido'));
