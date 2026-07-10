@@ -1289,6 +1289,7 @@ if (document.getElementById('subscription-tbody')) {
   var subTbody = document.getElementById('subscription-tbody');
   var subData = null;  // raw server data
   var subModels = [];  // computed models (after calculator adjustments)
+  var dismissedModels = [];  // models dismissed from comparator (resets on model change)
   var subSortField = 'cost_sub';
   var subSortDir = 1;  // 1=asc (cheapest first), -1=desc
 
@@ -1457,7 +1458,7 @@ if (document.getElementById('subscription-tbody')) {
         return metric;
       }
 
-      function renderNeighborList(container, items, selectedCost, relation) {
+      function renderNeighborList(container, items, selectedCost, relation, onDismiss) {
         if (!container) return;
         container.innerHTML = '';
         if (!items.length) {
@@ -1496,11 +1497,18 @@ if (document.getElementById('subscription-tbody')) {
           var delta = document.createElement('span');
           delta.className = 'mobile-cost-neighbor-delta';
           delta.textContent = ratio.toFixed(1) + '× más ' + (relation === 'cheaper' ? 'barato' : 'caro');
+          var dismiss = document.createElement('span');
+          dismiss.className = 'mobile-cost-neighbor-dismiss';
+          dismiss.textContent = '✕';
           values.appendChild(cost);
           values.appendChild(delta);
+          values.appendChild(dismiss);
 
           row.appendChild(identity);
           row.appendChild(values);
+          if (onDismiss) {
+            row.addEventListener('click', function() { onDismiss(item.model); });
+          }
           container.appendChild(row);
         });
       }
@@ -1511,11 +1519,12 @@ if (document.getElementById('subscription-tbody')) {
         if (!logic || !selectedContainer || !refModel) return;
 
         var currentCost = parseFloat(refCostInput ? refCostInput.value : 0);
+        var dismissedSet = new Set(dismissedModels);
         var comparableModels = subModels.map(function(item) {
           var copy = Object.assign({}, item);
           if (copy.model === refModel.model && currentCost > 0) copy.cost_sub = currentCost;
           return copy;
-        });
+        }).filter(function(item) { return !dismissedSet.has(item.model); });
         var comparison = logic.getCostNeighbors(comparableModels, refModel.model, 5);
         var selected = comparison.selected;
         if (!selected) {
@@ -1578,14 +1587,54 @@ if (document.getElementById('subscription-tbody')) {
         ));
         selectedContainer.appendChild(metrics);
 
-        renderNeighborList(document.getElementById('mobile-cost-cheaper'), comparison.cheaper, subscriptionCost, 'cheaper');
-        renderNeighborList(document.getElementById('mobile-cost-pricier'), comparison.pricier, subscriptionCost, 'pricier');
+        function handleDismiss(model) {
+          dismissedModels.push(model);
+          renderMobileCostComparison(refModel);
+        }
+
+        renderNeighborList(document.getElementById('mobile-cost-cheaper'), comparison.cheaper, subscriptionCost, 'cheaper', handleDismiss);
+        renderNeighborList(document.getElementById('mobile-cost-pricier'), comparison.pricier, subscriptionCost, 'pricier', handleDismiss);
+
+        // Render divider row with selected model
+        var divider = document.getElementById('mobile-cost-divider');
+        if (divider) {
+          divider.innerHTML = '';
+          var divName = document.createElement('strong');
+          divName.textContent = displayModelName(selected.model);
+          var divCost = document.createElement('strong');
+          divCost.textContent = formatComparisonCost(subscriptionCost);
+          var divLabel = document.createElement('span');
+          divLabel.textContent = 'referencia';
+          divider.appendChild(divName);
+          divider.appendChild(divCost);
+          divider.appendChild(divLabel);
+        }
+
+        // Restore button visibility
+        var restoreBtn = document.getElementById('mobile-cost-restore');
+        if (restoreBtn) {
+          var dismissedCount = dismissedModels.length;
+          if (dismissedCount > 0) {
+            restoreBtn.style.display = '';
+            restoreBtn.textContent = '↻ Restaurar ocultos (' + dismissedCount + ')';
+            restoreBtn.onclick = function() {
+              dismissedModels = [];
+              renderMobileCostComparison(refModel);
+            };
+          } else {
+            restoreBtn.style.display = 'none';
+            restoreBtn.textContent = '↻ Restaurar';
+          }
+        }
+
         var count = document.getElementById('mobile-cost-count');
-        if (count) count.textContent = comparison.cheaper.length + 1 + comparison.pricier.length + ' modelos';
+        if (count) count.textContent = (comparison.cheaper.length + 1 + comparison.pricier.length) + ' modelos';
       }
 
       // Recalculate table with dynamic reference
       function recalcAll() {
+        // Clear dismissals when reference changes
+        dismissedModels = [];
         var refModel = getRefModel();
         var typedRefPrice = parseFloat(refCostInput ? refCostInput.value : 0);
         var fallbackRefPrice = refModel && refModel.plan && refModel.plan.indexOf('Codex') !== -1 && refModel.cost_api > 0
