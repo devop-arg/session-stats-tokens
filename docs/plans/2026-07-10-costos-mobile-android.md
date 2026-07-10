@@ -35,41 +35,41 @@
 
 ## Tarea 1 — Backup y línea base
 
-- [ ] Respaldar los archivos afectados y archivos de precios en un directorio fechado dentro del proyecto.
-- [ ] Registrar la ruta completa del backup.
-- [ ] Verificar `/healthz`, `/costos` y `/api/subscription-estimate` antes de modificar.
-- [ ] Registrar cambios preexistentes del working tree para no sobrescribirlos.
+- [x] Respaldar los archivos afectados y archivos de precios en un directorio fechado dentro del proyecto.
+- [x] Registrar la ruta completa del backup: `/home/capw/scripts/session-stats/model_backups/costos-mobile-android-2026-07-10_173937_-0300`.
+- [x] Verificar `/healthz`, `/costos` y `/api/subscription-estimate` antes de modificar.
+- [x] Registrar cambios preexistentes del working tree para no sobrescribirlos.
 
 ## Tarea 2 — Lógica pura del comparador (TDD)
 
 ### RED
 
-- [ ] Crear pruebas para prioridad de precio manual.
-- [ ] Crear prueba para fallback Codex `cost_api / 20` con `precio pendiente`.
-- [ ] Crear prueba para excluir modelos sin precio ni fallback.
-- [ ] Crear prueba para obtener cinco vecinos inmediatamente más baratos y cinco más caros.
-- [ ] Crear pruebas de bordes cuando existen menos de cinco vecinos.
-- [ ] Ejecutar `node --test stats-web/tests/costos-logic.test.js` y verificar fallo por implementación ausente.
+- [x] Crear pruebas para prioridad de precio manual.
+- [x] Crear prueba para fallback Codex `cost_api / 20` con `precio pendiente`.
+- [x] Crear prueba para excluir modelos sin precio ni fallback.
+- [x] Crear prueba para obtener cinco vecinos inmediatamente más baratos y cinco más caros.
+- [x] Crear pruebas de bordes cuando existen menos de cinco vecinos.
+- [x] Ejecutar `node --test stats-web/tests/costos-logic.test.js` y verificar fallo por implementación ausente.
 
 ### GREEN
 
-- [ ] Implementar `getComparableSubscriptionCost()`.
-- [ ] Implementar `getCostNeighbors()`.
-- [ ] Ejecutar las pruebas y verificar que pasen.
+- [x] Implementar `getComparableSubscriptionCost()`.
+- [x] Implementar `getCostNeighbors()`.
+- [x] Ejecutar las pruebas y verificar que pasen.
 
 ## Tarea 3 — Punto de equilibrio (TDD)
 
 ### RED
 
-- [ ] Probar cálculo de tokens de equilibrio usando el costo semanal del plan y el costo API por millón.
-- [ ] Probar porcentaje de equilibrio respecto del volumen estimado al 100%.
-- [ ] Probar entradas cero o inválidas.
-- [ ] Ejecutar y verificar los fallos esperados.
+- [x] Probar cálculo de tokens de equilibrio usando el costo semanal del plan y el costo API por millón.
+- [x] Probar porcentaje de equilibrio respecto del volumen estimado al 100%.
+- [x] Probar entradas cero o inválidas.
+- [x] Ejecutar y verificar los fallos esperados.
 
 ### GREEN
 
-- [ ] Implementar `calculateBreakEven()`.
-- [ ] Ejecutar las pruebas y verificar que pasen.
+- [x] Implementar `calculateBreakEven()`.
+- [x] Ejecutar las pruebas y verificar que pasen.
 
 ## Tarea 4 — Integración del comparador mobile
 
