@@ -205,6 +205,52 @@ def _load_codex_sub_costs() -> dict:
     return data or {}
 
 
+def _ensure_codex_gpt_models(codex_sub_costs: dict, model_aliases: dict, models) -> dict:
+    """Agrega GPT nuevos al archivo Codex con costo 0 como placeholder.
+
+    El precio queda en cero hasta que el usuario lo confirme desde /costos.
+    Si el archivo está corrupto no se pisa: se deja que el warning existente
+    permita restaurarlo manualmente.
+    """
+    lock_file = _lock_path(CODEX_SUB_COST_PATH)
+    missing = set()
+    costs = dict(codex_sub_costs)
+
+    with open(lock_file, "w") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            raw, err = _safe_load_json(CODEX_SUB_COST_PATH)
+            if err or (raw is not None and not isinstance(raw, dict)):
+                return codex_sub_costs
+
+            costs = dict(raw if raw is not None else codex_sub_costs)
+            for model in models:
+                canonical = model_aliases.get(model, model)
+                if isinstance(canonical, str) and "gpt" in canonical.lower() and canonical not in costs:
+                    missing.add(canonical)
+
+            if not missing:
+                return costs
+
+            for model in sorted(missing):
+                costs[model] = 0.0
+
+            text = _json.dumps(costs, indent=2) + "\n"
+            with open(CODEX_SUB_COST_PATH, "w") as fh:
+                fh.write(text)
+                fh.flush()
+                os.fsync(fh.fileno())
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+
+    print(
+        "[INFO] GPT agregados a codex_sub_costs.json con costo 0: "
+        + ", ".join(sorted(missing)),
+        file=sys.stderr,
+    )
+    return costs
+
+
 # --- HTML Pages ---
 
 @app.get("/healthz")
@@ -1115,6 +1161,7 @@ def api_subscription_estimate():
 
     SUB_MULTIPLIER = 6.0  # $10 → $60 crédito
     codex_sub_costs = _load_codex_sub_costs()
+    codex_sub_costs = _ensure_codex_gpt_models(codex_sub_costs, model_aliases, agg.keys())
     GPT54_REF = codex_sub_costs.get("gpt-5.4", 0.0183)  # referencia dinámica
 
     models = []
@@ -1164,7 +1211,9 @@ def api_subscription_estimate():
         # vs gpt-5.4 sub reference
         if item["cost_sub"] is not None:
             ratio_ref = item["cost_sub"] / GPT54_REF if GPT54_REF > 0 else 0
-            if ratio_ref < 1:
+            if ratio_ref <= 0:
+                item["vs_gpt54"] = "— (costo pendiente)"
+            elif ratio_ref < 1:
                 item["vs_gpt54"] = f"{round(1/ratio_ref, 1)}× más barato"
             elif ratio_ref > 1:
                 item["vs_gpt54"] = f"{round(ratio_ref, 1)}× más caro"

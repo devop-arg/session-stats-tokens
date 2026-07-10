@@ -197,6 +197,11 @@ Costs per 1M tokens (USD). Some models include cache pricing.
 - **Gestión alternativa**: el CLI `session-stats-models` permite
   agregar/editar/borrar modelos y aliases, y listar huérfanos/sin uso.
   Precios en `model_costs.json`, aliases en `model_aliases.json`.
+- **Costos Codex**: `/api/subscription-estimate` agrega automáticamente los
+  modelos usados cuyo nombre contiene `gpt` a `codex_sub_costs.json` con costo
+  `0` si todavía no existen. El selector de `/costos` los muestra como
+  `costo pendiente`; el precio Codex real se carga luego con **Guardar**.
+  Actualizar los precios API no modifica `cost_sub`: son valores independientes.
 
 El costo se calcula en `stats_common.calculate_cost` como
 `input·price_in + output·price_out + cache_tokens·price_cache` (si el modelo no
