@@ -23,6 +23,9 @@ CURSOR_USAGE_JSONL = Path.home() / ".cursor" / "usage-events.jsonl"
 CURSOR_CHATS_DIR = Path.home() / ".cursor" / "chats"
 CURSOR_AGENT_LOGS_DIR = Path("/tmp") / f"cursor-agent-logs-{__import__('os').getuid()}"
 
+# Rutas de Grok CLI (session files en ~/.grok/sessions/<cwd>/<uuid>/)
+GROK_SESSIONS_DIR = Path.home() / ".grok" / "sessions"
+
 # Directorio del script (para JSON de modelos)
 SCRIPT_DIR = Path(__file__).resolve().parent
 MODEL_COSTS_FILE = SCRIPT_DIR / "model_costs.json"
@@ -204,6 +207,7 @@ SOURCE_CACHE_SEMANTICS = {
     "kilocode": {"input_includes_cache_read": False, "cache_write_billable": False},
     "cursor":   {"input_includes_cache_read": False, "cache_write_billable": False},
     "unknown":  {"input_includes_cache_read": False, "cache_write_billable": False},
+    "grok":     {"input_includes_cache_read": False, "cache_write_billable": False},
 }
 
 
@@ -224,6 +228,25 @@ def _load_model_overrides():
 
     # Alias protegidos: siempre presentes, nunca en JSON
     MODEL_ALIASES["historical_adjustment"] = "historical_adjustment"
+
+
+def reload_model_costs():
+    """Recarga MODEL_COSTS desde model_costs.json.
+
+    _load_model_overrides() corre solo una vez al importar el módulo, por lo
+    que los edits manuales al JSON (desde la UI web) no se reflejan en memoria.
+    Llamar esta función tras guardar precios o antes de recalcular para usar
+    los valores actuales del archivo. Idempotente: si el JSON no cambió, el
+    diccionario queda igual.
+    """
+    try:
+        if MODEL_COSTS_FILE.exists():
+            with open(MODEL_COSTS_FILE) as fh:
+                data = json.load(fh)
+            MODEL_COSTS.clear()
+            MODEL_COSTS.update(data)
+    except Exception:
+        pass
 
 
 _load_model_overrides()
@@ -961,6 +984,155 @@ def get_cursor_session_stats(session_id):
     }
 
 
+# --- Grok ---
+def _grok_session_summaries():
+    """Itera los summary.json de sesiones de Grok (~/.grok/sessions/<cwd>/<uuid>/)."""
+    if not GROK_SESSIONS_DIR.exists():
+        return []
+    import glob
+
+    paths = glob.glob(str(GROK_SESSIONS_DIR / "**" / "summary.json"), recursive=True)
+    return [Path(p) for p in paths]
+
+
+def _grok_max_total_tokens(session_dir):
+    """Lee updates.jsonl y devuelve el maximo _meta.totalTokens (proxy de input).
+
+    Grok no expone input/output/cache reales localmente; totalTokens es el
+    contexto acumulado de la sesion. Se usa como estimacion de input.
+    """
+    updates = session_dir / "updates.jsonl"
+    if not updates.exists():
+        return 0
+    max_tokens = 0
+    try:
+        with open(updates) as f:
+            for line in f:
+                idx = line.find('"totalTokens"')
+                if idx == -1:
+                    continue
+                rest = line[idx + len('"totalTokens"'):]
+                m = re.search(r":\s*(\d+)", rest)
+                if m:
+                    v = int(m.group(1))
+                    if v > max_tokens:
+                        max_tokens = v
+    except OSError:
+        pass
+    return max_tokens
+
+
+def _grok_request_count(session_dir):
+    """Cuenta prompts del usuario (mensajes type=user en chat_history.jsonl).
+
+    prompt_history.jsonl esta a nivel de cwd (no por sesion), asi que se
+    cuenta por sesion desde chat_history.jsonl.
+    """
+    ch = session_dir / "chat_history.jsonl"
+    if not ch.exists():
+        return 0
+    n = 0
+    try:
+        with open(ch) as f:
+            for line in f:
+                if '"type":"user"' in line or '{"type": "user"' in line:
+                    n += 1
+    except OSError:
+        return 0
+    return n
+
+
+def get_grok_sessions():
+    """Lista sesiones de Grok CLI desde archivos de sesion.
+
+    Nota: Grok no expone input/output/cache reales localmente. Usa
+    max(_meta.totalTokens) de updates.jsonl como proxy de input (contexto
+    acumulado). output/cache = 0. El costo queda en 0 salvo que el modelo
+    este en model_costs.json.
+    """
+    out = []
+    for summary_path in _grok_session_summaries():
+        session_dir = summary_path.parent
+        try:
+            with open(summary_path) as f:
+                summary = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        info = summary.get("info", {})
+        raw_id = info.get("id") or session_dir.name
+        sid = "grok_" + raw_id
+        model = summary.get("current_model_id") or "grok-unknown"
+        created = summary.get("created_at") or ""
+        date_str = created
+        ts = 0
+        try:
+            ts = int(datetime.datetime.fromisoformat(
+                created.replace("Z", "+00:00")).timestamp())
+        except Exception:
+            pass
+        total_tokens = _grok_max_total_tokens(session_dir)
+        requests = _grok_request_count(session_dir)
+        if total_tokens <= 0:
+            continue
+        # totalTokens = contexto acumulado (input+output+system+tools).
+        # Grok no expone breakdown real; se estima con la heurística 85/15
+        # (igual que el backfill de Cursor desde logs de debug).
+        input_tokens = int(total_tokens * 0.85)
+        output_tokens = total_tokens - input_tokens
+        normalized = normalize_model_name(model)
+        by_model = {normalized: {
+            "requests": requests,
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0,
+        }}
+        out.append({
+            "id": sid,
+            "model": model,
+            "date": date_str,
+            "updated_at": ts,
+            "requests": requests,
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache": 0,
+            "reasoning": 0,
+            "by_model": by_model,
+        })
+    out.sort(key=lambda s: s.get("updated_at") or 0, reverse=True)
+    return out
+
+
+def has_real_usage_grok(session_id):
+    """Verifica si una sesion Grok tiene uso (totalTokens > 0)."""
+    sid = session_id.removeprefix("grok_")
+    for sess in get_grok_sessions():
+        if sess["id"] == "grok_" + sid or sess["id"] == sid:
+            return sess["input"] > 0
+    return False
+
+
+def get_grok_session_stats(session_id):
+    """Extrae estadisticas de una sesion Grok CLI."""
+    sid = session_id.removeprefix("grok_")
+    for sess in get_grok_sessions():
+        if sess["id"] == "grok_" + sid or sess["id"] == sid:
+            return {
+                "session_id": sess["id"],
+                "model": sess["model"],
+                "input": sess["input"],
+                "output": sess["output"],
+                "cache": sess["cache"],
+                "reasoning": 0,
+                "requests": sess["requests"],
+                "date": sess["date"],
+                "by_model": sess["by_model"],
+            }
+    return {}
+
+
 def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0):
     """Calcula costo basado en tokens."""
     # Sonar: costo fijo por request
@@ -1327,6 +1499,8 @@ def _detect_source(session_id):
         return "hermes"
     if session_id.startswith("cursor_"):
         return "cursor"
+    if session_id.startswith("grok_"):
+        return "grok"
     if session_id.startswith("opencode_") or session_id.startswith("ses_"):
         return "opencode"
     # Sesiones Hermes: formato YYYYMMDD_HHMMSS_*

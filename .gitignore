@@ -28,3 +28,7 @@ __pycache__/
 db_backups/
 *.db-shm
 *.db-wal
+
+# Lock/temp files from writes
+*.json.lock
+*.json.tmp

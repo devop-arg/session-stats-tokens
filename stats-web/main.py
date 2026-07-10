@@ -1,4 +1,6 @@
 import sys
+import os
+import fcntl
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent.parent
@@ -152,14 +154,55 @@ MODEL_ALIASES_PATH = SCRIPT_DIR / "model_aliases.json"
 MODEL_BACKUP_DIR = SCRIPT_DIR / "model_backups"
 
 
+def _lock_path(path: Path) -> Path:
+    return path.with_suffix(path.suffix + ".lock")
+
+
+def _atomic_write_json(path: Path, data) -> None:
+    """Escribe JSON de forma segura y serializada para evitar archivos corruptos.
+
+    Usa escritura in-place (truncate + write + fsync) bajo un flock exclusivo
+    sobre <archivo>.lock, en lugar de tempfile + os.replace: en este entorno
+    `os.replace` sobre el archivo vivo falla con EBUSY (Device or resource busy)
+    dentro del proceso uvicorn, mientras que la escritura in-place funciona.
+    El flock serializa los writes concurrentes (el frontend manda un fetch por
+    campo con Promise.all), que era la causa real de la corrupción original.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_file = _lock_path(path)
+    with open(lock_file, "w") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            text = _json.dumps(data, indent=2) + "\n"
+            with open(path, "w") as fh:
+                fh.write(text)
+                fh.flush()
+                os.fsync(fh.fileno())
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+
+
+def _safe_load_json(path: Path):
+    """Carga JSON y NO oculta errores de parseo.
+
+    Devuelve (data, error). Si el archivo no existe, (None, None).
+    Si hay un JSONDecodeError u OSError, error tiene el mensaje y data es None.
+    """
+    if not path.exists():
+        return None, None
+    try:
+        data = _json.loads(path.read_text())
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+    return data, None
+
+
 def _load_codex_sub_costs() -> dict:
     """Carga los costos de suscripción Codex desde codex_sub_costs.json."""
-    if CODEX_SUB_COST_PATH.exists():
-        try:
-            return _json.loads(CODEX_SUB_COST_PATH.read_text())
-        except Exception:
-            pass
-    return {}
+    data, err = _safe_load_json(CODEX_SUB_COST_PATH)
+    if err:
+        print(f"[WARN] codex_sub_costs.json corrupto: {err}", file=sys.stderr)
+    return data or {}
 
 
 # --- HTML Pages ---
@@ -325,13 +368,32 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
         WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
         GROUP BY mu.model
         ORDER BY tokens DESC
-        LIMIT 5
     """, (start_utc, end_utc)).fetchall()
 
     conn.close()
 
-    top_models = []
+    # Reagrupar por nombre canónico (normalize + aliases) — mismo patrón que api_models
+    agg = {}
     for m in models:
+        canon = normalize_model_name(m["model"])
+        b = agg.setdefault(canon, {
+            "model": canon, "requests": 0, "cost": 0.0,
+            "input_tokens": 0, "output_tokens": 0, "cache_tokens": 0,
+            "cache_read_tokens": 0, "cache_ratio_input_tokens": 0, "tokens": 0,
+        })
+        b["requests"] += m["requests"]
+        b["cost"] += m["cost"]
+        b["input_tokens"] += m["input_tokens"]
+        b["output_tokens"] += m["output_tokens"]
+        b["cache_tokens"] += m["cache_tokens"]
+        b["cache_read_tokens"] += m["cache_read_tokens"]
+        b["cache_ratio_input_tokens"] += m["cache_ratio_input_tokens"]
+        b["tokens"] += m["tokens"]
+
+    sorted_models = sorted(agg.values(), key=lambda x: x["tokens"], reverse=True)[:5]
+
+    top_models = []
+    for m in sorted_models:
         top_models.append({
             "model": m["model"],
             "requests": m["requests"],
@@ -472,7 +534,6 @@ class SaveModelPriceRequest(BaseModel):
     model: str
     field: str
     value: float | None
-    create: bool = False
 
 
 def _backup_model_files():
@@ -486,18 +547,14 @@ def _backup_model_files():
 
 @app.get("/api/model-prices")
 def api_model_prices():
-    costs = {}
-    if MODEL_COSTS_PATH.exists():
-        try:
-            costs = _json.loads(MODEL_COSTS_PATH.read_text())
-        except Exception:
-            pass
-    aliases = {}
-    if MODEL_ALIASES_PATH.exists():
-        try:
-            aliases = _json.loads(MODEL_ALIASES_PATH.read_text())
-        except Exception:
-            pass
+    costs, costs_err = _safe_load_json(MODEL_COSTS_PATH)
+    if costs_err:
+        print(f"[WARN] model_costs.json corrupto: {costs_err}", file=sys.stderr)
+    costs = costs or {}
+    aliases, aliases_err = _safe_load_json(MODEL_ALIASES_PATH)
+    if aliases_err:
+        print(f"[WARN] model_aliases.json corrupto: {aliases_err}", file=sys.stderr)
+    aliases = aliases or {}
     alias_count = {}
     for alias, target in aliases.items():
         alias_count[target] = alias_count.get(target, 0) + 1
@@ -515,122 +572,83 @@ def api_model_prices():
 
 @app.post("/api/model-prices/save")
 def api_save_model_price(req: SaveModelPriceRequest):
-    if not MODEL_COSTS_PATH.exists():
-        return JSONResponse({"success": False, "error": "model_costs.json not found"}, status_code=500)
-    try:
-        costs = _json.loads(MODEL_COSTS_PATH.read_text())
-    except Exception as e:
-        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
-
+    # Validaciones tempranas (sin I/O de disco)
     if req.field not in ("input", "output", "cache"):
         return JSONResponse({"success": False, "error": f"Invalid field '{req.field}'"}, status_code=400)
-
     if req.value is not None and req.value < 0:
         return JSONResponse({"success": False, "error": "Price cannot be negative"}, status_code=400)
+    if not MODEL_COSTS_PATH.exists():
+        return JSONResponse({"success": False, "error": "model_costs.json not found"}, status_code=500)
 
+    # Backup una sola vez (antes del lock)
     _backup_model_files()
 
-    canonical_name = None
-    for name in costs:
-        if name == req.model:
-            canonical_name = name
-            break
+    # Ciclo completo read-modify-write bajo el mismo flock para serializar
+    # requests concurrentes (el frontend manda uno por campo con Promise.all).
+    # Si la lectura queda fuera del lock, requests paralelos leen estado viejo y
+    # el último en escribir pisa a los otros (solo sobrevive un campo).
+    lock_file = _lock_path(MODEL_COSTS_PATH)
+    with open(lock_file, "w") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            costs, load_err = _safe_load_json(MODEL_COSTS_PATH)
+            if load_err:
+                print(f"[ERROR] model_costs.json corrupto al guardar: {load_err}", file=sys.stderr)
+                return JSONResponse(
+                    {"success": False, "error": f"model_costs.json corrupto, no se puede guardar: {load_err}"},
+                    status_code=500,
+                )
 
-    # Crear modelo nuevo si no existe (permite dar de alta modelos huérfanos)
-    created = False
-    if not canonical_name:
-        if req.create is not True:
-            return JSONResponse({"success": False, "error": f"Model '{req.model}' not found"}, status_code=404)
-        if req.field not in ("input", "output"):
-            return JSONResponse({"success": False, "error": "Para crear un modelo se requiere input y output"}, status_code=400)
-        if req.value is None:
-            return JSONResponse({"success": False, "error": "input and output cannot be null"}, status_code=400)
-        canonical_name = req.model
-        costs[canonical_name] = {}
-        created = True
+            canonical_name = None
+            for name in costs:
+                if name == req.model:
+                    canonical_name = name
+                    break
 
-    if req.value is None:
-        if req.field == "cache":
-            costs[canonical_name].pop("cache", None)
-        else:
-            return JSONResponse({"success": False, "error": "input and output cannot be null"}, status_code=400)
-    else:
-        costs[canonical_name][req.field] = req.value
+            if not canonical_name:
+                return JSONResponse({"success": False, "error": f"Model '{req.model}' not found"}, status_code=404)
 
-    if "cache" in costs[canonical_name] and costs[canonical_name]["cache"] is None:
-        costs[canonical_name].pop("cache", None)
+            if req.value is None:
+                if req.field == "cache":
+                    costs[canonical_name].pop("cache", None)
+                else:
+                    return JSONResponse({"success": False, "error": "input and output cannot be null"}, status_code=400)
+            else:
+                costs[canonical_name][req.field] = req.value
 
+            if "cache" in costs[canonical_name] and costs[canonical_name]["cache"] is None:
+                costs[canonical_name].pop("cache", None)
+
+            text = _json.dumps(costs, indent=2) + "\n"
+            with open(MODEL_COSTS_PATH, "w") as fh:
+                fh.write(text)
+                fh.flush()
+                os.fsync(fh.fileno())
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+
+    # Sincronizar el dict en memoria (stats_common.MODEL_COSTS) con el archivo
+    # recién escrito, para que el recálculo subsiguiente use los precios nuevos.
     try:
-        MODEL_COSTS_PATH.write_text(_json.dumps(costs, indent=2) + "\n")
-        return {"success": True, "model": req.model, "field": req.field, "value": req.value}
-    except Exception as e:
-        return JSONResponse({"success": False, "error": str(e)}, status_code=500)
+        from stats_common import reload_model_costs
+        reload_model_costs()
+    except Exception:
+        pass
 
-
-@app.get("/api/model-prices/orphans")
-def api_model_price_orphans():
-    """Modelos usados en la DB que aún no tienen precio en model_costs.json.
-
-    Un modelo es huérfano si no aparece como clave en model_costs.json, sin
-    importar si es destino de un alias (un alias puede apuntar a un modelo que
-    todavía no tiene precio, p.ej. tencent/hy3 es target de tencent/hy3:free).
-    """
-    costs = {}
-    if MODEL_COSTS_PATH.exists():
-        try:
-            costs = _json.loads(MODEL_COSTS_PATH.read_text())
-        except Exception:
-            pass
-    aliases = {}
-    if MODEL_ALIASES_PATH.exists():
-        try:
-            aliases = _json.loads(MODEL_ALIASES_PATH.read_text())
-        except Exception:
-            pass
-
-    priced = set(costs.keys())
-
-    orphans = []
-    conn = _db()
-    rows = conn.execute("""
-        SELECT mu.model,
-               COALESCE(SUM(mu.requests),0) as requests,
-               COALESCE(SUM(mu.cost),0) as cost
-        FROM model_usage mu
-        JOIN sessions s ON s.id = mu.session_id
-        WHERE s.source != 'legacy'
-        GROUP BY mu.model
-    """).fetchall()
-    conn.close()
-
-    for r in rows:
-        canon = normalize_model_name(r["model"])
-        if canon in priced:
-            continue
-        orphans.append({
-            "model": r["model"],
-            "canonical": canon,
-            "requests": r["requests"],
-            "cost": r["cost"],
-        })
-
-    # Deduplicar por canónico, sumando requests/cost
-    agg = {}
-    for o in orphans:
-        b = agg.setdefault(o["canonical"], {"model": o["model"], "canonical": o["canonical"], "requests": 0, "cost": 0.0})
-        b["requests"] += o["requests"]
-        b["cost"] += o["cost"]
-    result = sorted(agg.values(), key=lambda x: x["cost"], reverse=True)
-    return result
+    return {"success": True, "model": req.model, "field": req.field, "value": req.value}
 
 
 @app.get("/api/model-prices/recalculate")
 def api_recalculate_history():
     """Recalcula costos históricos usando precios actuales."""
     try:
-        from stats_common import normalize_model_name, calculate_cost
+        from stats_common import normalize_model_name, calculate_cost, reload_model_costs
     except ImportError:
         return JSONResponse({"success": False, "error": "stats_common import failed"}, status_code=500)
+
+    # Recargar precios desde el JSON: el dict en memoria puede estar desactualizado
+    # si se editaron precios desde la UI después de que el server arrancó.
+    reload_model_costs()
 
     conn = sqlite3.connect(str(DB_PATH))
     mrows = conn.execute(
@@ -1227,7 +1245,7 @@ def api_save_subscription_cost(req: SaveCostRequest):
     costs = _load_codex_sub_costs()
     costs[req.model] = round(req.cost_sub, 6)
     try:
-        CODEX_SUB_COST_PATH.write_text(_json.dumps(costs, indent=2) + "\n")
+        _atomic_write_json(CODEX_SUB_COST_PATH, costs)
         return {"success": True, "model": req.model, "cost_sub": costs[req.model]}
     except Exception as e:
         return JSONResponse({"success": False, "error": str(e)}, status_code=500)

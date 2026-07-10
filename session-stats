@@ -16,10 +16,12 @@ import sqlite3
 import datetime
 from pathlib import Path
 import sys
+import os
+import fcntl
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from stats_common import MODEL_COSTS, MODEL_ALIASES, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, get_cursor_sessions, has_real_usage_cursor, get_cursor_session_stats, save_session, init_db, _parse_timestamp, _detect_source, DB_PATH
+from stats_common import MODEL_COSTS, MODEL_ALIASES, MODEL_COSTS_FILE, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, get_cursor_sessions, has_real_usage_cursor, get_cursor_session_stats, get_grok_sessions, has_real_usage_grok, get_grok_session_stats, save_session, init_db, _parse_timestamp, _detect_source, DB_PATH
 
 KILO_DB_PATH = Path.home() / ".local/share/kilo/kilo.db"
 OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
@@ -162,8 +164,14 @@ def get_current_session():
     # Collect Hermes sessions with real usage
     for sess in get_hermes_sessions():
         if has_real_usage_hermes(sess["id"]):
-            ts_ms = int(sess["started_at"] * 1000) if sess.get("started_at") else 0
+            ts_ms = int(sess.get("started_at") * 1000) if sess.get("started_at") else 0
             candidates.append(("hermes", sess["id"], ts_ms, sess.get("ended_at")))
+
+    # Collect Grok sessions with real usage (totalTokens > 0)
+    for sess in get_grok_sessions():
+        if has_real_usage_grok(sess["id"]):
+            ts_ms = int(sess.get("updated_at", 0) * 1000)
+            candidates.append(("grok", sess["id"], ts_ms))
 
     if not candidates:
         return None
@@ -346,6 +354,42 @@ def update_history(session_id, requests, input_tokens, output_tokens, cost, by_m
     except Exception:
         pass
 
+
+def _prune_residual_models(sid, by_model):
+    """Elimina modelos residuales sólo cuando la fuente es completa y verificable."""
+    if not by_model:
+        return 0
+
+    expected = (
+        sum(m.get("requests", 0) for m in by_model.values()),
+        sum(m.get("input", 0) for m in by_model.values()),
+        sum(m.get("output", 0) for m in by_model.values()),
+        sum(m.get("cache", 0) for m in by_model.values()),
+        sum(m.get("reasoning", 0) for m in by_model.values()),
+    )
+    models = tuple(by_model)
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        current = conn.execute(
+            "SELECT requests, input_tokens, output_tokens, cache_tokens, reasoning_tokens "
+            "FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        if current != expected:
+            conn.close()
+            return 0
+        placeholders = ",".join("?" for _ in models)
+        cursor = conn.execute(
+            f"DELETE FROM model_usage WHERE session_id = ? AND model NOT IN ({placeholders})",
+            (sid, *models),
+        )
+        conn.commit()
+        deleted = cursor.rowcount
+        conn.close()
+        return deleted
+    except sqlite3.Error:
+        return 0
+
+
 def capture_all_sessions():
     """Captura y persiste TODAS las sesiones de todas las fuentes (Kilo, OpenCode, Codex, Hermes).
 
@@ -399,7 +443,9 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid)
         if stats["by_model"]:
-            _save_if_new(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000), source="kilo")
+            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000)
+            _save_if_new(sid, entry, source="kilo")
+            _prune_residual_models(sid, entry["by_model"])
 
     # --- OpenCode SQLite ---
     for sess in get_opencode_sessions():
@@ -410,7 +456,9 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid, OPENCODE_DB_PATH)
         if stats["by_model"]:
-            _save_if_new(sid, _build_session_entry(stats["by_model"], sess["time_updated"] / 1000))
+            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000)
+            _save_if_new(sid, entry)
+            _prune_residual_models(sid, entry["by_model"])
 
     # --- Codex ---
     for sess_file in get_codex_sessions():
@@ -418,8 +466,9 @@ def capture_all_sessions():
             continue
         stats = get_codex_session_stats(sess_file)
         sid = "codex_" + (stats.get("session_id") or sess_file.stem)
-        if sid in existing_keys:
-            continue
+        # Las sesiones de Codex se escriben incrementalmente mientras siguen
+        # activas. save_session usa MAX() por campo, por lo que este upsert
+        # sólo incorpora el uso nuevo y nunca reduce datos ya persistidos.
         normalized = normalize_model_name(stats["model"])
         cost = calculate_cost(stats["model"], stats["input"], stats["output"], stats["cache"])
         _save_if_new(sid, {
@@ -433,6 +482,7 @@ def capture_all_sessions():
                 "output": stats["output"], "cache": stats["cache"],
                 "cache_read": stats.get("cache_read", stats["cache"]),
                 "cache_write": stats.get("cache_write", 0),
+                "reasoning": stats.get("reasoning", 0),
                 "cost": cost
             }}
         })
@@ -499,7 +549,103 @@ def capture_all_sessions():
         except Exception:
             pass
 
+    # --- Grok CLI (siempre upsert: sesiones activas crecen) ---
+    for sess in get_grok_sessions():
+        sid = sess["id"]
+        by_model = sess.get("by_model", {})
+        if not by_model:
+            continue
+        was_new = sid not in existing_keys
+        try:
+            by_model_with_cost = {}
+            session_cost = 0
+            for model, mdata in by_model.items():
+                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+                session_cost += c
+                by_model_with_cost[model] = {**mdata, "cost": c}
+            cache_tokens = sum(m.get("cache", 0) for m in by_model_with_cost.values())
+            save_session(
+                sid, "grok",
+                sess.get("date", ""), sess.get("updated_at", 0),
+                sess.get("requests", 0),
+                sess.get("input", 0),
+                sess.get("output", 0),
+                cache_tokens, 0,
+                session_cost,
+                by_model_with_cost, DB_PATH
+            )
+            if was_new:
+                new_count += 1
+            existing_keys.add(sid)
+        except Exception:
+            pass
+
+    # --- Sembrar modelos huérfanos usados en la DB a 0/0/0 ---
+    try:
+        _seed_orphan_costs()
+    except Exception as e:
+        print(f"[seed] error: {e}", file=sys.stderr)
+
     return new_count
+
+
+def _atomic_write_costs(data):
+    """Escritura segura y serializada sobre model_costs.json.
+
+    Escritura in-place (truncate + write + fsync) bajo flock sobre
+    model_costs.json.lock. Se evita tempfile + os.replace porque en este
+    entorno `os.replace` sobre el archivo vivo falla con EBUSY dentro del
+    proceso uvicorn. El flock serializa writes del cron y la UI.
+    """
+    path = MODEL_COSTS_FILE
+    lock = path.with_suffix(path.suffix + ".lock")
+    with open(lock, "w") as lf:
+        fcntl.flock(lf, fcntl.LOCK_EX)
+        try:
+            with open(path, "w") as fh:
+                fh.write(json.dumps(data, indent=2) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+        finally:
+            fcntl.flock(lf, fcntl.LOCK_UN)
+
+
+def _seed_orphan_costs():
+    """Siembra en model_costs.json los modelos usados en la DB sin precio, a 0/0/0.
+
+    Evita modelos huérfanos y el fricción de crearlos a mano desde la UI.
+    Idempotente: solo agrega los que faltan.
+    """
+    try:
+        conn = sqlite3.connect(str(DB_PATH))
+        rows = conn.execute(
+            "SELECT DISTINCT mu.model FROM model_usage mu "
+            "JOIN sessions s ON s.id = mu.session_id "
+            "WHERE s.source != 'legacy'"
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return
+    if not rows:
+        return
+    used = {normalize_model_name(r[0]) for r in rows}
+    used.discard("")
+    costs = {}
+    if MODEL_COSTS_FILE.exists():
+        try:
+            costs = json.load(open(MODEL_COSTS_FILE))
+        except Exception:
+            costs = {}
+    added = [m for m in sorted(used) if m not in costs]
+    if not added:
+        return
+    for m in added:
+        costs[m] = {"input": 0.0, "output": 0.0, "cache": 0.0}
+    try:
+        _atomic_write_costs(costs)
+        print(f"[seed] {len(added)} modelo(s) nuevo(s) sembrado(s) en model_costs.json a 0/0/0")
+    except Exception as e:
+        print(f"[seed] error al sembrar model_costs.json: {e}", file=sys.stderr)
 
 
 def _build_session_entry(by_model, timestamp):
@@ -589,6 +735,14 @@ def main():
             "by_model": cursor_stats.get("by_model", {}),
             "session_title": cursor_stats.get("session_title", ""),
         }
+    elif source == "grok":
+        grok_stats = get_grok_session_stats(session_ref)
+        session_id = session_ref
+        session_date = grok_stats.get("date", "")
+        stats = {
+            "total_messages": grok_stats.get("requests", 0),
+            "by_model": grok_stats.get("by_model", {}),
+        }
     else:
         # opencode_json
         stats = get_session_stats_json(session_ref)
@@ -628,7 +782,7 @@ def main():
     total_historical_cost = hist["total_cost"]
     total_sessions = hist["total_sessions"]
     
-    source_label = {"kilo": "Kilo", "opencode_sqlite": "OpenCode", "opencode_json": "OpenCode", "codex": "Codex", "hermes": "Hermes", "cursor": "Cursor"}.get(source, source)
+    source_label = {"kilo": "Kilo", "opencode_sqlite": "OpenCode", "opencode_json": "OpenCode", "codex": "Codex", "hermes": "Hermes", "cursor": "Cursor", "grok": "Grok"}.get(source, source)
     title_info = ""
     if source in ("kilo", "opencode_sqlite", "hermes", "cursor") and stats.get("session_title"):
         title_info = f" ({stats['session_title'][:50]})"

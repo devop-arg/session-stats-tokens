@@ -13,8 +13,11 @@ git push private main
 echo "=== 2. Checkout public (force) ==="
 git checkout public --force
 
-echo "=== 3. Merge main --no-commit ==="
-git merge main --no-commit || true
+echo "=== 3. Aplicar main sin heredar historial privado ==="
+# Un squash evita que commits privados (que incluyen la base y backups) queden
+# como ancestros de public, incluso si los archivos se eliminan antes del
+# commit público.
+git merge --squash main || true
 
 echo "=== 4. Excluir datos sensibles ==="
 git rm -f session_history.json session_history.db session_history_legacy_freeze.json 2>/dev/null || true

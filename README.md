@@ -67,6 +67,23 @@ Prevents data loss when chat sessions are deleted:
 - **Diario 6 AM**: backup SQLite con rotación de 7 días en `db_backups/`
 - Cron configurado localmente, no trackeado en el repo
 
+### Consistencia de capturas por modelo
+
+- **Codex**: las sesiones se actualizan en cada ejecución de
+  `--capture-all`. Sus contadores crecen de forma monotónica, por lo que una
+  captura temprana no congela el uso de una sesión todavía activa.
+- **OpenCode y Kilo**: el desglose se reconstruye desde todos los mensajes de
+  la sesión, conservando los tokens y requests de cada modelo usado. Sólo se
+  eliminan filas de modelos residuales si los totales reconstruidos coinciden
+  exactamente con los de la sesión persistida; ante cualquier diferencia se
+  preservan los datos históricos.
+- **Hermes** registra un modelo por sesión. **Cursor** conserva el desglose que
+  expone su hook local, pero no se depura automáticamente porque esos eventos
+  pueden no contener el historial completo.
+- **Grok CLI** no expone tokens reales locales: `totalTokens` se usa como
+  estimación de contexto y se reparte con una heurística 85/15. Sus tokens y
+  costos son orientativos, no adecuados para comparaciones precisas.
+
 ### SQLite Schema Migrations
 
 `session-stats` and the web dashboard call `init_db()` on startup. This creates
@@ -164,16 +181,26 @@ En el branch `main` (privado) estos archivos **sí** están trackeados para back
 | OpenCode | `~/.local/share/opencode/storage/message/` | JSON (v1.1.x fallback) |
 | Codex | `~/.codex/sessions/**/*.jsonl` | JSONL |
 | Hermes | `~/.hermes/state.db` | SQLite |
+| Cursor | `~/.cursor/usage-events.jsonl` | JSONL (hook local) |
+| Grok CLI | `~/.grok/sessions/**/summary.json` | JSON + estimación de contexto |
 
 ## Model Pricing
 
-Costs per 1M tokens (USD). Some models include cache pricing. Managed interactively via:
+Costs per 1M tokens (USD). Some models include cache pricing.
 
-```bash
-session-stats-models
-```
+- **Auto-seed**: `session-stats --capture-all` siembra automáticamente en
+  `model_costs.json` los modelos usados en la DB que aún no tienen precio, con
+  `0/0/0` (idempotente). Ya no hace falta darlos de alta a mano.
+- **Edición**: la UI web (`/models`) permite editar los precios de los modelos
+  ya presentes (input/output/cache). No se pueden crear modelos desde la UI;
+  los nuevos aparecen solos vía auto-seed al ser usados.
+- **Gestión alternativa**: el CLI `session-stats-models` permite
+  agregar/editar/borrar modelos y aliases, y listar huérfanos/sin uso.
+  Precios en `model_costs.json`, aliases en `model_aliases.json`.
 
-Features: add/edit/delete models, manage aliases, detect orphan models without pricing, list unused models. Prices stored in `model_costs.json`, aliases in `model_aliases.json`.
+El costo se calcula en `stats_common.calculate_cost` como
+`input·price_in + output·price_out + cache_tokens·price_cache` (si el modelo no
+registra cache tokens, el término cache es 0 da igual el precio).
 
 ### Siempre muestra Hermes aunque esté cerrado
 

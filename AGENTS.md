@@ -16,6 +16,19 @@ cp session_history.db /tmp/session_history.db.bak
 
 **Si ya se borró:** restaurar desde `db_backups/` + `session-stats --capture-all`.
 
+## `model_costs.json` (precios)
+
+- Editado por la UI web (`/models`) y por `session-stats-models`.
+- `session-stats --capture-all` auto-sembra modelos usados sin precio en `0/0/0`.
+- **Backup automático**: antes de cada guardado la UI copia el archivo actual a
+  `model_backups/model_costs_<timestamp>.json`.
+- **Escritura**: in-place (truncate + write + fsync) bajo `fcntl.flock` en
+  `model_costs.json.lock`. No usar `os.replace`/`tempfile`: en este entorno
+  falla con `EBUSY` dentro del proceso uvicorn.
+- **Si se corrompe** (parseo JSON inválido): restaurar la última copia buena
+  desde `model_backups/`; el save devuelve error 500 claro si el archivo está
+  corrupto en lugar de corromperlo.
+
 ## Migraciones SQLite
 
 `session-stats` y `stats-web` deben ejecutar `init_db()` al arrancar para aplicar

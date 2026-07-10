@@ -1101,10 +1101,25 @@ if (document.getElementById('models-tbody')) {
             modelPrices[model][field] = raw !== '' ? parseFloat(raw) : null;
           }
         });
-        var badge = document.getElementById('save-global-badge');
-        if (badge) { badge.textContent = '✓ guardado'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-pos)'; }
-        setTimeout(function() { if (badge) badge.style.display = 'none'; }, 2000);
         onCancelEdit(tr, model);
+
+        // Recalcular costos históricos y refrescar la tabla de modelos
+        var badge = document.getElementById('save-global-badge');
+        if (badge) { badge.textContent = '✓ guardado — recalculando...'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-faint)'; }
+        fetch('/api/model-prices/recalculate')
+          .then(function(r) { return r.json(); })
+          .then(function() { return fetch('/api/models?limit=200'); })
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            modelsData = data;
+            renderModels();
+            if (badge) { badge.textContent = '✓ guardado y recalculado'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-pos)'; }
+            setTimeout(function() { if (badge) badge.style.display = 'none'; }, 2000);
+          })
+          .catch(function() {
+            if (badge) { badge.textContent = '✓ guardado (recálculo pendiente)'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-accent-text)'; }
+            setTimeout(function() { if (badge) badge.style.display = 'none'; }, 3000);
+          });
       } else {
         var err = results.find(function(r) { return !r.success; });
         showSaveFeedback(cells[0], 'error', 'Error: ' + (err ? err.error : 'desconocido'));
@@ -1172,89 +1187,6 @@ if (document.getElementById('models-tbody')) {
     renderModels();
   });
 
-  // --- Agregar modelo huérfano ---
-  var addBtn = document.getElementById('add-model-btn');
-  var panel = document.getElementById('add-model-panel');
-  var sel = document.getElementById('orphan-select');
-  var nameInput = document.getElementById('new-model-input');
-  var inEl = document.getElementById('new-input');
-  var outEl = document.getElementById('new-output');
-  var cacheEl = document.getElementById('new-cache');
-  var badge = document.getElementById('add-model-badge');
-
-  if (addBtn) {
-    addBtn.addEventListener('click', function() {
-      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-      if (panel.style.display === 'block') {
-        badge.textContent = '';
-        fetch('/api/model-prices/orphans').then(function(r) { return r.json(); }).then(function(list) {
-          sel.innerHTML = '';
-          if (!list.length) {
-            var opt = document.createElement('option');
-            opt.textContent = '(sin modelos huérfanos)';
-            opt.value = '';
-            sel.appendChild(opt);
-          }
-          list.forEach(function(o) {
-            var opt = document.createElement('option');
-            opt.value = o.canonical;
-            opt.textContent = o.canonical + '  (' + o.requests + ' req)';
-            sel.appendChild(opt);
-          });
-        }).catch(function() { sel.innerHTML = '<option>(error)</option>'; });
-      }
-    });
-  }
-  var cancelBtn = document.getElementById('add-model-cancel');
-  if (cancelBtn) cancelBtn.addEventListener('click', function() { panel.style.display = 'none'; });
-
-  var confirmBtn = document.getElementById('add-model-confirm');
-  if (confirmBtn) {
-    confirmBtn.addEventListener('click', function() {
-      var model = (nameInput.value || sel.value || '').trim();
-      var inp = parseFloat(inEl.value);
-      var out = parseFloat(outEl.value);
-      var cache = cacheEl.value === '' ? null : parseFloat(cacheEl.value);
-      badge.style.display = 'none';
-      badge.style.color = 'var(--stats-faint)';
-      if (!model) { badge.style.display = 'inline'; badge.textContent = '⚠ Elegí un modelo'; return; }
-      if (isNaN(inp) || isNaN(out)) { badge.style.display = 'inline'; badge.textContent = '⚠ Input y Output requeridos'; return; }
-      if (cache !== null && isNaN(cache)) { badge.style.display = 'inline'; badge.textContent = '⚠ Cache inválido'; return; }
-
-      // Crear input y luego output (y cache si corresponde) vía save con create:true
-      function doCreate(field, value, done) {
-        fetch('/api/model-prices/save', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ model: model, field: field, value: value, create: true })
-        }).then(function(r) { return r.json().then(function(j) { return {ok: r.ok, j: j}; }); })
-          .then(function(res) { done(res); });
-      }
-      doCreate('input', inp, function(res1) {
-        if (!res1.ok) { badge.style.display = 'inline'; badge.style.color = 'var(--stats-danger, #f55)'; badge.textContent = '✗ ' + (res1.j.error || 'error input'); return; }
-        doCreate('output', out, function(res2) {
-          if (!res2.ok) { badge.style.display = 'inline'; badge.style.color = 'var(--stats-danger, #f55)'; badge.textContent = '✗ ' + (res2.j.error || 'error output'); return; }
-          if (cache !== null) {
-            doCreate('cache', cache, function() { finishCreate(); });
-          } else {
-            finishCreate();
-          }
-        });
-      });
-      function finishCreate() {
-        badge.style.display = 'inline';
-        badge.style.color = 'var(--stats-ok, #0c0)';
-        badge.textContent = '✓ ' + model + ' creado';
-        nameInput.value = '';
-        loadModelPrices().then(function() {
-          return fetch('/api/models?limit=200').then(function(r) { return r.json(); });
-        }).then(function(data) {
-          modelsData = data;
-          renderModels();
-        });
-      }
-    });
-  }
 }
 
 // --- Recalculate historical costs button ---
