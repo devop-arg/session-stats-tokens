@@ -1557,6 +1557,12 @@ td .model-name { color: var(--stats-text); font-weight: 500; }
   color: var(--stats-faint);
   font-size: 9px;
 }
+.mobile-cost-neighbor-cost,
+.mobile-cost-neighbor-delta { font-weight: 600; }
+.mobile-cost-neighbor-cheaper .mobile-cost-neighbor-cost { color: #4ade80; }
+.mobile-cost-neighbor-cheaper .mobile-cost-neighbor-delta { color: #4ade80; }
+.mobile-cost-neighbor-pricier .mobile-cost-neighbor-cost { color: #fb923c; }
+.mobile-cost-neighbor-pricier .mobile-cost-neighbor-delta { color: #fb923c; }
 .mobile-cost-empty,
 .mobile-cost-loading { padding: 12px 0; }
 

@@ -1470,7 +1470,7 @@ if (document.getElementById('subscription-tbody')) {
 
         items.forEach(function(item) {
           var row = document.createElement('div');
-          row.className = 'mobile-cost-neighbor';
+          row.className = 'mobile-cost-neighbor mobile-cost-neighbor-' + relation;
 
           var identity = document.createElement('div');
           identity.className = 'mobile-cost-neighbor-identity';
@@ -1488,11 +1488,13 @@ if (document.getElementById('subscription-tbody')) {
           var values = document.createElement('div');
           values.className = 'mobile-cost-neighbor-values';
           var cost = document.createElement('strong');
+          cost.className = 'mobile-cost-neighbor-cost';
           cost.textContent = formatComparisonCost(item.comparisonCost);
           var ratio = relation === 'cheaper'
             ? selectedCost / item.comparisonCost
             : item.comparisonCost / selectedCost;
           var delta = document.createElement('span');
+          delta.className = 'mobile-cost-neighbor-delta';
           delta.textContent = ratio.toFixed(1) + '× más ' + (relation === 'cheaper' ? 'barato' : 'caro');
           values.appendChild(cost);
           values.appendChild(delta);
