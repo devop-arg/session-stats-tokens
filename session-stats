@@ -755,6 +755,10 @@ def main():
         session_date = datetime.datetime.fromtimestamp(session_ref.stat().st_mtime).isoformat()
     
     merged_by_model = merge_model_stats(stats["by_model"])
+
+    if source == "codex" and not merged_by_model:
+        print("⚠️ Sesion Codex sin uso de tokens; no se actualiza el historial")
+        return
     
     if source == "codex":
         total_requests = codex_stats["requests"]
