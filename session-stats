@@ -21,7 +21,7 @@ import fcntl
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from stats_common import MODEL_COSTS, MODEL_ALIASES, MODEL_COSTS_FILE, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, get_cursor_sessions, has_real_usage_cursor, get_cursor_session_stats, get_grok_sessions, has_real_usage_grok, get_grok_session_stats, save_session, init_db, _parse_timestamp, _detect_source, DB_PATH
+from stats_common import MODEL_COSTS, MODEL_ALIASES, MODEL_COSTS_FILE, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, get_cursor_sessions, has_real_usage_cursor, get_cursor_session_stats, get_grok_sessions, has_real_usage_grok, get_grok_session_stats, save_session, save_codex_session, init_db, _parse_timestamp, _detect_source, DB_PATH
 
 KILO_DB_PATH = Path.home() / ".local/share/kilo/kilo.db"
 OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
@@ -465,27 +465,40 @@ def capture_all_sessions():
         if not has_real_usage_codex(sess_file):
             continue
         stats = get_codex_session_stats(sess_file)
+        if not stats.get("complete"):
+            continue
         sid = "codex_" + (stats.get("session_id") or sess_file.stem)
-        # Las sesiones de Codex se escriben incrementalmente mientras siguen
-        # activas. save_session usa MAX() por campo, por lo que este upsert
-        # sólo incorpora el uso nuevo y nunca reduce datos ya persistidos.
-        normalized = normalize_model_name(stats["model"])
-        cost = calculate_cost(stats["model"], stats["input"], stats["output"], stats["cache"])
-        _save_if_new(sid, {
-            "date": stats.get("date", ""),
-            "requests": stats["requests"],
-            "input": stats["input"],
-            "output": stats["output"],
-            "cost": cost,
-            "by_model": {normalized: {
-                "requests": stats["requests"], "input": stats["input"],
-                "output": stats["output"], "cache": stats["cache"],
-                "cache_read": stats.get("cache_read", stats["cache"]),
-                "cache_write": stats.get("cache_write", 0),
-                "reasoning": stats.get("reasoning", 0),
-                "cost": cost
-            }}
-        })
+        merged = merge_model_stats(stats.get("by_model", {}))
+        if not merged:
+            continue
+
+        by_model_with_cost = {}
+        session_cost = 0.0
+        for model, mdata in merged.items():
+            model_cost = calculate_cost(
+                model, mdata["input"], mdata["output"], mdata.get("cache", 0)
+            )
+            session_cost += model_cost
+            by_model_with_cost[model] = {**mdata, "cost": model_cost}
+
+        was_new = sid not in existing_keys
+        try:
+            save_codex_session(
+                sid, "codex", stats.get("date", ""),
+                _parse_timestamp(stats.get("date", "")),
+                stats.get("requests", 0),
+                sum(m["input"] for m in merged.values()),
+                sum(m["output"] for m in merged.values()),
+                sum(m.get("cache", 0) for m in merged.values()),
+                sum(m.get("reasoning", 0) for m in merged.values()),
+                session_cost, by_model_with_cost, DB_PATH,
+                request_model=normalize_model_name(stats.get("model", "")),
+            )
+            if was_new:
+                new_count += 1
+            existing_keys.add(sid)
+        except Exception:
+            pass
 
     # --- Hermes (siempre upsert: sesiones activas crecen) ---
     for sess in get_hermes_sessions():
@@ -700,23 +713,15 @@ def main():
         session_date = datetime.datetime.fromtimestamp(time_updated / 1000).isoformat()
     elif source == "codex":
         codex_stats = get_codex_session_stats(session_ref)
+        if not codex_stats.get("complete"):
+            print("⚠️ Sesion Codex incompleta; no se actualiza el historial")
+            return
         session_id = codex_stats.get("session_id", session_ref.name)
         session_date = codex_stats.get("date", "")
-        # Convertir a formato de stats compatible
-        model = codex_stats["model"]
+        # Usar el desglose completo reconstruido por deltas.
         stats = {
             "total_messages": codex_stats["requests"],
-            "by_model": {
-                model: {
-                    "requests": codex_stats["requests"],
-                    "input": codex_stats["input"],
-                    "output": codex_stats["output"],
-                    "reasoning": codex_stats["reasoning"],
-                    "cache": codex_stats.get("cache", codex_stats.get("cache_read", 0)),
-                    "cache_read": codex_stats.get("cache_read", codex_stats.get("cache", 0)),
-                    "cache_write": codex_stats.get("cache_write", 0),
-                }
-            }
+            "by_model": codex_stats.get("by_model", {}),
         }
     elif source == "hermes":
         hermes_stats = get_hermes_session_stats(session_ref)
@@ -751,7 +756,10 @@ def main():
     
     merged_by_model = merge_model_stats(stats["by_model"])
     
-    total_requests = sum(m["requests"] for m in merged_by_model.values())
+    if source == "codex":
+        total_requests = codex_stats["requests"]
+    else:
+        total_requests = sum(m["requests"] for m in merged_by_model.values())
     total_input = sum(m["input"] for m in merged_by_model.values())
     total_output = sum(m["output"] for m in merged_by_model.values())
     total_cache = sum(m["cache"] for m in merged_by_model.values())
@@ -762,7 +770,12 @@ def main():
         model_cost = calculate_cost(model, data["input"], data["output"], data["cache"])
         total_session_cost += model_cost
         by_model_with_cost[model] = {
-            "requests": data["requests"],
+            "requests": (
+                total_requests
+                if source == "codex"
+                and model == normalize_model_name(codex_stats.get("model", ""))
+                else data["requests"]
+            ),
             "input": data["input"],
             "output": data["output"],
             "cache": data["cache"],
@@ -771,11 +784,22 @@ def main():
             "cost": model_cost
         }
     
-    # Guardar sesión actual en historial (para tracking)
-    update_history(
-        session_id, total_requests, total_input, total_output, 
-        total_session_cost, by_model_with_cost, date=session_date, source=source
-    )
+    # Guardar sesión actual en historial. Codex usa un reemplazo autoritativo
+    # porque sus contadores se reconstruyen completos; las demás fuentes
+    # conservan el upsert MAX() histórico.
+    if source == "codex":
+        save_codex_session(
+            session_id, source, session_date, _parse_timestamp(session_date),
+            total_requests, total_input, total_output, total_cache,
+            sum(m.get("reasoning", 0) for m in by_model_with_cost.values()),
+            total_session_cost, by_model_with_cost, DB_PATH,
+            request_model=normalize_model_name(codex_stats.get("model", "")),
+        )
+    else:
+        update_history(
+            session_id, total_requests, total_input, total_output,
+            total_session_cost, by_model_with_cost, date=session_date, source=source
+        )
     
     # Recalcular TODO desde tokens (misma lógica que session-stats-history)
     hist = recalculate_historical_cost()

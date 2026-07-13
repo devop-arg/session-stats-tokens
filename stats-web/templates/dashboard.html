@@ -89,7 +89,11 @@
     <div data-slot="top-models-axis" class="top-models-axis" aria-hidden="true" id="top-models-30d-axis"></div>
     <div data-slot="top-models-bars" class="top-models-bars" id="top-models-30d-bars"></div>
   </div>
-  <div data-component="leaderboard" class="leaderboard" id="top-models-30d-leaderboard" role="list" aria-label="Ranking de 30 días de modelos"></div>
+  <div class="leaderboard-controls" aria-live="polite">
+    <span id="top-models-30d-selection">Todos los modelos</span>
+    <button type="button" class="leaderboard-clear" id="top-models-30d-clear" disabled>Limpiar selección</button>
+  </div>
+  <div data-component="leaderboard" class="leaderboard" id="top-models-30d-leaderboard" role="group" aria-label="Selector de modelos de los últimos 30 días"></div>
 </section>
 
 <section data-section="top-models" id="top-models" class="stats-section section-block">
@@ -103,7 +107,11 @@
     <div data-slot="top-models-axis" class="top-models-axis" aria-hidden="true" id="top-axis"></div>
     <div data-slot="top-models-bars" class="top-models-bars" id="top-bars"></div>
   </div>
-  <div data-component="leaderboard" class="leaderboard" id="leaderboard" role="list" aria-label="Ranking histórico de modelos"></div>
+  <div class="leaderboard-controls" aria-live="polite">
+    <span id="top-models-selection">Todos los modelos</span>
+    <button type="button" class="leaderboard-clear" id="top-models-clear" disabled>Limpiar selección</button>
+  </div>
+  <div data-component="leaderboard" class="leaderboard" id="leaderboard" role="group" aria-label="Selector histórico de modelos"></div>
 </section>
 
 <div class="section-block">

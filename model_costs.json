@@ -344,5 +344,10 @@
     "input": 2.5,
     "output": 15.0,
     "cache": 0.25
+  },
+  "gpt-5.6-sol": {
+    "input": 5.0,
+    "output": 30.0,
+    "cache": 0.5
   }
 }

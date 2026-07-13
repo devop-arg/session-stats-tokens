@@ -436,7 +436,13 @@ def has_real_usage_codex(session_file):
 def get_codex_session_stats(session_file):
     """Extrae estadisticas de tokens de una sesion Codex (archivo JSONL).
 
-    Retorna dict con: model, input, output, cache, reasoning, requests, session_id, date
+    Reconstruye el uso por modelo a partir de los deltas de los contadores
+    acumulados de Codex. ``requests`` conserva la semantica historica del
+    collector como contador global; este parser no modifica ni redistribuye
+    los requests persistidos por modelo.
+
+    Retorna dict con: model, input, output, cache, reasoning, requests,
+    session_id, date, by_model y complete.
     """
     result = {
         "model": "gpt-5.4",
@@ -447,49 +453,120 @@ def get_codex_session_stats(session_file):
         "requests": 0,
         "session_id": "",
         "date": "",
+        "by_model": {},
+        "complete": True,
     }
 
-    last_token_count = None
+    active_model = None
+    previous_usage = None
     request_count = 0
+    pending_requests = 0
+    first_session_meta = True
+    by_model = {}
+
+    def model_bucket(model):
+        return by_model.setdefault(model, {
+            "requests": 0,
+            "input": 0,
+            "output": 0,
+            "cache": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0,
+        })
 
     try:
         with open(session_file) as f:
             for line in f:
-                data = json.loads(line)
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    # No reemplazar una captura valida con un JSONL parcial.
+                    result["complete"] = False
+                    break
                 typ = data.get("type", "")
 
                 if typ == "session_meta":
-                    result["session_id"] = data.get("payload", {}).get("id", "")
-                    ts_str = data.get("payload", {}).get("timestamp", "")
-                    if ts_str:
-                        result["date"] = ts_str
+                    if first_session_meta:
+                        payload = data.get("payload", {})
+                        result["session_id"] = payload.get("id", "")
+                        result["date"] = payload.get("timestamp", "")
+                        first_session_meta = False
 
                 elif typ == "turn_context":
                     model = data.get("payload", {}).get("model", "")
                     if model:
+                        active_model = model
+                        if pending_requests:
+                            pending_requests = 0
                         result["model"] = model
 
                 elif typ == "event_msg":
                     p = data.get("payload", {})
                     if p.get("type") == "token_count":
                         info = p.get("info", {})
-                        if info and "total_token_usage" in info:
-                            last_token_count = info["total_token_usage"]
+                        usage = info.get("total_token_usage") if info else None
+                        if not usage:
+                            continue
+                        if active_model is None:
+                            result["complete"] = False
+                            break
+
+                        current_usage = {
+                            "input": int(usage.get("input_tokens", 0) or 0),
+                            "output": int(usage.get("output_tokens", 0) or 0),
+                            "cache": int(usage.get("cached_input_tokens", 0) or 0),
+                            "reasoning": int(usage.get("reasoning_output_tokens", 0) or 0),
+                        }
+                        if previous_usage is None:
+                            delta = current_usage.copy()
+                        else:
+                            delta = {
+                                field: current_usage[field] - previous_usage[field]
+                                for field in current_usage
+                            }
+                            if any(value < 0 for value in delta.values()):
+                                # Un reset de contador no es reconstruible con
+                                # seguridad: esperar una captura completa.
+                                result["complete"] = False
+                                break
+
+                        bucket = model_bucket(active_model)
+                        bucket["input"] += delta["input"]
+                        bucket["output"] += delta["output"]
+                        bucket["cache"] += delta["cache"]
+                        bucket["cache_read"] += delta["cache"]
+                        bucket["reasoning"] += delta["reasoning"]
+                        previous_usage = current_usage
                     elif p.get("type") == "user_message":
                         request_count += 1
-    except (json.JSONDecodeError, OSError):
-        pass
+                        if active_model is None:
+                            # Algunos JSONL antiguos registran el primer
+                            # user_message antes del primer turn_context.
+                            # Se asigna al modelo cuando aparezca ese contexto.
+                            pending_requests += 1
+    except OSError:
+        result["complete"] = False
 
-    if last_token_count:
-        result["input"] = last_token_count.get("input_tokens", 0)
-        result["output"] = last_token_count.get("output_tokens", 0)
-        cached = last_token_count.get("cached_input_tokens", 0)
-        result["cache"] = cached
-        result["cache_read"] = cached
-        result["cache_write"] = 0
-        result["reasoning"] = last_token_count.get("reasoning_output_tokens", 0)
+    if pending_requests:
+        if active_model is None:
+            result["complete"] = False
+        else:
+            pending_requests = 0
 
-    result["requests"] = request_count if request_count > 0 else 1
+    # Mantener el fallback historico de una request para sesiones con uso pero
+    # sin user_message explicito, sin inventar una segunda request por modelo.
+    if request_count == 0 and previous_usage is not None:
+        request_count = 1
+
+    result["requests"] = request_count
+    result["by_model"] = by_model
+    result["input"] = sum(m["input"] for m in by_model.values())
+    result["output"] = sum(m["output"] for m in by_model.values())
+    result["cache"] = sum(m["cache"] for m in by_model.values())
+    result["cache_read"] = sum(m["cache_read"] for m in by_model.values())
+    result["cache_write"] = sum(m["cache_write"] for m in by_model.values())
+    result["reasoning"] = sum(m["reasoning"] for m in by_model.values())
 
     return result
 
@@ -1636,6 +1713,131 @@ def save_session(sid, source, date, timestamp, requests, input_tokens,
         )
     conn.commit()
     conn.close()
+
+
+def save_codex_session(sid, source, date, timestamp, requests, input_tokens,
+                       output_tokens, cache_tokens, reasoning_tokens, cost,
+                       by_model, db_path=None,
+                       cache_read_tokens=None, cache_write_tokens=None,
+                       request_model=None):
+    """Reemplaza tokens de Codex preservando requests exactamente.
+
+    Codex expone contadores acumulados y el parser reconstruye el snapshot
+    completo desde el JSONL. Por eso este camino no usa MAX() para tokens:
+    debe poder corregir filas previas que atribuyeron el acumulado al ultimo
+    modelo. Los campos requests se conservan de la fila existente; para una
+    sesion nueva se mantiene la logica historica de poner el total en el
+    modelo actual/final. Las demas fuentes siguen usando save_session().
+    """
+    if not by_model:
+        raise ValueError("No se puede guardar una sesion Codex sin modelos")
+    if cache_read_tokens is None:
+        cache_read_tokens = sum(
+            (m.get("cache_read", m.get("cache", 0)) or 0)
+            for m in by_model.values()
+        )
+    if cache_write_tokens is None:
+        cache_write_tokens = sum(
+            (m.get("cache_write", 0) or 0) for m in by_model.values()
+        )
+
+    path = Path(db_path or DB_PATH)
+    conn = sqlite3.connect(str(path))
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        conn.execute("BEGIN")
+        existing_session = conn.execute(
+            "SELECT requests FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        existing_model_requests = {
+            model: model_requests
+            for model, model_requests in conn.execute(
+                "SELECT model, requests FROM model_usage WHERE session_id = ?",
+                (sid,),
+            ).fetchall()
+        }
+        stored_requests = (
+            existing_session[0] if existing_session is not None else requests
+        )
+        models_to_write = dict(by_model)
+        for model, model_requests in existing_model_requests.items():
+            if model not in models_to_write:
+                # Conservar siempre la fila y sus requests aunque no tenga
+                # token_count; su consumo de tokens correcto es cero.
+                models_to_write[model] = {
+                    "requests": model_requests,
+                    "input": 0,
+                    "output": 0,
+                    "cache": 0,
+                    "cache_read": 0,
+                    "cache_write": 0,
+                    "reasoning": 0,
+                    "cost": 0.0,
+                }
+        conn.execute(
+            """INSERT INTO sessions
+            (id, source, date, timestamp, requests, input_tokens, output_tokens,
+             cache_tokens, reasoning_tokens, cost,
+             cache_read_tokens, cache_write_tokens)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              source = excluded.source,
+              date = MIN(date, excluded.date),
+              timestamp = MIN(timestamp, excluded.timestamp),
+              requests = excluded.requests,
+              input_tokens = excluded.input_tokens,
+              output_tokens = excluded.output_tokens,
+              cache_tokens = excluded.cache_tokens,
+              reasoning_tokens = excluded.reasoning_tokens,
+              cost = excluded.cost,
+              cache_read_tokens = excluded.cache_read_tokens,
+              cache_write_tokens = excluded.cache_write_tokens""",
+            (sid, source, date, timestamp, stored_requests, input_tokens, output_tokens,
+             cache_tokens, reasoning_tokens, cost,
+             cache_read_tokens, cache_write_tokens),
+        )
+
+        for model, mdata in models_to_write.items():
+            mu_cache_read = mdata.get("cache_read", mdata.get("cache", 0))
+            mu_cache_write = mdata.get("cache_write", 0)
+            stored_model_requests = existing_model_requests.get(model)
+            if stored_model_requests is None:
+                stored_model_requests = requests if model == request_model else 0
+            conn.execute(
+                """INSERT INTO model_usage
+                (session_id, model, requests, input_tokens, output_tokens,
+                 cache_tokens, reasoning_tokens, cost,
+                 cache_read_tokens, cache_write_tokens)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id, model) DO UPDATE SET
+                  requests = excluded.requests,
+                  input_tokens = excluded.input_tokens,
+                  output_tokens = excluded.output_tokens,
+                  cache_tokens = excluded.cache_tokens,
+                  reasoning_tokens = excluded.reasoning_tokens,
+                  cost = excluded.cost,
+                  cache_read_tokens = excluded.cache_read_tokens,
+                  cache_write_tokens = excluded.cache_write_tokens""",
+                (sid, model,
+                 stored_model_requests,
+                 mdata.get("input", 0),
+                 mdata.get("output", 0),
+                 mdata.get("cache", mdata.get("cache_read", 0) + mdata.get("cache_write", 0)),
+                 mdata.get("reasoning", 0),
+                 mdata.get("cost", 0.0),
+                 mu_cache_read,
+                 mu_cache_write),
+            )
+
+        # No se eliminan filas model_usage: las ausentes en el JSONL
+        # quedan conservadas con tokens/costo en cero.
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def get_sessions(date_from=None, date_to=None, db_path=None):
