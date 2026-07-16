@@ -698,7 +698,9 @@ def api_recalculate_history():
 
     conn = sqlite3.connect(str(DB_PATH))
     mrows = conn.execute(
-        "SELECT id, session_id, model, input_tokens, output_tokens, cache_tokens, cost FROM model_usage"
+        "SELECT mu.id, mu.session_id, mu.model, mu.input_tokens, mu.output_tokens, "
+        "mu.cache_tokens, mu.cost, s.source "
+        "FROM model_usage mu JOIN sessions s ON s.id = mu.session_id"
     ).fetchall()
     updated = 0
     for mr in mrows:
@@ -708,7 +710,8 @@ def api_recalculate_history():
         out = mr[4]
         cache = mr[5]
         old_cost = mr[6]
-        new_cost = calculate_cost(model, inp, out, cache)
+        source = mr[7]
+        new_cost = calculate_cost(model, inp, out, cache, source=source)
         if abs(new_cost - old_cost) > 0.0001:
             conn.execute("UPDATE model_usage SET cost=? WHERE id=?", (new_cost, mu_id))
             updated += 1

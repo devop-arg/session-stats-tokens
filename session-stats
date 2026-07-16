@@ -443,7 +443,7 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid)
         if stats["by_model"]:
-            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000)
+            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000, source="kilo")
             _save_if_new(sid, entry, source="kilo")
             _prune_residual_models(sid, entry["by_model"])
 
@@ -456,7 +456,7 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid, OPENCODE_DB_PATH)
         if stats["by_model"]:
-            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000)
+            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000, source="opencode")
             _save_if_new(sid, entry)
             _prune_residual_models(sid, entry["by_model"])
 
@@ -476,7 +476,7 @@ def capture_all_sessions():
         session_cost = 0.0
         for model, mdata in merged.items():
             model_cost = calculate_cost(
-                model, mdata["input"], mdata["output"], mdata.get("cache", 0)
+                model, mdata["input"], mdata["output"], mdata.get("cache", 0), source="codex"
             )
             session_cost += model_cost
             by_model_with_cost[model] = {**mdata, "cost": model_cost}
@@ -511,7 +511,7 @@ def capture_all_sessions():
             by_model_with_cost = {}
             session_cost = 0
             for model, mdata in by_model.items():
-                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0), source="hermes")
                 session_cost += c
                 by_model_with_cost[model] = {**mdata, "cost": c}
             cache_tokens = sum(m.get("cache", 0) for m in by_model_with_cost.values())
@@ -542,7 +542,7 @@ def capture_all_sessions():
             by_model_with_cost = {}
             session_cost = 0
             for model, mdata in by_model.items():
-                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0), source="cursor")
                 session_cost += c
                 by_model_with_cost[model] = {**mdata, "cost": c}
             cache_tokens = sum(m.get("cache", 0) for m in by_model_with_cost.values())
@@ -573,7 +573,7 @@ def capture_all_sessions():
             by_model_with_cost = {}
             session_cost = 0
             for model, mdata in by_model.items():
-                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0), source="grok")
                 session_cost += c
                 by_model_with_cost[model] = {**mdata, "cost": c}
             cache_tokens = sum(m.get("cache", 0) for m in by_model_with_cost.values())
@@ -661,7 +661,7 @@ def _seed_orphan_costs():
         print(f"[seed] error al sembrar model_costs.json: {e}", file=sys.stderr)
 
 
-def _build_session_entry(by_model, timestamp):
+def _build_session_entry(by_model, timestamp, source=None):
     """Convierte estadisticas por modelo en una entrada de historial con costos."""
     merged = merge_model_stats(by_model)
     if not merged:
@@ -669,7 +669,7 @@ def _build_session_entry(by_model, timestamp):
     session_cost = 0
     by_model_with_cost = {}
     for model, mdata in merged.items():
-        c = calculate_cost(model, mdata["input"], mdata["output"], mdata["cache"])
+        c = calculate_cost(model, mdata["input"], mdata["output"], mdata["cache"], source=source)
         session_cost += c
         by_model_with_cost[model] = {**mdata, "cost": c}
     try:
@@ -771,7 +771,7 @@ def main():
     total_session_cost = 0
     by_model_with_cost = {}
     for model, data in merged_by_model.items():
-        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"])
+        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"], source=source)
         total_session_cost += model_cost
         by_model_with_cost[model] = {
             "requests": (
@@ -826,7 +826,7 @@ def main():
         short_model = short_model.replace("x-ai", "grok-4.1-fast")
         short_model = short_model.replace("deepseek-v4-flash", "ds-v4-flash")
         short_model = short_model.replace("deepseek-v4-pro", "ds-v4-pro")
-        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"])
+        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"], source=source)
         total_input = data["input"] + data["cache"]
         cache_info = f" (cache:{format_number(data['cache'])})" if data.get("cache", 0) > 0 else ""
         print(f"   └─ {short_model}: {data['requests']} req, in:{format_number(total_input)}{cache_info}, out:{format_number(data['output'])}, cost:{format_cost(model_cost)}")

@@ -371,7 +371,7 @@ def get_kilocode_history():
             cache_tokens = (task.get("cacheReads", 0) or 0) + (
                 task.get("cacheWrites", 0) or 0
             )
-            cost = calculate_cost(normalized_model, tokens_in, tokens_out, cache_tokens)
+            cost = calculate_cost(normalized_model, tokens_in, tokens_out, cache_tokens, source="codex")
 
         ts = task.get("ts", 0)
         try:
@@ -459,6 +459,7 @@ def get_codex_session_stats(session_file):
 
     active_model = None
     previous_usage = None
+    max_usage = None  # max counter across all parallel task windows
     request_count = 0
     pending_requests = 0
     first_session_meta = True
@@ -519,17 +520,22 @@ def get_codex_session_stats(session_file):
                             "reasoning": int(usage.get("reasoning_output_tokens", 0) or 0),
                         }
                         if previous_usage is None:
+                            max_usage = current_usage.copy()
                             delta = current_usage.copy()
                         else:
-                            delta = {
-                                field: current_usage[field] - previous_usage[field]
-                                for field in current_usage
-                            }
-                            if any(value < 0 for value in delta.values()):
-                                # Un reset de contador no es reconstruible con
-                                # seguridad: esperar una captura completa.
-                                result["complete"] = False
-                                break
+                            # Codex puede ejecutar tareas paralelas con contadores
+                            # independientes, o compactar su contexto (counter reset).
+                            # En ambos casos el total real es el maximo observado
+                            # de cada campo, no la suma de deltas entre ventanas.
+                            delta = {}
+                            for field in current_usage:
+                                if current_usage[field] > previous_usage[field]:
+                                    delta[field] = current_usage[field] - previous_usage[field]
+                                    max_usage[field] = current_usage[field]
+                                else:
+                                    delta[field] = 0
+                                    if current_usage[field] > max_usage[field]:
+                                        max_usage[field] = current_usage[field]
 
                         bucket = model_bucket(active_model)
                         bucket["input"] += delta["input"]
@@ -537,7 +543,14 @@ def get_codex_session_stats(session_file):
                         bucket["cache"] += delta["cache"]
                         bucket["cache_read"] += delta["cache"]
                         bucket["reasoning"] += delta["reasoning"]
-                        previous_usage = current_usage
+                        # Solo avanzar previous_usage si hubo consumo real
+                        # (delta positivo). En tareas paralelas el contador
+                        # baja y no debe reiniciar la linea base.
+                        prev = {}
+                        for field in current_usage:
+                            prev_val = previous_usage.get(field, 0) if previous_usage else 0
+                            prev[field] = max(current_usage[field], prev_val)
+                        previous_usage = prev
                     elif p.get("type") == "user_message":
                         request_count += 1
                         if active_model is None:
@@ -1210,8 +1223,15 @@ def get_grok_session_stats(session_id):
     return {}
 
 
-def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0):
-    """Calcula costo basado en tokens."""
+def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0, source=None):
+    """Calcula costo basado en tokens.
+
+    La semántica de input_tokens depende del source:
+    - input_includes_cache_read=True (Codex): input_tokens INCLUYE cache reads.
+      Hay que descontar cache para obtener el input no-cacheado.
+    - input_includes_cache_read=False (Hermes, OpenCode, etc.): input_tokens y
+      cache_tokens son datos separados. Input siempre se cobra full.
+    """
     # Sonar: costo fijo por request
     if model == "sonar":
         return 0.0055
@@ -1255,11 +1275,14 @@ def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0):
     if not costs:
         return 0
 
-    if cache_tokens >= input_tokens:
-        input_cost = (input_tokens / 1000000) * costs["input"]
-    else:
-        uncached = input_tokens - cache_tokens
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    if sem["input_includes_cache_read"]:
+        # Codex: input_tokens incluye cache_read → descontar cache
+        uncached = max(0, input_tokens - cache_tokens)
         input_cost = (uncached / 1000000) * costs["input"]
+    else:
+        # Hermes/OpenCode/etc: input_tokens y cache_tokens son separados
+        input_cost = (input_tokens / 1000000) * costs["input"]
     output_cost = (output_tokens / 1000000) * costs["output"]
     cache_cost = (cache_tokens / 1000000) * costs.get("cache", 0)
     return input_cost + output_cost + cache_cost
@@ -1347,14 +1370,15 @@ def recalculate_historical_cost():
                     models_totals[normalized] = {
                         "requests": 0, "input": 0, "output": 0,
                         "cache": 0, "cache_read": 0, "cache_write": 0,
-                        "stored_cost": 0.0,
+                        "stored_cost": 0.0, "cost": 0.0,
                     }
                 models_totals[normalized]["requests"] += m_req
                 models_totals[normalized]["input"] += m_in
                 models_totals[normalized]["output"] += m_out
                 models_totals[normalized]["cache"] += m_cache
                 models_totals[normalized]["cache_read"] += m_cache
-                historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache)
+                models_totals[normalized]["cost"] += calculate_cost(normalized, m_in, m_out, m_cache, source="legacy")
+                historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache, source="legacy")
             continue
         if sid == "legacy_price_adjustment":
             # Ajuste de precio legacy: no cuenta como sesión
@@ -1373,18 +1397,19 @@ def recalculate_historical_cost():
         placeholders = ",".join("?" for _ in session_keys)
         mrows = conn.execute(
             f"SELECT mu.model, mu.requests, mu.input_tokens, mu.output_tokens, "
-            f"mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens "
-            f"FROM model_usage mu WHERE mu.session_id IN ({placeholders})",
+            f"mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens, s.source "
+            f"FROM model_usage mu JOIN sessions s ON s.id = mu.session_id "
+            f"WHERE mu.session_id IN ({placeholders})",
             session_keys,
         ).fetchall()
-        for model, reqs, inp, out, cache, cache_read, cache_write in mrows:
+        for model, reqs, inp, out, cache, cache_read, cache_write, source in mrows:
             effective_cache_read = effective_cache_read_tokens(cache, cache_read, cache_write)
             normalized = normalize_model_name(model)
             if normalized not in models_totals:
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
                     "cache": 0, "cache_read": 0, "cache_write": 0,
-                    "stored_cost": 0.0,
+                    "stored_cost": 0.0, "cost": 0.0,
                 }
             models_totals[normalized]["requests"] += reqs
             models_totals[normalized]["input"] += inp
@@ -1392,6 +1417,7 @@ def recalculate_historical_cost():
             models_totals[normalized]["cache"] += cache
             models_totals[normalized]["cache_read"] += effective_cache_read
             models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(normalized, inp, out, cache, source=source)
 
         # Totales de sesión desde la tabla sessions
         srows_agg = conn.execute(
@@ -1439,12 +1465,14 @@ def recalculate_historical_cost():
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
                     "cache": 0, "cache_read": 0, "cache_write": 0,
-                    "stored_cost": 0.0,
+                    "stored_cost": 0.0, "cost": 0.0,
                 }
             models_totals[normalized]["requests"] += stats["requests"]
             models_totals[normalized]["input"] += stats["input"]
             models_totals[normalized]["output"] += stats["output"]
             models_totals[normalized]["cache"] += stats["cache"]
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, stats["input"], stats["output"], stats["cache"], source="codex")
             total_requests += stats["requests"]
             total_input += stats["input"]
             total_output += stats["output"]
@@ -1467,7 +1495,7 @@ def recalculate_historical_cost():
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
                     "cache": 0, "cache_read": 0, "cache_write": 0,
-                    "stored_cost": 0.0,
+                    "stored_cost": 0.0, "cost": 0.0,
                 }
             models_totals[normalized]["requests"] += model_data.get("requests", 0)
             models_totals[normalized]["input"] += model_data.get("input", 0)
@@ -1477,6 +1505,9 @@ def recalculate_historical_cost():
             models_totals[normalized]["cache"] += model_data.get("cache", 0)
             models_totals[normalized]["cache_read"] += cache_read
             models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, model_data.get("input", 0), model_data.get("output", 0),
+                model_data.get("cache", 0), source="opencode")
         cache_read = stats.get("cache_read", stats.get("cache", 0))
         cache_write = stats.get("cache_write", 0)
         total_requests += stats["requests"]
@@ -1499,7 +1530,7 @@ def recalculate_historical_cost():
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
                     "cache": 0, "cache_read": 0, "cache_write": 0,
-                    "stored_cost": 0.0,
+                    "stored_cost": 0.0, "cost": 0.0,
                 }
             models_totals[normalized]["requests"] += model_data.get("requests", 0)
             models_totals[normalized]["input"] += model_data.get("input", 0)
@@ -1509,6 +1540,9 @@ def recalculate_historical_cost():
             models_totals[normalized]["cache"] += model_data.get("cache", 0)
             models_totals[normalized]["cache_read"] += cache_read
             models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, model_data.get("input", 0), model_data.get("output", 0),
+                model_data.get("cache", 0), source="hermes")
         cache_read = sess.get("cache_read", sess.get("cache", 0))
         cache_write = sess.get("cache_write", 0)
         total_requests += sess.get("requests", 0)
@@ -1519,15 +1553,12 @@ def recalculate_historical_cost():
         total_cache_read += cache_read
         total_sessions += 1
 
-    # 6. Calcular costo total desde tokens + ajuste histórico
-    # Agregar modelos de historical_total a models_totals (mismo comportamiento que versión JSON)
+    # 6. Calcular costo total desde costos acumulados por fila + ajuste histórico
     historical_cost_adjustment = historical_total_cost - historical_models_cost
 
     total_cost = 0
     for model, mdata in models_totals.items():
-        mdata["cost"] = calculate_cost(
-            model, mdata["input"], mdata["output"], mdata.get("cache", 0)
-        )
+        mdata["cost"] = mdata.get("cost", 0.0)
         total_cost += mdata["cost"]
     total_cost += historical_cost_adjustment
 

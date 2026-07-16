@@ -27,8 +27,9 @@ def main():
 
     # 1. Recalcular model_usage
     rows = conn.execute(
-        "SELECT session_id, model, requests, input_tokens, output_tokens, cache_tokens, cost "
-        "FROM model_usage"
+        "SELECT mu.session_id, mu.model, mu.requests, mu.input_tokens, mu.output_tokens, "
+        "mu.cache_tokens, mu.cost, s.source "
+        "FROM model_usage mu JOIN sessions s ON s.id = mu.session_id"
     ).fetchall()
 
     updates = []
@@ -37,7 +38,7 @@ def main():
     changed = 0
 
     for r in rows:
-        new_cost = calculate_cost(r["model"], r["input_tokens"], r["output_tokens"], r["cache_tokens"])
+        new_cost = calculate_cost(r["model"], r["input_tokens"], r["output_tokens"], r["cache_tokens"], source=r["source"])
         old_cost = r["cost"]
         total_old += old_cost
         total_new += new_cost
