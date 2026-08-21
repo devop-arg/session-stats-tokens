@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1 class="section-title"><strong>Modelos.</strong> Ranking de modelos por costo. Precios editables.</h1>
+  <h1 class="section-title"><strong data-i18n="mod.title_strong">Modelos.</strong><span data-i18n="mod.title_rest"> Ranking de modelos por costo. Precios editables.</span></h1>
   <div class="model-prices-actions">
-    <button type="button" class="btn-recalc" id="recalc-historical-btn">Recalcular costos históricos</button>
+    <button type="button" class="btn-recalc" id="recalc-historical-btn" data-i18n="mod.recalc">Recalcular costos históricos</button>
     <span id="recalc-badge" class="badge-msg"></span>
     <span id="save-global-badge" class="badge-msg"></span>
   </div>
@@ -11,11 +11,11 @@
 
 
 <div class="sort-controls" role="group" aria-label="Ordenar tabla modelos">
-  <span class="sort-label">Ordenar:</span>
-  <button type="button" class="sort-btn" data-sort="cost" data-active="true" aria-pressed="true">Costo</button>
-  <button type="button" class="sort-btn" data-sort="total" aria-pressed="false">Total tokens</button>
-  <button type="button" class="sort-btn" data-sort="requests" aria-pressed="false">Requests</button>
-  <button type="button" class="sort-btn" data-sort="name" aria-pressed="false">Modelo</button>
+  <span class="sort-label" data-i18n="mod.sort_label">Ordenar:</span>
+  <button type="button" class="sort-btn" data-sort="cost" data-active="true" aria-pressed="true" data-i18n="mod.sort_cost">Costo</button>
+  <button type="button" class="sort-btn" data-sort="total" aria-pressed="false" data-i18n="mod.sort_tokens">Tokens efectivos</button>
+  <button type="button" class="sort-btn" data-sort="requests" aria-pressed="false" data-i18n="mod.sort_requests">Requests</button>
+  <button type="button" class="sort-btn" data-sort="name" aria-pressed="false" data-i18n="mod.sort_name">Modelo</button>
   <button type="button" class="sort-btn" data-sort-dir="desc" data-active="true" aria-pressed="true">↓</button>
 </div>
 
@@ -24,21 +24,22 @@
     <thead>
       <tr>
         <th>#</th>
-        <th>Modelo</th>
-        <th class="num">Requests</th>
-        <th class="num">Input</th>
-        <th class="num">Output</th>
-        <th class="num">Cache</th>
-        <th class="num">Total</th>
-        <th class="num">Costo</th>
-        <th class="num price-col">Input</th>
-        <th class="num price-col">Output</th>
-        <th class="num price-col">Cache</th>
+        <th data-i18n="th.model">Modelo</th>
+        <th class="num" data-i18n="sess.th_requests">Requests</th>
+        <th class="num" title="Input sin cache read" data-i18n-attr="title:sess.tip_input" data-i18n="sess.th_input">Input</th>
+        <th class="num" data-i18n="sess.th_output">Output</th>
+        <th class="num" title="Cache read" data-i18n-attr="title:sess.tip_cache" data-i18n="sess.th_cache_input">Cache input</th>
+        <th class="num" title="Input reportado por la fuente; en Codex incluye cache read" data-i18n-attr="title:sess.tip_raw" data-i18n="sess.th_raw_input">Input crudo</th>
+        <th class="num" title="Tokens efectivos según la semántica de cada fuente" data-i18n-attr="title:sess.tip_effective" data-i18n="sess.th_effective">Total efectivo</th>
+        <th class="num" data-i18n="sess.th_cost">Costo</th>
+        <th class="num price-col" data-i18n="sess.th_input">Input</th>
+        <th class="num price-col" data-i18n="sess.th_output">Output</th>
+        <th class="num price-col" data-i18n="card.cache_input">Cache</th>
         <th class="price-col"></th>
       </tr>
     </thead>
     <tbody id="models-tbody">
-      <tr><td colspan="12" class="loading-row">Cargando...</td></tr>
+      <tr><td colspan="13" class="loading-row" data-i18n="common.loading">Cargando...</td></tr>
     </tbody>
   </table>
 </div>

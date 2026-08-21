@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1 class="section-title"><strong>Sesiones.</strong> Listado paginado de todas las sesiones registradas.</h1>
+  <h1 class="section-title"><strong data-i18n="sess.title_strong">Sesiones.</strong><span data-i18n="sess.title_rest"> Listado paginado de todas las sesiones registradas.</span></h1>
 </section>
 
 <div class="table-controls">
   <select id="source-filter" class="select-control">
-    <option value="">Todas las fuentes</option>
+    <option value="" data-i18n="sess.all_sources">Todas las fuentes</option>
     <option value="opencode">OpenCode</option>
     <option value="hermes">Hermes</option>
     <option value="codex">Codex</option>
@@ -14,7 +14,7 @@
     <option value="kilocode">Kilocode</option>
     <option value="unknown">Unknown</option>
   </select>
-  <span class="page-info" id="page-info">Página <strong id="page-num">1</strong> &middot; <span id="total-sessions-label">0</span> sesiones</span>
+  <span class="page-info" id="page-info"><span data-i18n="sess.page">Página</span> <strong id="page-num">1</strong> &middot; <span id="total-sessions-label">0</span> <span data-i18n="sess.sessions_word">sesiones</span></span>
 </div>
 
 <div class="table-wrap">
@@ -22,24 +22,25 @@
     <thead>
       <tr>
         <th>ID</th>
-        <th>Fecha</th>
-        <th>Fuente</th>
-        <th class="num">Requests</th>
-        <th class="num">Input</th>
-        <th class="num">Output</th>
-        <th class="num">Cache</th>
-        <th class="num">Total</th>
-        <th class="num">Costo</th>
+        <th data-i18n="sess.th_date">Fecha</th>
+        <th data-i18n="sess.th_source">Fuente</th>
+        <th class="num" data-i18n="sess.th_requests">Requests</th>
+        <th class="num" title="Input sin cache read" data-i18n-attr="title:sess.tip_input" data-i18n="sess.th_input">Input</th>
+        <th class="num" data-i18n="sess.th_output">Output</th>
+        <th class="num" title="Cache read" data-i18n-attr="title:sess.tip_cache" data-i18n="sess.th_cache_input">Cache input</th>
+        <th class="num" title="Input reportado por la fuente; en Codex incluye cache read" data-i18n-attr="title:sess.tip_raw" data-i18n="sess.th_raw_input">Input crudo</th>
+        <th class="num" title="Tokens efectivos según la semántica de la fuente" data-i18n-attr="title:sess.tip_effective" data-i18n="sess.th_effective">Total efectivo</th>
+        <th class="num" data-i18n="sess.th_cost">Costo</th>
       </tr>
     </thead>
     <tbody id="sessions-tbody">
-      <tr><td colspan="9" class="loading-row">Cargando...</td></tr>
+      <tr><td colspan="10" class="loading-row" data-i18n="common.loading">Cargando...</td></tr>
     </tbody>
   </table>
 </div>
 
 <div class="pagination">
   <button class="page-btn" id="prev-page" disabled>&larr; Anterior</button>
-  <button class="page-btn" id="next-page">Siguiente &rarr;</button>
+  <button class="page-btn" id="next-page" data-i18n-html="1" data-i18n="sess.next">Siguiente &rarr;</button>
 </div>
 {% endblock %}

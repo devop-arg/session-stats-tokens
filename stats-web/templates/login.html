@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>session-stats &middot; login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --stats-bg: #161616;
+  --stats-layer: #242424;
+  --stats-layer-2: #303030;
+  --stats-line: rgba(255,255,255,0.1);
+  --stats-line-strong: rgba(255,255,255,0.2);
+  --stats-text: #ffffff;
+  --stats-muted: #d4d4d4;
+  --stats-faint: #808080;
+  --stats-accent: #3b5cf6;
+  --stats-accent-text: #6c7dff;
+  --stats-pos: #198b43;
+  --stats-neg: #b82d35;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--stats-bg);
+  color: var(--stats-text);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--stats-layer);
+  border: 1px solid var(--stats-line);
+  border-radius: 12px;
+  padding: 32px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--stats-accent);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+}
+.brand-name { font-size: 15px; font-weight: 600; }
+.login-title { font-size: 15px; margin-bottom: 4px; }
+.login-sub { color: var(--stats-faint); font-size: 12px; margin-bottom: 24px; }
+.form-field { margin-bottom: 16px; }
+.form-field label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--stats-faint);
+  margin-bottom: 6px;
+}
+.form-field input {
+  width: 100%;
+  background: var(--stats-layer-2);
+  border: 1px solid var(--stats-line-strong);
+  border-radius: 8px;
+  color: var(--stats-text);
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 10px 12px;
+  outline: none;
+}
+.form-field input:focus { border-color: var(--stats-accent-text); }
+.btn {
+  width: 100%;
+  background: var(--stats-accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 11px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+.btn:hover { background: var(--stats-accent-text); }
+.error {
+  background: rgba(184,45,53,0.15);
+  border: 1px solid var(--stats-neg);
+  color: #ff8a91;
+  border-radius: 8px;
+  font-size: 12px;
+  padding: 10px 12px;
+  margin-bottom: 16px;
+}
+.footer-note {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--stats-faint);
+}
+</style>
+<script src="/static/i18n.js?v=1"></script>
+</head>
+<body>
+  <div class="login-card">
+    <div class="brand">
+      <span class="brand-mark">S</span>
+      <span class="brand-name">session-stats</span>
+    </div>
+    <div class="login-title" data-i18n="login.restricted">Acceso restringido</div>
+    <div class="login-sub" data-i18n="login.subtitle">Ingresá tus credenciales para ver el dashboard.</div>
+    {% if error %}
+    <div class="error" data-i18n="login.bad_credentials">Credenciales incorrectas</div>
+    {% endif %}
+    <form method="post" action="/login" autocomplete="off">
+      <div class="form-field">
+        <label for="username" data-i18n="login.user">Usuario</label>
+        <input type="text" id="username" name="username" required autofocus autocomplete="username">
+      </div>
+      <div class="form-field">
+        <label for="password" data-i18n="login.password">Contraseña</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn" data-i18n="login.enter">Ingresar</button>
+    </form>
+    <div class="footer-note" data-i18n="login.note">La sesión se mantiene por 90 días.</div>
+  </div>
+</body>
+</html>

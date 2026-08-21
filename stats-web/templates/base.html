@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>session-stats &middot; consumo LLM</title>
+<title data-i18n="title">session-stats &middot; consumo LLM</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css?v=17">
+<link rel="stylesheet" href="/static/style.css?v=39">
 <script src="/vendor/chart.umd.min.js"></script>
+<script src="/static/i18n.js?v=1"></script>
 </head>
 <body>
 <header class="site-header">
@@ -17,17 +18,21 @@
       <span class="brand-mark">S</span>
       <span class="brand-name">session-stats</span>
     </a>
-    <button class="menu-toggle" id="menu-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-nav">
+    <button class="menu-toggle" id="menu-toggle" aria-label="Abrir menú" aria-expanded="false" aria-controls="main-nav" data-i18n-attr="aria-label:aria.open_menu">
       <span class="menu-toggle-bar"></span>
       <span class="menu-toggle-bar"></span>
       <span class="menu-toggle-bar"></span>
     </button>
     <nav class="nav" id="main-nav" role="navigation">
-      <a href="/" class="nav-link{% if request.url.path == '/' %} active{% endif %}">Dashboard</a>
-      <a href="/sessions" class="nav-link{% if request.url.path == '/sessions' %} active{% endif %}">Sesiones</a>
-      <a href="/models" class="nav-link{% if request.url.path == '/models' %} active{% endif %}">Modelos</a>
-      <a href="/costos" class="nav-link{% if request.url.path == '/costos' %} active{% endif %}">Costos</a>
+      <a href="/" class="nav-link{% if request.url.path == '/' %} active{% endif %}" data-i18n="nav.dashboard">Dashboard</a>
+      <a href="/sessions" class="nav-link{% if request.url.path == '/sessions' %} active{% endif %}" data-i18n="nav.sessions">Sesiones</a>
+      <a href="/models" class="nav-link{% if request.url.path == '/models' %} active{% endif %}" data-i18n="nav.models">Modelos</a>
+      <a href="/costos" class="nav-link{% if request.url.path == '/costos' %} active{% endif %}" data-i18n="nav.costos">Costos</a>
     </nav>
+    <div class="lang-switch" role="group" aria-label="Language / Idioma">
+      <button type="button" class="lang-btn" data-lang="en" aria-pressed="false">EN</button>
+      <button type="button" class="lang-btn" data-lang="es" aria-pressed="false">ES</button>
+    </div>
     <div class="nav-overlay" id="nav-overlay"></div>
   </div>
 </header>
@@ -37,19 +42,20 @@
 <footer class="site-footer">
   <div class="container footer-inner">
     <div class="footer-brand">
-      session-stats <span class="fg-dim">&middot; monitoreo de APIs LLM</span>
+      session-stats <span class="fg-dim" data-i18n="footer.tagline">&middot; monitoreo de APIs LLM</span>
     </div>
     <div class="footer-meta">
-      <span class="badge"><span id="session-count">&mdash;</span> sesiones</span>
+      <span class="badge"><span id="session-count">&mdash;</span> <span data-i18n="footer.sessions_badge">sesiones</span></span>
       <span class="badge" id="updated-badge">&mdash;</span>
     </div>
   </div>
 </footer>
-<button class="scroll-top" id="scroll-top" aria-label="Volver arriba">
+<button class="scroll-top" id="scroll-top" aria-label="Volver arriba" data-i18n-attr="aria-label:aria.back_top">
   <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
     <path d="M10 16V4M10 4L4 10M10 4L16 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
   </svg>
 </button>
-<script src="/static/app.js?v=22"></script>
+<script src="/static/costos-logic.js?v=1"></script>
+<script src="/static/app.js?v=33"></script>
 </body>
 </html>

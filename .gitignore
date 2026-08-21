@@ -32,3 +32,7 @@ db_backups/
 # Lock/temp files from writes
 *.json.lock
 *.json.tmp
+
+# Session signing secret (auth)
+stats-web/.session_secret
+

@@ -18,6 +18,12 @@ function fmtCost(n) {
   return '$' + Number(n).toFixed(2);
 }
 
+function fmtCostShort(n) {
+  if (n == null) return '—';
+  if (n < 0.01) return '$' + n.toFixed(4);
+  return '$' + Number(n).toFixed(0);
+}
+
 function fmtPct(n) {
   if (n == null) return '—';
   return n.toFixed(1) + '%';
@@ -46,7 +52,7 @@ function getPPMColor(price) {
 function fmtDateTimeArt(ts, fallback) {
   if (!ts) return fallback || '—';
   try {
-    return new Intl.DateTimeFormat('es-AR', {
+    return new Intl.DateTimeFormat(window.SS_I18N ? window.SS_I18N.intlLocale() : 'es-AR', {
       timeZone: 'America/Argentina/Buenos_Aires',
       year: 'numeric',
       month: '2-digit',
@@ -69,6 +75,16 @@ Chart.defaults.animation = false;
 // --- Dashboard ---
 if (document.querySelector('.stats-grid')) {
 
+  function displayUncachedInput(item) {
+    if (item && item.input_tokens_uncached != null) return Number(item.input_tokens_uncached) || 0;
+    return Number(item && item.input_tokens || 0);
+  }
+
+  function displayCacheInput(item) {
+    if (item && item.cache_input_tokens != null) return Number(item.cache_input_tokens) || 0;
+    return Number(item && item.cache_tokens || 0);
+  }
+
   // Summary
   fetch('/api/summary')
     .then(function(r) { return r.json(); })
@@ -77,15 +93,30 @@ if (document.querySelector('.stats-grid')) {
       var ts = cli ? cli.sessions : d.total_sessions;
       var tc = cli ? cli.cost : d.total_cost;
       var tr = cli ? cli.requests : d.total_requests;
-      var ti = cli ? cli.input_tokens : d.total_input_tokens;
-      var to = cli ? cli.output_tokens : d.total_output_tokens;
-      var tca = cli ? cli.cache_tokens : d.total_cache_tokens;
-      document.querySelector('[data-stat="total-cost"]').textContent = fmtCost(tc);
+      document.querySelector('[data-stat="total-cost"]').textContent = fmtCostShort(tc);
       var totalTk = cli ? cli.total_tokens : d.total_tokens;
       document.querySelector('[data-stat="total-tokens"]').textContent = fmt(totalTk);
       document.querySelector('[data-stat="total-sessions"]').textContent = fmt(ts);
       document.querySelector('[data-stat="cache-ratio"]').textContent = fmtPct(cli ? cli.cache_ratio : d.cache_ratio);
       document.querySelector('[data-stat="total-requests"]').textContent = fmt(tr);
+      var accounting = cli && cli.input_tokens_uncached != null ? cli : {
+        input_tokens: d.total_input_tokens,
+        input_tokens_uncached: d.total_input_tokens_uncached,
+        output_tokens: d.total_output_tokens,
+        cache_input_tokens: d.total_cache_input_tokens,
+        total_tokens: d.total_tokens
+      };
+      var accountingValues = {
+        input: accounting.input_tokens_uncached,
+        output: accounting.output_tokens,
+        'cache-input': accounting.cache_input_tokens,
+        total: accounting.total_tokens,
+        'raw-input': accounting.input_tokens
+      };
+      Object.keys(accountingValues).forEach(function(key) {
+        var el = document.querySelector('[data-accounting="' + key + '"]');
+        if (el) el.textContent = fmt(accountingValues[key]);
+      });
       var sc = document.getElementById('session-count');
       if (sc) sc.textContent = fmt(d.total_sessions);
       var upd = document.getElementById('updated-badge');
@@ -97,7 +128,12 @@ if (document.querySelector('.stats-grid')) {
   var todayModels = document.getElementById('today-models');
   var todayRangeTabs = document.querySelectorAll('.today-range-tab');
   var todayTitle = todaySection.querySelector('.section-title-sm');
-  var RANGE_LABELS = { today: 'Hoy', yesterday: 'Ayer', '48h': 'Últimas 48hs', '7d': 'Últimos 7 días' };
+  var RANGE_LABELS = {
+    today: (window.SS_I18N ? window.SS_I18N.t('rangelabel.today') : 'Hoy'),
+    yesterday: (window.SS_I18N ? window.SS_I18N.t('rangelabel.yesterday') : 'Ayer'),
+    '48h': (window.SS_I18N ? window.SS_I18N.t('rangelabel.48h') : '\u00daltimas 48hs'),
+    '7d': (window.SS_I18N ? window.SS_I18N.t('rangelabel.7d') : '\u00daltimos 7 d\u00edas')
+  };
 
   function loadTodaySummary(range) {
     fetch('/api/today-summary?range=' + range)
@@ -121,9 +157,13 @@ if (document.querySelector('.stats-grid')) {
           return;
         }
         todaySection.classList.add('has-data');
-        todayTitle.textContent = 'Uso de modelos y costos \u2014 ' + (RANGE_LABELS[range] || range);
-        document.getElementById('today-tokens').textContent = fmt(d.total_tokens);
+        document.getElementById('today-input').textContent = fmt(d.total_input_tokens_uncached);
+        document.getElementById('today-output').textContent = fmt(d.total_output_tokens);
+        document.getElementById('today-cache').textContent = fmt(d.total_cache_input_tokens);
+        document.getElementById('today-ratio').textContent = fmtPct(d.cache_ratio);
+        document.getElementById('today-sessions').textContent = fmt(d.total_sessions);
         document.getElementById('today-requests').textContent = fmt(d.total_requests);
+        document.getElementById('today-tokens').textContent = fmt(d.total_tokens);
         document.getElementById('today-cost').textContent = fmtCost(d.total_cost);
 
         todayModels.innerHTML = '';
@@ -136,17 +176,17 @@ if (document.querySelector('.stats-grid')) {
             '<span class="today-model-rank">' + String(i + 1).padStart(2, '0') + '</span>' +
             '<span class="today-model-name">' + displayModelName(m.model) + '</span>' +
             '<span class="today-model-reqs">' + fmt(m.requests) + ' req</span>' +
-            '<span class="today-model-ioc i">In ' + fmtTokens(m.input_tokens) + '</span>' +
+            '<span class="today-model-ioc i">In ' + fmtTokens(displayUncachedInput(m)) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-ioc o">Out ' + fmtTokens(m.output_tokens) + '</span>' +
             '<span class="today-model-sep">-</span>' +
-            '<span class="today-model-ioc c">Cache ' + fmtTokens(m.cache_tokens) + '</span>' +
+            '<span class="today-model-ioc c">Cache in ' + fmtTokens(displayCacheInput(m)) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-cache-ratio">Ratio ' + fmtPct(cacheRatio) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-total">Total ' + fmtTokens(m.tokens) + '</span>' +
             '<span class="today-model-sep">-</span>' +
-            '<span class="today-model-cost">Costo ' + fmtCost(m.cost) + '</span>' +
+            '<span class="today-model-cost">' + (window.SS_I18N ? window.SS_I18N.t('dyn.lbl_cost') : 'Costo') + ' ' + fmtCost(m.cost) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-pct">' + barPct + '%</span>';
           todayModels.appendChild(row);
@@ -230,6 +270,7 @@ if (document.querySelector('.stats-grid')) {
     barEl.className = 'top-models-bar';
     barEl.setAttribute('role', 'button');
     barEl.setAttribute('tabindex', '0');
+    barEl.setAttribute('aria-expanded', 'false');
     barEl.setAttribute('aria-label', point.date + ': ' + fmtTokens(total) + ' tokens');
     barEl.style.setProperty('--bar-height', getBarHeight(total, maxTotal) + '%');
 
@@ -267,7 +308,7 @@ if (document.querySelector('.stats-grid')) {
     tip.appendChild(strong);
 
     var sub = document.createElement('span');
-    sub.textContent = fmtTokens(total) + ' total  ·  ' + fmtCost(totalCost);
+    sub.textContent = fmtTokens(total) + (window.SS_I18N ? window.SS_I18N.t('dyn.tooltip_total') : ' total  \u00b7  ') + fmtCost(totalCost);
     tip.appendChild(sub);
 
     var divider = document.createElement('div');
@@ -293,13 +334,46 @@ if (document.querySelector('.stats-grid')) {
     });
 
     barEl.appendChild(tip);
+
+    var tooltipTimer = null;
+    function closeTooltip() {
+      barEl.setAttribute('data-tooltip-open', 'false');
+      barEl.setAttribute('aria-expanded', 'false');
+    }
+    function toggleTooltip() {
+      var shouldOpen = barEl.getAttribute('data-tooltip-open') !== 'true';
+      if (tooltipTimer) window.clearTimeout(tooltipTimer);
+      document.querySelectorAll('.top-models-bar[data-tooltip-open="true"]').forEach(function(other) {
+        other.setAttribute('data-tooltip-open', 'false');
+        other.setAttribute('aria-expanded', 'false');
+      });
+      barEl.setAttribute('data-tooltip-open', shouldOpen ? 'true' : 'false');
+      barEl.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+      if (shouldOpen) {
+        tooltipTimer = window.setTimeout(closeTooltip, 3500);
+      }
+    }
+
+    barEl.addEventListener('click', function() {
+      if (window.matchMedia && window.matchMedia('(hover: none), (pointer: coarse)').matches) {
+        toggleTooltip();
+      }
+    });
+    barEl.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        toggleTooltip();
+      }
+    });
   }
 
   function buildLeaderCard(entry, onToggle) {
     var card = document.createElement('div');
     card.className = 'leader-card';
     card.setAttribute('data-model', entry.model);
-    card.setAttribute('role', 'listitem');
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-pressed', 'false');
 
     var rank = document.createElement('span');
     rank.className = 'leader-rank';
@@ -340,11 +414,18 @@ if (document.querySelector('.stats-grid')) {
 
     var tokens = document.createElement('span');
     tokens.className = 'leader-tokens';
-    tokens.textContent = 'I ' + fmtTokens(entry.input_tokens || 0).replace('.0', '') +
+    var displayInput = entry.input_tokens_uncached != null
+      ? entry.input_tokens_uncached
+      : entry.input_tokens;
+    var displayCache = entry.cache_input_tokens != null
+      ? entry.cache_input_tokens
+      : entry.cache_tokens;
+    tokens.textContent = 'I ' + fmtTokens(displayInput || 0).replace('.0', '') +
                          '  O ' + fmtTokens(entry.output_tokens || 0).replace('.0', '') +
-                         '  C ' + fmtTokens(entry.cache_tokens || 0).replace('.0', '') +
+                         '  CI ' + fmtTokens(displayCache || 0).replace('.0', '') +
                          '  T ' + fmtTokens(entry.tokens).replace('.0', '') +
                          '  R ' + fmt(entry.requests || 0);
+    tokens.title = 'Input sin cache · Output · Cache input (cache read) · Total efectivo';
     row2.appendChild(tokens);
 
     inner.appendChild(row2);
@@ -352,6 +433,12 @@ if (document.querySelector('.stats-grid')) {
 
     card.addEventListener('click', function() {
       onToggle(entry.model);
+    });
+    card.addEventListener('keydown', function(event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onToggle(entry.model);
+      }
     });
 
     return card;
@@ -373,8 +460,10 @@ if (document.querySelector('.stats-grid')) {
     var axisEl = document.getElementById(config.axisId);
     var yAxisEl = document.getElementById(config.yAxisId);
     var leaderboardContainer = document.getElementById(config.leaderboardId);
-    var activeModel = '';
+    var selectedModels = new Set();
     var modelColorMap = {};
+    var selectionLabel = config.selectionLabelId ? document.getElementById(config.selectionLabelId) : null;
+    var clearButton = config.clearButtonId ? document.getElementById(config.clearButtonId) : null;
 
     if (!barsEl || !axisEl || !leaderboardContainer) return;
 
@@ -383,20 +472,36 @@ if (document.querySelector('.stats-grid')) {
     }
 
     function syncHighlightState() {
+      var hasSelection = selectedModels.size > 0;
       barsEl.querySelectorAll('.top-models-stack i').forEach(function(seg) {
-        var matches = !activeModel || seg.getAttribute('data-model') === activeModel;
+        var matches = !hasSelection || selectedModels.has(seg.getAttribute('data-model'));
         seg.setAttribute('data-dimmed', matches ? 'false' : 'true');
       });
       leaderboardContainer.querySelectorAll('.leader-card').forEach(function(card) {
-        var selected = activeModel && card.getAttribute('data-model') === activeModel;
+        var selected = selectedModels.has(card.getAttribute('data-model'));
         card.setAttribute('data-selected', selected ? 'true' : 'false');
-        card.setAttribute('data-dimmed', activeModel && !selected ? 'true' : 'false');
+        card.setAttribute('data-dimmed', hasSelection && !selected ? 'true' : 'false');
+        card.setAttribute('aria-pressed', selected ? 'true' : 'false');
       });
+      if (selectionLabel) {
+        selectionLabel.textContent = hasSelection
+          ? selectedModels.size + (selectedModels.size === 1 ? (window.SS_I18N ? window.SS_I18N.t('one_model_selected') : ' modelo seleccionado') : (window.SS_I18N ? window.SS_I18N.t('n_models_selected') : ' modelos seleccionados'))
+          : (window.SS_I18N ? window.SS_I18N.t('all_models') : 'Todos los modelos');
+      }
+      if (clearButton) clearButton.disabled = !hasSelection;
     }
 
     function toggleModel(model) {
-      activeModel = activeModel === model ? '' : model;
+      if (selectedModels.has(model)) selectedModels.delete(model);
+      else selectedModels.add(model);
       syncHighlightState();
+    }
+
+    if (clearButton) {
+      clearButton.addEventListener('click', function() {
+        selectedModels.clear();
+        syncHighlightState();
+      });
     }
 
     fetch(config.endpoint)
@@ -457,11 +562,14 @@ if (document.querySelector('.stats-grid')) {
 
         var sc = config.statsContainerId ? document.getElementById(config.statsContainerId) : null;
         if (sc && data.total_cost != null) {
-          sc.querySelector('[data-stat-30d="total-cost"]').textContent = fmtCost(data.total_cost);
-          sc.querySelector('[data-stat-30d="total-tokens"]').textContent = fmt(data.total_tokens);
-          sc.querySelector('[data-stat-30d="total-sessions"]').textContent = fmt(data.total_sessions);
+          sc.querySelector('[data-stat-30d="total-input"]').textContent = fmt(data.total_input_tokens_uncached);
+          sc.querySelector('[data-stat-30d="total-output"]').textContent = fmt(data.total_output_tokens);
+          sc.querySelector('[data-stat-30d="total-cache"]').textContent = fmt(data.total_cache_input_tokens);
           sc.querySelector('[data-stat-30d="cache-ratio"]').textContent = fmtPct(data.cache_ratio);
+          sc.querySelector('[data-stat-30d="total-sessions"]').textContent = fmt(data.total_sessions);
           sc.querySelector('[data-stat-30d="total-requests"]').textContent = fmt(data.total_requests);
+          sc.querySelector('[data-stat-30d="total-tokens"]').textContent = fmt(data.total_tokens);
+          sc.querySelector('[data-stat-30d="total-cost"]').textContent = fmtCostShort(data.total_cost);
         }
 
         if (yAxisEl) {
@@ -493,6 +601,8 @@ if (document.querySelector('.stats-grid')) {
     axisId: 'top-models-30d-axis',
     yAxisId: 'top-models-30d-y-axis',
     leaderboardId: 'top-models-30d-leaderboard',
+    selectionLabelId: 'top-models-30d-selection',
+    clearButtonId: 'top-models-30d-clear',
     endpoint: '/api/top-models-30d',
     rangeKey: '30D',
     statsContainerId: 'thirty-stats'
@@ -505,6 +615,8 @@ if (document.querySelector('.stats-grid')) {
     axisId: 'top-axis',
     yAxisId: 'top-y-axis',
     leaderboardId: 'leaderboard',
+    selectionLabelId: 'top-models-selection',
+    clearButtonId: 'top-models-clear',
     endpoint: '/api/top-models',
     rangeKey: '12M'
   });
@@ -530,6 +642,7 @@ if (document.querySelector('.stats-grid')) {
     return rows.map(function(r) {
       if (metric === 'cost') return Number(r.cost || 0);
       if (metric === 'sessions') return Number(r.sessions || 0);
+      if (r.total_tokens != null) return Number(r.total_tokens || 0);
       return Number(r.input_tokens || 0) + Number(r.output_tokens || 0) + Number(r.cache_tokens || 0);
     });
   }
@@ -576,7 +689,7 @@ if (document.querySelector('.stats-grid')) {
     var built = buildSourcesDatasets(rows);
     var labels = built.periods.map(function(p) {
       var date = new Date(p + 'T00:00:00');
-      var months = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+      var months = (window.SS_I18N ? window.SS_I18N.monthsShort() : ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC']);
       return String(date.getDate()).padStart(2, '0') + '/' + months[date.getMonth()];
     });
 
@@ -593,7 +706,7 @@ if (document.querySelector('.stats-grid')) {
             mode: 'index',
             callbacks: {
               label: function(ctx) {
-                return ctx.dataset.label + ': ' + fmt(ctx.parsed.y) + ' sesiones';
+                return ctx.dataset.label + ': ' + fmt(ctx.parsed.y) + (window.SS_I18N ? window.SS_I18N.t('dyn.sessions_word') : ' sesiones');
               }
             }
           }
@@ -647,7 +760,7 @@ if (document.querySelector('.stats-grid')) {
     sourcesLegend.style.display = 'none';
     var labels = rows.map(function(r) {
       var date = new Date(r.period + 'T00:00:00');
-      var months = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+      var months = (window.SS_I18N ? window.SS_I18N.monthsShort() : ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC']);
       return String(date.getDate()).padStart(2, '0') + '/' + months[date.getMonth()];
     });
     var values = buildActivityDataset(rows, activityMetric);
@@ -844,7 +957,7 @@ if (document.getElementById('sessions-tbody')) {
 
   function loadSessions() {
     var tbody = document.getElementById('sessions-tbody');
-    tbody.innerHTML = '<tr><td colspan="9" class="loading-row">Cargando...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="loading-row">Cargando...</td></tr>';
     var url = '/api/sessions?limit=' + limit + '&offset=' + offset;
     if (sourceFilter) url += '&source=' + sourceFilter;
 
@@ -859,27 +972,37 @@ if (document.getElementById('sessions-tbody')) {
         document.getElementById('next-page').disabled = (offset + limit) >= total;
 
         if (data.sessions.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="9" class="loading-row">Sin resultados</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="10" class="loading-row">Sin resultados</td></tr>';
           return;
         }
 
         data.sessions.forEach(function(s) {
           var tr = document.createElement('tr');
-          var totalT = (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_tokens || 0);
+          var totalT = s.total_tokens != null
+            ? Number(s.total_tokens || 0)
+            : (s.input_tokens || 0) + (s.output_tokens || 0) + (s.cache_tokens || 0);
+          var inputT = s.input_tokens_uncached != null
+            ? Number(s.input_tokens_uncached || 0)
+            : Number(s.input_tokens || 0);
+          var cacheInputT = s.cache_input_tokens != null
+            ? Number(s.cache_input_tokens || 0)
+            : Number(s.cache_tokens || 0);
           tr.innerHTML =
             '<td title="' + (s.id || '') + '">' + (s.id ? s.id.slice(0, 24) + '...' : '—') + '</td>' +
             '<td>' + fmtDateTimeArt(s.timestamp, s.date) + '</td>' +
             '<td>' + (s.source || '—') + '</td>' +
             '<td class="num">' + fmt(s.requests) + '</td>' +
-            '<td class="num">' + fmt(s.input_tokens) + '</td>' +
+            '<td class="num">' + fmt(inputT) + '</td>' +
             '<td class="num">' + fmt(s.output_tokens) + '</td>' +
-            '<td class="num">' + fmt(s.cache_tokens) + '</td>' +
+            '<td class="num">' + fmt(cacheInputT) + '</td>' +
+            '<td class="num">' + fmt(s.input_tokens) + '</td>' +
+            '<td class="num">' + fmt(totalT) + '</td>' +
             '<td class="num">' + fmtCost(s.cost) + '</td>';
           tbody.appendChild(tr);
         });
       })
       .catch(function() {
-        tbody.innerHTML = '<tr><td colspan="9" class="loading-row">Error al cargar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="loading-row">Error al cargar</td></tr>';
       });
   }
 
@@ -926,8 +1049,8 @@ if (document.getElementById('models-tbody')) {
       return av < bv ? -sortDir : av > bv ? sortDir : 0;
     }
     if (sortField === 'total') {
-      av = (a.input_tokens || 0) + (a.output_tokens || 0) + (a.cache_tokens || 0);
-      bv = (b.input_tokens || 0) + (b.output_tokens || 0) + (b.cache_tokens || 0);
+      av = modelTotalTokens(a);
+      bv = modelTotalTokens(b);
     } else if (sortField === 'requests') {
       av = a.requests || 0;
       bv = b.requests || 0;
@@ -938,12 +1061,27 @@ if (document.getElementById('models-tbody')) {
     return av < bv ? -sortDir : av > bv ? sortDir : 0;
   }
 
+  function modelTotalTokens(model) {
+    if (model && model.billable_tokens != null) return Number(model.billable_tokens) || 0;
+    return (model.input_tokens || 0) + (model.output_tokens || 0) + (model.cache_tokens || 0);
+  }
+
+  function modelInputTokens(model) {
+    if (model && model.input_tokens_uncached != null) return Number(model.input_tokens_uncached) || 0;
+    return Number(model && model.input_tokens || 0);
+  }
+
+  function modelCacheInputTokens(model) {
+    if (model && model.cache_input_tokens != null) return Number(model.cache_input_tokens) || 0;
+    return Number(model && model.cache_tokens || 0);
+  }
+
   function renderModels() {
     var sorted = modelsData.slice().sort(modelSortCompare);
     var tbody = document.getElementById('models-tbody');
     tbody.innerHTML = '';
     sorted.forEach(function(m, i) {
-      var totalT = (m.input_tokens || 0) + (m.output_tokens || 0) + (m.cache_tokens || 0);
+      var totalT = modelTotalTokens(m);
       var price = modelPrices[m.model] || {};
       var inpPrice = price.input;
       var outPrice = price.output;
@@ -958,9 +1096,10 @@ if (document.getElementById('models-tbody')) {
         '<td class="num"><span class="rank' + (i < 3 ? ' top-3' : '') + '">' + (i + 1) + '</span></td>' +
         '<td><span class="model-color-dot" style="background:' + dotColor + '"></span><span class="model-name">' + escHtml(m.model) + '</span></td>' +
         '<td class="num">' + fmt(m.requests) + '</td>' +
-        '<td class="num col-input">' + fmt(m.input_tokens) + '</td>' +
+        '<td class="num col-input">' + fmt(modelInputTokens(m)) + '</td>' +
         '<td class="num col-output">' + fmt(m.output_tokens) + '</td>' +
-        '<td class="num col-cache">' + fmt(m.cache_tokens) + '</td>' +
+        '<td class="num col-cache">' + fmt(modelCacheInputTokens(m)) + '</td>' +
+        '<td class="num col-raw-input">' + fmt(m.input_tokens) + '</td>' +
         '<td class="num col-total">' + fmt(totalT) + '</td>' +
         '<td class="num col-cost">' + fmtCost(m.cost) + '</td>' +
         '<td class="num price-cell">' + formatPriceDisplay(inpPrice) + '</td>' +
@@ -1074,7 +1213,7 @@ if (document.getElementById('models-tbody')) {
       if (raw === orig) return;
       var value = raw !== '' ? parseFloat(raw) : null;
       if (raw !== '' && (isNaN(value) || value < 0)) {
-        showSaveFeedback(cells[fields.indexOf(field)], 'invalid', 'Número inválido');
+        showSaveFeedback(cells[fields.indexOf(field)], 'invalid', window.SS_I18N ? window.SS_I18N.t('dyn.invalid_number') : 'Número inválido');
         return;
       }
       promises.push(
@@ -1117,7 +1256,7 @@ if (document.getElementById('models-tbody')) {
             setTimeout(function() { if (badge) badge.style.display = 'none'; }, 2000);
           })
           .catch(function() {
-            if (badge) { badge.textContent = '✓ guardado (recálculo pendiente)'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-accent-text)'; }
+            if (badge) { badge.textContent = window.SS_I18N ? window.SS_I18N.t('dyn.saved_pending') : '✓ guardado (recálculo pendiente)'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-accent-text)'; }
             setTimeout(function() { if (badge) badge.style.display = 'none'; }, 3000);
           });
       } else {
@@ -1210,14 +1349,14 @@ if (document.getElementById('recalc-historical-btn')) {
           badge.style.color = 'var(--stats-neg)';
         }
         btn.disabled = false;
-        btn.textContent = 'Recalcular costos históricos';
+        btn.textContent = window.SS_I18N ? window.SS_I18N.t('mod.recalc') : 'Recalcular costos históricos';
         setTimeout(function() { badge.style.display = 'none'; }, 4000);
       })
       .catch(function() {
         badge.textContent = 'Error de red';
         badge.style.color = 'var(--stats-neg)';
         btn.disabled = false;
-        btn.textContent = 'Recalcular costos históricos';
+        btn.textContent = window.SS_I18N ? window.SS_I18N.t('mod.recalc') : 'Recalcular costos históricos';
       });
   });
 }
@@ -1227,6 +1366,7 @@ if (document.getElementById('subscription-tbody')) {
   var subTbody = document.getElementById('subscription-tbody');
   var subData = null;  // raw server data
   var subModels = [];  // computed models (after calculator adjustments)
+  var dismissedModels = [];  // models dismissed from comparator (resets on model change)
   var subSortField = 'cost_sub';
   var subSortDir = 1;  // 1=asc (cheapest first), -1=desc
 
@@ -1306,8 +1446,12 @@ if (document.getElementById('subscription-tbody')) {
       }
 
       var vsClass = '';
-      if (m.vs_gpt54 && m.vs_gpt54.indexOf('barato') !== -1) {
+      if (m.vs_gpt54 && window.SS_I18N && m.vs_gpt54.indexOf(window.SS_I18N.t('dyn.more_cheap')) !== -1) {
         vsClass = ' cheaper';
+      } else if (m.vs_gpt54 && m.vs_gpt54.indexOf('barato') !== -1) {
+        vsClass = ' cheaper';
+      } else if (m.vs_gpt54 && window.SS_I18N && m.vs_gpt54.indexOf(window.SS_I18N.t('dyn.more_expensive')) !== -1) {
+        vsClass = ' pricier';
       } else if (m.vs_gpt54 && m.vs_gpt54.indexOf('caro') !== -1) {
         vsClass = ' pricier';
       }
@@ -1377,10 +1521,207 @@ if (document.getElementById('subscription-tbody')) {
         return null;
       }
 
+      function formatComparisonCost(value) {
+        return Number.isFinite(value) ? '$' + value.toFixed(4) + '/M' : '—';
+      }
+
+      function createComparisonMetric(label, value) {
+        var metric = document.createElement('div');
+        metric.className = 'mobile-cost-metric';
+        var metricLabel = document.createElement('span');
+        metricLabel.className = 'mobile-cost-metric-label';
+        metricLabel.textContent = label;
+        var metricValue = document.createElement('strong');
+        metricValue.className = 'mobile-cost-metric-value';
+        metricValue.textContent = value;
+        metric.appendChild(metricLabel);
+        metric.appendChild(metricValue);
+        return metric;
+      }
+
+      function renderNeighborList(container, items, selectedCost, relation, onDismiss) {
+        if (!container) return;
+        container.innerHTML = '';
+        if (!items.length) {
+          var empty = document.createElement('div');
+          empty.className = 'mobile-cost-empty';
+          empty.textContent = window.SS_I18N ? window.SS_I18N.t('dyn.no_comparable') : 'No hay modelos comparables.';
+          container.appendChild(empty);
+          return;
+        }
+
+        items.forEach(function(item) {
+          var row = document.createElement('div');
+          row.className = 'mobile-cost-neighbor mobile-cost-neighbor-' + relation;
+
+          var identity = document.createElement('div');
+          identity.className = 'mobile-cost-neighbor-identity';
+          var name = document.createElement('strong');
+          name.className = 'mobile-cost-neighbor-name';
+          name.textContent = displayModelName(item.model);
+          identity.appendChild(name);
+          if (item.pricePending) {
+            var pending = document.createElement('span');
+            pending.className = 'mobile-cost-pending';
+            pending.textContent = window.SS_I18N ? window.SS_I18N.t('dyn.price_pending') : 'precio pendiente';
+            identity.appendChild(pending);
+          }
+
+          var values = document.createElement('div');
+          values.className = 'mobile-cost-neighbor-values';
+          var cost = document.createElement('strong');
+          cost.className = 'mobile-cost-neighbor-cost';
+          cost.textContent = formatComparisonCost(item.comparisonCost);
+          var ratio = relation === 'cheaper'
+            ? selectedCost / item.comparisonCost
+            : item.comparisonCost / selectedCost;
+          var delta = document.createElement('span');
+          delta.className = 'mobile-cost-neighbor-delta';
+          delta.textContent = ratio.toFixed(1) + (window.SS_I18N ? window.SS_I18N.t(relation === 'cheaper' ? 'dyn.more_cheap' : 'dyn.more_expensive') : (relation === 'cheaper' ? '× más barato' : '× más caro'));
+          var dismiss = document.createElement('span');
+          dismiss.className = 'mobile-cost-neighbor-dismiss';
+          dismiss.textContent = '✕';
+          values.appendChild(cost);
+          values.appendChild(delta);
+          values.appendChild(dismiss);
+
+          row.appendChild(identity);
+          row.appendChild(values);
+          if (onDismiss) {
+            row.addEventListener('click', function() { onDismiss(item.model); });
+          }
+          container.appendChild(row);
+        });
+      }
+
+      function renderMobileCostComparison(refModel) {
+        var logic = window.CostosLogic;
+        var selectedContainer = document.getElementById('mobile-cost-selected');
+        if (!logic || !selectedContainer || !refModel) return;
+
+        var currentCost = parseFloat(refCostInput ? refCostInput.value : 0);
+        var dismissedSet = new Set(dismissedModels);
+        var comparableModels = subModels.map(function(item) {
+          var copy = Object.assign({}, item);
+          if (copy.model === refModel.model && currentCost > 0) copy.cost_sub = currentCost;
+          return copy;
+        }).filter(function(item) { return !dismissedSet.has(item.model); });
+        var comparison = logic.getCostNeighbors(comparableModels, refModel.model, 5);
+        var selected = comparison.selected;
+        if (!selected) {
+          selectedContainer.innerHTML = '<div class="mobile-cost-empty">' + (window.SS_I18N ? window.SS_I18N.t('dyn.no_comparable_selected') : 'El modelo elegido no tiene un costo comparable.') + '</div>';
+          return;
+        }
+        if (currentCost > 0 && !(Number(refModel.cost_sub) > 0)) {
+          selected.pricePending = true;
+          selected.comparisonSource = 'draft';
+        }
+
+        selectedContainer.innerHTML = '';
+        var top = document.createElement('div');
+        top.className = 'mobile-cost-selected-top';
+        var selectedName = document.createElement('strong');
+        selectedName.className = 'mobile-cost-selected-name';
+        selectedName.textContent = displayModelName(selected.model);
+        top.appendChild(selectedName);
+        if (selected.pricePending) {
+          var selectedPending = document.createElement('span');
+          selectedPending.className = 'mobile-cost-pending';
+          selectedPending.textContent = window.SS_I18N ? window.SS_I18N.t('dyn.price_pending') : 'precio pendiente';
+          top.appendChild(selectedPending);
+        }
+        selectedContainer.appendChild(top);
+
+        var apiCost = Number(selected.cost_api) || 0;
+        var subscriptionCost = selected.comparisonCost;
+        var savingsPct = apiCost > 0 ? (1 - subscriptionCost / apiCost) * 100 : 0;
+        var multiplier = subscriptionCost > 0 ? apiCost / subscriptionCost : 0;
+
+        var pct = parseFloat(document.getElementById('calc-codex-pct').value) || 0;
+        var inpM = parseFloat(document.getElementById('calc-codex-in').value) || 0;
+        var outM = parseFloat(document.getElementById('calc-codex-out').value) || 0;
+        var cacheM = parseFloat(document.getElementById('calc-codex-cache').value) || 0;
+        var usedM = inpM + outM + cacheM;
+        var weekPct = pct / 100;
+        var fullWindowM = weekPct > 0 ? usedM / weekPct : 0;
+        var breakEven = logic.calculateBreakEven({
+          monthlyPlanCost: parseFloat(document.getElementById('calc-codex-cost').value) || 0,
+          apiCostPerMillion: apiCost,
+          fullWindowTokensM: fullWindowM
+        });
+
+        var metrics = document.createElement('div');
+        metrics.className = 'mobile-cost-metrics';
+        metrics.appendChild(createComparisonMetric(window.SS_I18N ? window.SS_I18N.t('dyn.api_cost_metric') : 'Costo por API', formatComparisonCost(apiCost)));
+        metrics.appendChild(createComparisonMetric(window.SS_I18N ? window.SS_I18N.t('dyn.eff_sub_metric') : 'Costo efectivo por suscripción', formatComparisonCost(subscriptionCost)));
+        metrics.appendChild(createComparisonMetric(
+          window.SS_I18N ? window.SS_I18N.t('dyn.difference') : 'Diferencia',
+          savingsPct >= 0
+            ? savingsPct.toFixed(1) + (window.SS_I18N ? window.SS_I18N.t('dyn.percent_less') : '% menos · ') + multiplier.toFixed(1) + '×'
+            : Math.abs(savingsPct).toFixed(1) + (window.SS_I18N ? window.SS_I18N.t('dyn.percent_more') : '% más')
+        ));
+        metrics.appendChild(createComparisonMetric(
+          window.SS_I18N ? window.SS_I18N.t('dyn.break_even') : 'Punto de equilibrio',
+          breakEven
+            ? fmtTokens(breakEven.tokensMillions * 1000000) + (breakEven.windowPercent !== null ? ' · ' + breakEven.windowPercent.toFixed(1) + '%' : '')
+            : '—'
+        ));
+        selectedContainer.appendChild(metrics);
+
+        function handleDismiss(model) {
+          dismissedModels.push(model);
+          renderMobileCostComparison(refModel);
+        }
+
+        renderNeighborList(document.getElementById('mobile-cost-cheaper'), comparison.cheaper, subscriptionCost, 'cheaper', handleDismiss);
+        renderNeighborList(document.getElementById('mobile-cost-pricier'), comparison.pricier, subscriptionCost, 'pricier', handleDismiss);
+
+        // Render divider row with selected model
+        var divider = document.getElementById('mobile-cost-divider');
+        if (divider) {
+          divider.innerHTML = '';
+          var divName = document.createElement('strong');
+          divName.textContent = displayModelName(selected.model);
+          var divCost = document.createElement('strong');
+          divCost.textContent = formatComparisonCost(subscriptionCost);
+          var divLabel = document.createElement('span');
+          divLabel.textContent = window.SS_I18N ? window.SS_I18N.t('dyn.reference') : 'referencia';
+          divider.appendChild(divName);
+          divider.appendChild(divCost);
+          divider.appendChild(divLabel);
+        }
+
+        // Restore button visibility
+        var restoreBtn = document.getElementById('mobile-cost-restore');
+        if (restoreBtn) {
+          var dismissedCount = dismissedModels.length;
+          if (dismissedCount > 0) {
+            restoreBtn.style.display = '';
+            restoreBtn.textContent = '↻ Restaurar ocultos (' + dismissedCount + ')';
+            restoreBtn.onclick = function() {
+              dismissedModels = [];
+              renderMobileCostComparison(refModel);
+            };
+          } else {
+            restoreBtn.style.display = 'none';
+            restoreBtn.textContent = '↻ Restaurar';
+          }
+        }
+
+        var count = document.getElementById('mobile-cost-count');
+        if (count) count.textContent = (comparison.cheaper.length + 1 + comparison.pricier.length) + (window.SS_I18N ? window.SS_I18N.t('dyn.models_word') : ' modelos');
+      }
+
       // Recalculate table with dynamic reference
       function recalcAll() {
+        // Clear dismissals when reference changes
+        dismissedModels = [];
         var refModel = getRefModel();
-        var refPrice = parseFloat(refCostInput ? refCostInput.value : 0.0183) || 0.0183;
+        var typedRefPrice = parseFloat(refCostInput ? refCostInput.value : 0);
+        var fallbackRefPrice = refModel && refModel.plan && refModel.plan.indexOf('Codex') !== -1 && refModel.cost_api > 0
+          ? refModel.cost_api / 20
+          : 0;
+        var refPrice = typedRefPrice > 0 ? typedRefPrice : (fallbackRefPrice || 0.0183);
 
         // Update header
         if (refColHeader) {
@@ -1390,18 +1731,20 @@ if (document.getElementById('subscription-tbody')) {
         // Update results header
         function setTxt(id, val) { var e = document.getElementById(id); if (e) e.textContent = val; }
         setTxt('res-ref-model-name', refModel ? refModel.model : '—');
-        setTxt('res-ref-ppm', refModel ? '$' + (refModel.cost_sub || 0).toFixed(4) + '/1M' : '—');
+        setTxt('res-ref-ppm', refModel
+          ? (typedRefPrice > 0 ? '$' + typedRefPrice.toFixed(4) + '/1M' : '\u2014 (' + (window.SS_I18N ? window.SS_I18N.t('dyn.price_pending') : 'precio pendiente') + ')')
+          : '—');
 
         // Recalculate vs_gpt54 for all models
         subData.models.forEach(function(m) {
           if (m.cost_sub != null) {
             var ratio = m.cost_sub / refPrice;
             if (ratio < 0.99) {
-              m.vs_gpt54 = (1 / ratio).toFixed(1) + '× más barato';
+              m.vs_gpt54 = (1 / ratio).toFixed(1) + (window.SS_I18N ? window.SS_I18N.t('dyn.more_cheap') : '× más barato');
             } else if (ratio > 1.01) {
-              m.vs_gpt54 = ratio.toFixed(1) + '× más caro';
+              m.vs_gpt54 = ratio.toFixed(1) + (window.SS_I18N ? window.SS_I18N.t('dyn.more_expensive') : '× más caro');
             } else {
-              m.vs_gpt54 = '— (referencia)';
+              m.vs_gpt54 = '\u2014 (' + (window.SS_I18N ? window.SS_I18N.t('dyn.reference') : 'referencia') + ')';
             }
           } else {
             m.vs_gpt54 = '—';
@@ -1418,6 +1761,7 @@ if (document.getElementById('subscription-tbody')) {
 
         subApplyCalculator();
         updateCodexUsageCalc();
+        renderMobileCostComparison(refModel);
       }
 
       // Update Codex usage calculator
@@ -1467,7 +1811,6 @@ if (document.getElementById('subscription-tbody')) {
         setTxt('res-codex-api-week', usedM > 0 ? '$' + apiWeekCost.toFixed(2) : '$—');
         setTxt('res-codex-savings-week', usedM > 0 ? (savingsPct >= 0 ? savingsPct + '% ($' + savingsWeek.toFixed(2) + ')' : '0% ($0)') : '—');
         setTxt('res-codex-week-tokens', weekFullM > 0 ? weekFullM.toFixed(1) + 'M' : '—');
-        setTxt('res-codex-eff-actual', usedM > 0 ? '$' + effActual.toFixed(4) + '/1M' : '—');
         setTxt('res-codex-eff-full', monthTokensM > 0 ? '$' + effFull.toFixed(4) + '/1M' : '—');
       }
 
@@ -1529,7 +1872,7 @@ if (document.getElementById('subscription-tbody')) {
         saveBtn.addEventListener('click', function() {
           var model = refSelect ? refSelect.value : '';
           var cost = parseFloat(refCostInput ? refCostInput.value : 0) || 0;
-          if (!model) { alert('Seleccioná un modelo de referencia primero.'); return; }
+          if (!model) { alert(window.SS_I18N ? window.SS_I18N.t('dyn.select_ref_first') : 'Seleccioná un modelo de referencia primero.'); return; }
           fetch('/api/subscription-cost/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1538,6 +1881,12 @@ if (document.getElementById('subscription-tbody')) {
           .then(function(r) { return r.json(); })
           .then(function(data) {
             saveCalcState();
+            if (data.success && subData && subData.models) {
+              subData.models.forEach(function(item) {
+                if (item.model === model) item.cost_sub = cost;
+              });
+              recalcAll();
+            }
             if (data.success && saveBadge) {
               saveBadge.style.display = 'inline';
               setTimeout(function(){ saveBadge.style.display = 'none'; }, 3000);
@@ -1545,7 +1894,7 @@ if (document.getElementById('subscription-tbody')) {
           })
           .catch(function(err) {
             console.error('Error saving cost:', err);
-            alert('Error al guardar: ' + err.message);
+            alert((window.SS_I18N ? window.SS_I18N.t('dyn.save_error') : 'Error al guardar: ') + err.message);
           });
         });
       }
@@ -1561,11 +1910,15 @@ if (document.getElementById('subscription-tbody')) {
       var ocgInputs = ['calc-ocg-cost', 'calc-ocg-credit'];
       ocgInputs.forEach(function(id) {
         var el = document.getElementById(id);
-        if (el) el.addEventListener('input', function() { subApplyCalculator(); });
+        if (el) el.addEventListener('input', function() { recalcAll(); });
       });
 
-      // Initial calculation
-      recalcAll();
+      // Initial calculation: cargar la muestra del modelo elegido sin persistir cambios
+      if (refSelect && refSelect.value) {
+        refSelect.dispatchEvent(new Event('change'));
+      } else {
+        recalcAll();
+      }
 
       // Wire up sort buttons
       var sortBtns = document.querySelectorAll('[data-sub-sort], [data-sub-sort-dir]');
@@ -1659,17 +2012,18 @@ document.querySelectorAll('.table-wrap').forEach(function(wrap) {
 
 // --- Responsive: inject data-label on today-model-row spans ---
 function injectTodayModelLabels() {
+  var T = window.SS_I18N ? window.SS_I18N.t : function(k) { return k; };
   var LABELS = {
-    'today-model-rank': '#',
-    'today-model-name': 'Modelo',
-    'today-model-reqs': 'Requests',
-    'today-model-ioc i': 'Input',
-    'today-model-ioc o': 'Output',
-    'today-model-ioc c': 'Cache',
-    'today-model-cache-ratio': 'Cache %',
-    'today-model-total': 'Total',
-    'today-model-cost': 'Costo',
-    'today-model-pct': '%'
+    'today-model-rank': T('dyn.lbl_rank'),
+    'today-model-name': T('dyn.lbl_model'),
+    'today-model-reqs': T('dyn.lbl_requests'),
+    'today-model-ioc i': T('dyn.lbl_input_nocache'),
+    'today-model-ioc o': T('dyn.lbl_output'),
+    'today-model-ioc c': T('dyn.lbl_cache_input'),
+    'today-model-cache-ratio': T('dyn.lbl_cache_pct'),
+    'today-model-total': T('dyn.lbl_total'),
+    'today-model-cost': T('dyn.lbl_cost'),
+    'today-model-pct': T('dyn.lbl_pct')
   };
   document.querySelectorAll('.today-model-row').forEach(function(row) {
     row.querySelectorAll('span').forEach(function(span) {

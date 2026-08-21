@@ -15,12 +15,30 @@ Dashboard web para visualizar consumo de APIs LLM desde session-stats.
 | `/` | Dashboard con gráficos |
 | `/sessions` | Tabla paginada de sesiones |
 | `/models` | Ranking de modelos por costo |
+| `/costos` | Comparador API vs costo efectivo por suscripción |
 | `/healthz` | Healthcheck |
 | `/api/summary` | Totales globales (JSON) |
 | `/api/timeseries?range=30d&bucket=day` | Serie temporal (JSON) |
 | `/api/models?limit=20` | Ranking modelos (JSON) |
 | `/api/sessions?limit=50&offset=0` | Sesiones paginadas (JSON) |
 | `/api/sources` | Totales por fuente (JSON) |
+
+Los endpoints conservan los campos crudos `input_tokens`, `output_tokens` y
+`cache_tokens`. También exponen `input_tokens_uncached` (input sin cache read),
+`cache_input_tokens` (cache read efectivo) y el total efectivo
+(`billable_tokens` en `/api/models`, `total_tokens` en
+`/api/timeseries`/`/api/sessions`). Estos derivados respetan la semántica de
+cache de cada fuente y no duplican el cache de Codex.
+
+## `/costos` en Android
+
+- Chrome y Firefox Android usan un comparador compacto del elegido con sus
+  cinco vecinos inferiores y superiores por costo efectivo.
+- Desktop conserva la tabla completa.
+- Los precios manuales prevalecen; Codex sin precio usa `cost_api / 20` solo
+  como fallback visual y sigue marcado `precio pendiente`.
+- El punto de equilibrio usa el costo semanal del plan (`mensual / 4`) frente
+  al costo API efectivo por millón.
 
 ## Operación diaria
 
@@ -39,11 +57,15 @@ curl http://127.0.0.1:8091/healthz
 ## Troubleshooting
 
 - **502 Bad Gateway**: el backend no corre. Verificar `systemctl status session-stats-web`.
-- **401 Unauthorized**: credenciales Basic Auth incorrectas. Regenerar con `htpasswd -nb stats <nueva-pass>` y copiar a `/etc/nginx/.htpasswd-stats`.
+- **Redirect a /login**: la cookie `stats_session` venció o no existe. Ingresar credenciales en `/login`.
+- **No recuerda el login**: la cookie se firma con el secreto en `stats-web/.session_secret`. Si se borra o cambia, las cookies viejas se invalidan (hay que volver a loguear). Duración: 90 días.
+- **401 en POST /login**: credenciales incorrectas. Regenerar la contraseña con `htpasswd -nb stats <nueva-pass>` y copiar a `/etc/nginx/.htpasswd-stats` (el backend valida contra ese archivo).
 - **DB no disponible**: `session_history.db` no existe o no es legible. Verificar permisos.
 
 ## Notas
 
-- El Basic Auth está en nginx, no en la app.
+- La autenticación es por **cookie de sesión firmada** (endpoint `/__auth`, validado por nginx con `auth_request`). Reemplaza al antiguo Basic Auth.
+- El secreto de firma vive en `stats-web/.session_secret` (gitignored, permisos 600).
+- `/login`, `/logout` y `/__auth` se sirven sin `auth_request`; el resto del sitio pasa por él.
 - Chart.js está vendorizado localmente — no depende de CDN externo.
 - Todas las conexiones a SQLite son read-only (`PRAGMA query_only=ON`).

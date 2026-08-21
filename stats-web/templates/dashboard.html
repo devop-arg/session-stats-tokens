@@ -3,53 +3,84 @@
 
 <section class="hero">
   <div class="hero-inner">
-    <h1 class="hero-title">Métricas de consumo LLM</h1>
-    <p class="lede">Métricas de uso de modelos y costos</p>
+    <p class="lede" data-i18n="hero.lede">Estadísticas de uso LLM</p>
   </div>
 </section>
 
 <div class="stats-grid">
-  <div class="stat-card accent">
-    <div class="stat-label">Costo Total</div>
-    <div class="stat-value" data-stat="total-cost">&mdash;</div>
+  <div class="stat-card stat-input">
+    <div class="stat-label" data-i18n="card.input">Input</div>
+    <div class="stat-value" data-accounting="input">&mdash;</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-label">Total Tokens</div>
-    <div class="stat-value" data-stat="total-tokens">&mdash;</div>
+  <div class="stat-card stat-output">
+    <div class="stat-label" data-i18n="card.output">Output</div>
+    <div class="stat-value" data-accounting="output">&mdash;</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-label">Sesiones</div>
-    <div class="stat-value" data-stat="total-sessions">&mdash;</div>
+  <div class="stat-card stat-cache">
+    <div class="stat-label" data-i18n="card.cache_input">Cache input</div>
+    <div class="stat-value" data-accounting="cache-input">&mdash;</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-label">Cache Ratio</div>
+  <div class="stat-card stat-ratio">
+    <div class="stat-label" data-i18n="card.cache_ratio">Cache Ratio</div>
     <div class="stat-value" data-stat="cache-ratio">&mdash;</div>
   </div>
-  <div class="stat-card">
-    <div class="stat-label">Total Requests</div>
+  <div class="stat-card stat-sessions">
+    <div class="stat-label" data-i18n="card.sessions">Sesiones</div>
+    <div class="stat-value" data-stat="total-sessions">&mdash;</div>
+  </div>
+  <div class="stat-card stat-requests">
+    <div class="stat-label" data-i18n="card.requests">Requests</div>
     <div class="stat-value" data-stat="total-requests">&mdash;</div>
+  </div>
+  <div class="stat-card stat-tokens">
+    <div class="stat-label" data-i18n="card.tokens">Tokens</div>
+    <div class="stat-value" data-stat="total-tokens">&mdash;</div>
+  </div>
+  <div class="stat-card accent">
+    <div class="stat-label" data-i18n="card.cost_total">Costo Total</div>
+    <div class="stat-value" data-stat="total-cost">&mdash;</div>
   </div>
 </div>
 
 <section class="today-section" id="today-section">
-  <h2 class="section-title-sm">Uso de modelos y costos</h2>
-  <div class="today-range-tabs" role="tablist" aria-label="Rango de tiempo">
-    <button type="button" class="today-range-tab" data-range="today" data-active="true" role="tab" aria-selected="true">Hoy</button>
-    <button type="button" class="today-range-tab" data-range="yesterday" role="tab" aria-selected="false">Ayer</button>
-    <button type="button" class="today-range-tab" data-range="48h" role="tab" aria-selected="false">48hs</button>
-    <button type="button" class="today-range-tab" data-range="7d" role="tab" aria-selected="false">7 días</button>
+  <h2 class="section-title-sm" data-i18n="sec.weekly">Estadísticas Semanales</h2>
+  <div class="today-range-tabs" role="tablist" aria-label="Rango de tiempo" data-i18n-attr="aria-label:aria.activity">
+    <button type="button" class="today-range-tab" data-range="today" data-active="true" role="tab" aria-selected="true" data-i18n="range.today">Hoy</button>
+    <button type="button" class="today-range-tab" data-range="yesterday" role="tab" aria-selected="false" data-i18n="range.yesterday">Ayer</button>
+    <button type="button" class="today-range-tab" data-range="48h" role="tab" aria-selected="false" data-i18n="range.48h">48hs</button>
+    <button type="button" class="today-range-tab" data-range="7d" role="tab" aria-selected="false" data-i18n="range.7d">7 días</button>
   </div>
   <div class="today-stats" id="today-stats">
-    <div class="today-stat">
-      <div class="today-stat-label">Tokens Totales</div>
-      <div class="today-stat-value" id="today-tokens">&mdash;</div>
+    <div class="today-stat stat-input">
+      <div class="today-stat-label" data-i18n="card.input">Input</div>
+      <div class="today-stat-value" id="today-input">&mdash;</div>
     </div>
-    <div class="today-stat">
-      <div class="today-stat-label">Requests</div>
+    <div class="today-stat stat-output">
+      <div class="today-stat-label" data-i18n="card.output">Output</div>
+      <div class="today-stat-value" id="today-output">&mdash;</div>
+    </div>
+    <div class="today-stat stat-cache">
+      <div class="today-stat-label" data-i18n="card.cache_input">Cache input</div>
+      <div class="today-stat-value" id="today-cache">&mdash;</div>
+    </div>
+    <div class="today-stat stat-ratio">
+      <div class="today-stat-label" data-i18n="card.cache_ratio">Cache Ratio</div>
+      <div class="today-stat-value" id="today-ratio">&mdash;</div>
+    </div>
+    <div class="today-stat stat-sessions">
+      <div class="today-stat-label" data-i18n="card.sessions">Sesiones</div>
+      <div class="today-stat-value" id="today-sessions">&mdash;</div>
+    </div>
+    <div class="today-stat stat-requests">
+      <div class="today-stat-label" data-i18n="card.requests">Requests</div>
       <div class="today-stat-value" id="today-requests">&mdash;</div>
     </div>
-    <div class="today-stat">
-      <div class="today-stat-label">Costo Total</div>
+    <div class="today-stat stat-tokens">
+      <div class="today-stat-label" data-i18n="card.tokens">Tokens</div>
+      <div class="today-stat-value" id="today-tokens">&mdash;</div>
+    </div>
+    <div class="today-stat stat-cost">
+      <div class="today-stat-label" data-i18n="card.cost_total">Costo Total</div>
       <div class="today-stat-value" id="today-cost">&mdash;</div>
     </div>
   </div>
@@ -57,126 +88,148 @@
 </section>
 
 <section data-section="top-models-30d" id="top-models-30d" class="stats-section section-block">
-  <h2 class="section-title-sm">Uso de modelos y costos de los últimos 30 días</h2>
+  <h2 class="section-title-sm" data-i18n="sec.monthly">Estadísticas Mensuales</h2>
   <div class="today-stats" id="thirty-stats">
-    <div class="today-stat">
-      <div class="today-stat-label">Costo Total (30d)</div>
-      <div class="today-stat-value" data-stat-30d="total-cost">&mdash;</div>
+    <div class="today-stat stat-input">
+      <div class="today-stat-label" data-i18n="card.input">Input</div>
+      <div class="today-stat-value" data-stat-30d="total-input">&mdash;</div>
     </div>
-    <div class="today-stat">
-      <div class="today-stat-label">Total Tokens (30d)</div>
-      <div class="today-stat-value" data-stat-30d="total-tokens">&mdash;</div>
+    <div class="today-stat stat-output">
+      <div class="today-stat-label" data-i18n="card.output">Output</div>
+      <div class="today-stat-value" data-stat-30d="total-output">&mdash;</div>
     </div>
-    <div class="today-stat">
-      <div class="today-stat-label">Sesiones (30d)</div>
-      <div class="today-stat-value" data-stat-30d="total-sessions">&mdash;</div>
+    <div class="today-stat stat-cache">
+      <div class="today-stat-label" data-i18n="card.cache_input">Cache input</div>
+      <div class="today-stat-value" data-stat-30d="total-cache">&mdash;</div>
     </div>
-    <div class="today-stat">
-      <div class="today-stat-label">Cache Ratio (30d)</div>
+    <div class="today-stat stat-ratio">
+      <div class="today-stat-label" data-i18n="card.cache_ratio">Cache Ratio</div>
       <div class="today-stat-value" data-stat-30d="cache-ratio">&mdash;</div>
     </div>
-    <div class="today-stat">
-      <div class="today-stat-label">Total Requests (30d)</div>
+    <div class="today-stat stat-sessions">
+      <div class="today-stat-label" data-i18n="card.sessions">Sesiones</div>
+      <div class="today-stat-value" data-stat-30d="total-sessions">&mdash;</div>
+    </div>
+    <div class="today-stat stat-requests">
+      <div class="today-stat-label" data-i18n="card.requests">Requests</div>
       <div class="today-stat-value" data-stat-30d="total-requests">&mdash;</div>
+    </div>
+    <div class="today-stat stat-tokens">
+      <div class="today-stat-label" data-i18n="card.tokens">Tokens</div>
+      <div class="today-stat-value" data-stat-30d="total-tokens">&mdash;</div>
+    </div>
+    <div class="today-stat stat-cost">
+      <div class="today-stat-label" data-i18n="card.cost_total">Costo Total</div>
+      <div class="today-stat-value" data-stat-30d="total-cost">&mdash;</div>
     </div>
   </div>
   <div data-component="top-models-chart"
        class="top-models-chart"
        role="img"
        aria-label="Gráfico apilado de uso de modelos (30 días)"
+       data-i18n-attr="aria-label:aria.chart30"
        id="top-models-30d-chart">
     <div class="top-y-axis" id="top-models-30d-y-axis"></div>
     <div data-slot="top-models-axis" class="top-models-axis" aria-hidden="true" id="top-models-30d-axis"></div>
     <div data-slot="top-models-bars" class="top-models-bars" id="top-models-30d-bars"></div>
   </div>
-  <div data-component="leaderboard" class="leaderboard" id="top-models-30d-leaderboard" role="list" aria-label="Ranking de 30 días de modelos"></div>
+  <div class="leaderboard-controls" aria-live="polite">
+    <span id="top-models-30d-selection" data-i18n="all_models">Todos los modelos</span>
+    <button type="button" class="leaderboard-clear" id="top-models-30d-clear" disabled data-i18n="clear_selection">Limpiar selección</button>
+  </div>
+  <div data-component="leaderboard" class="leaderboard" id="top-models-30d-leaderboard" role="group" aria-label="Selector de modelos de los últimos 30 días" data-i18n-attr="aria-label:aria.leaderboard30"></div>
 </section>
 
 <section data-section="top-models" id="top-models" class="stats-section section-block">
-  <h2 class="section-title-sm">Uso de modelos y costos de los últimos 12 meses</h2>
+  <h2 class="section-title-sm" data-i18n="sec.yearly">Estadísticas Anuales</h2>
   <div data-component="top-models-chart"
        class="top-models-chart"
        role="img"
        aria-label="Gráfico apilado de uso de modelos (12 meses)"
+       data-i18n-attr="aria-label:aria.charthist"
        id="top-models-chart">
     <div class="top-y-axis" id="top-y-axis"></div>
     <div data-slot="top-models-axis" class="top-models-axis" aria-hidden="true" id="top-axis"></div>
     <div data-slot="top-models-bars" class="top-models-bars" id="top-bars"></div>
   </div>
-  <div data-component="leaderboard" class="leaderboard" id="leaderboard" role="list" aria-label="Ranking histórico de modelos"></div>
+  <div class="leaderboard-controls" aria-live="polite">
+    <span id="top-models-selection" data-i18n="all_models">Todos los modelos</span>
+    <button type="button" class="leaderboard-clear" id="top-models-clear" disabled data-i18n="clear_selection">Limpiar selección</button>
+  </div>
+  <div data-component="leaderboard" class="leaderboard" id="leaderboard" role="group" aria-label="Selector histórico de modelos" data-i18n-attr="aria-label:aria.leaderboardhist"></div>
 </section>
 
 <div class="section-block">
-  <h2 class="section-title-sm">Actividad temporal &mdash; evolución semanal de sesiones, tokens y costo en los últimos 12 meses</h2>
+  <h2 class="section-title-sm" data-i18n-html="1" data-i18n="act.title">Actividad temporal &mdash; evolución semanal de sesiones, tokens efectivos y costo en los últimos 12 meses</h2>
   <div class="metric-hero" id="activity-hero">
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Semana Pico Tokens</span>
+      <span class="metric-hero-label" data-i18n="act.peak_tokens">Semana Pico Tokens efectivos</span>
       <span class="metric-hero-value accent" id="activity-peak-tokens">&mdash;</span>
     </div>
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Semana Pico Costo</span>
+      <span class="metric-hero-label" data-i18n="act.peak_cost">Semana Pico Costo</span>
       <span class="metric-hero-value" id="activity-peak-cost">&mdash;</span>
     </div>
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Semana Pico Sesiones</span>
+      <span class="metric-hero-label" data-i18n="act.peak_sessions">Semana Pico Sesiones</span>
       <span class="metric-hero-value" id="activity-peak-sessions">&mdash;</span>
     </div>
   </div>
   <div class="activity-tabs" role="tablist" aria-label="Métrica temporal">
-    <button type="button" class="activity-tab" data-metric="tokens" data-active="true" role="tab" aria-selected="true">Tokens</button>
-    <button type="button" class="activity-tab" data-metric="cost" role="tab" aria-selected="false">Costo</button>
-    <button type="button" class="activity-tab" data-metric="sessions" role="tab" aria-selected="false">Sesiones</button>
-    <button type="button" class="activity-tab" data-metric="sources" role="tab" aria-selected="false">Fuentes</button>
+    <button type="button" class="activity-tab" data-metric="tokens" data-active="true" role="tab" aria-selected="true" data-i18n="metric.tokens">Tokens efectivos</button>
+    <button type="button" class="activity-tab" data-metric="cost" role="tab" aria-selected="false" data-i18n="metric.cost">Costo</button>
+    <button type="button" class="activity-tab" data-metric="sessions" role="tab" aria-selected="false" data-i18n="metric.sessions">Sesiones</button>
+    <button type="button" class="activity-tab" data-metric="sources" role="tab" aria-selected="false" data-i18n="metric.sources">Fuentes</button>
   </div>
   <div class="chart-wrap activity-chart-wrap">
-    <canvas id="activity-chart" aria-label="Actividad temporal semanal" role="img"></canvas>
+    <canvas id="activity-chart" aria-label="Actividad temporal semanal" role="img" data-i18n-attr="aria-label:aria.activity"></canvas>
     <div id="sources-legend" class="sources-legend" style="display:none; margin-top:12px;"></div>
   </div>
 </div>
 
 <div class="section-block">
-  <h2 class="section-title-sm">Costo por millón de tokens &mdash; precio efectivo por modelo</h2>
+  <h2 class="section-title-sm" data-i18n-html="1" data-i18n="tc.title">Costo por millón de tokens &mdash; precio efectivo por modelo</h2>
   <div class="metric-hero" id="token-cost-hero">
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Precio / 1M tokens</span>
+      <span class="metric-hero-label" data-i18n="tc.price_per_1m">Precio / 1M tokens</span>
       <span class="metric-hero-value accent" id="overall-price-per-1m">&mdash;</span>
     </div>
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Total Tokens</span>
+      <span class="metric-hero-label" data-i18n="tc.eff_tokens">Tokens efectivos</span>
       <span class="metric-hero-value" id="token-total-tokens">&mdash;</span>
     </div>
   </div>
   <div class="sort-controls" role="group" aria-label="Ordenar por">
-    <span class="sort-label">Ordenar por:</span>
-    <button type="button" class="sort-btn" data-sort="price" data-active="true" aria-pressed="true">Costo efectivo</button>
-    <button type="button" class="sort-btn" data-sort="tokens" aria-pressed="false">Total tokens</button>
+    <span class="sort-label"><span data-i18n="tc.sort_by">Ordenar por:</span></span>
+    <button type="button" class="sort-btn" data-sort="price" data-active="true" aria-pressed="true" data-i18n="tc.sort_cost">Costo efectivo</button>
+    <button type="button" class="sort-btn" data-sort="tokens" aria-pressed="false" data-i18n="tc.sort_tokens">Tokens efectivos</button>
   </div>
   <div class="token-cost-header">
-    <span>Modelo</span>
+    <span data-i18n="th.model">Modelo</span>
     <span></span>
-    <span>Costo / 1M</span>
-    <span>Total tokens</span>
+    <span data-i18n="th.cost_1m">Costo / 1M</span>
+    <span data-i18n="tc.eff_tokens">Tokens efectivos</span>
   </div>
   <div class="token-cards" id="token-cost-list"></div>
 </div>
 
 <div class="section-block">
-  <h2 class="section-title-sm">Proporción de cache &mdash; modelos con cache</h2>
+  <h2 class="section-title-sm" data-i18n-html="1" data-i18n="cache.title">Proporción de cache &mdash; modelos con cache</h2>
   <div class="metric-hero" id="cache-ratio-hero">
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Ratio en modelos con cache</span>
+      <span class="metric-hero-label" data-i18n="cache.ratio_models">Ratio en modelos con cache</span>
       <span class="metric-hero-value accent" id="overall-cache-ratio">&mdash;</span>
     </div>
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Tokens cacheados</span>
+      <span class="metric-hero-label" data-i18n="cache.cached">Tokens cacheados</span>
       <span class="metric-hero-value" id="overall-cached">&mdash;</span>
     </div>
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Tokens sin cache</span>
+      <span class="metric-hero-label" data-i18n="cache.uncached">Tokens sin cache</span>
       <span class="metric-hero-value" id="overall-uncached">&mdash;</span>
     </div>
     <div class="metric-hero-item">
-      <span class="metric-hero-label">Input medido</span>
+      <span class="metric-hero-label" data-i18n="cache.measured_input">Input medido</span>
       <span class="metric-hero-value" id="overall-total-input">&mdash;</span>
     </div>
   </div>

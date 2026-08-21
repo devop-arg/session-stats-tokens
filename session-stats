@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
 Shows token statistics for the current Kilo/OpenCode/Codex session.
-Usage: session-stats
+Usage: session-stats [OPTIONS]
+
+Options:
+  --capture-all   Capture and persist all new sessions to the history DB.
+  -h, --help      Show this help message and exit.
 
 Features:
 - Reads from Kilo (SQLite), OpenCode (SQLite/JSON), Codex (JSONL), Hermes (SQLite), and Cursor CLI (hook JSONL).
@@ -21,7 +25,7 @@ import fcntl
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from stats_common import MODEL_COSTS, MODEL_ALIASES, MODEL_COSTS_FILE, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, get_cursor_sessions, has_real_usage_cursor, get_cursor_session_stats, get_grok_sessions, has_real_usage_grok, get_grok_session_stats, save_session, init_db, _parse_timestamp, _detect_source, DB_PATH
+from stats_common import MODEL_COSTS, MODEL_ALIASES, MODEL_COSTS_FILE, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, get_cursor_sessions, has_real_usage_cursor, get_cursor_session_stats, get_grok_sessions, has_real_usage_grok, get_grok_session_stats, save_session, save_codex_session, init_db, _parse_timestamp, _detect_source, DB_PATH
 
 KILO_DB_PATH = Path.home() / ".local/share/kilo/kilo.db"
 OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
@@ -37,9 +41,18 @@ def get_opencode_sessions():
         try:
             conn = sqlite3.connect(str(OPENCODE_DB_PATH))
             cursor = conn.cursor()
-            cursor.execute("SELECT id, title, time_updated FROM session ORDER BY time_updated DESC")
-            sessions = [{"id": row[0], "title": row[1], "time_updated": row[2], "source": "sqlite"} 
-                        for row in cursor.fetchall()]
+            seen = set()
+            sessions = []
+            for table in ("session_v2", "session"):
+                try:
+                    cursor.execute(f"SELECT id, title, time_updated FROM {table} ORDER BY time_updated DESC")
+                    for row in cursor.fetchall():
+                        if row[0] in seen:
+                            continue
+                        seen.add(row[0])
+                        sessions.append({"id": row[0], "title": row[1], "time_updated": row[2], "source": "sqlite"})
+                except sqlite3.Error:
+                    continue
             conn.close()
             if sessions:
                 return sessions
@@ -105,29 +118,51 @@ def has_real_usage_sqlite(session_id, db_path=None):
         db_path = KILO_DB_PATH
     if not db_path.exists():
         return False
+
+    def _has_tokens(data_str):
+        try:
+            msg = json.loads(data_str)
+            tokens = msg.get("tokens", {}) or {}
+            cache = tokens.get("cache", {}) or {}
+            total = (
+                abs(tokens.get("input", 0))
+                + abs(tokens.get("output", 0))
+                + abs(tokens.get("reasoning", 0))
+                + abs(cache.get("read", 0))
+                + abs(cache.get("write", 0))
+            )
+            return total > 0
+        except (json.JSONDecodeError, KeyError):
+            return False
+
     try:
         conn = sqlite3.connect(str(db_path))
         cursor = conn.cursor()
-        cursor.execute("SELECT data FROM message WHERE session_id = ?", (session_id,))
-        for (data_str,) in cursor.fetchall():
-            try:
-                msg = json.loads(data_str)
-                if msg.get("role") != "assistant":
-                    continue
-                tokens = msg.get("tokens", {}) or {}
-                cache = tokens.get("cache", {}) or {}
-                total = (
-                    abs(tokens.get("input", 0))
-                    + abs(tokens.get("output", 0))
-                    + abs(tokens.get("reasoning", 0))
-                    + abs(cache.get("read", 0))
-                    + abs(cache.get("write", 0))
-                )
-                if total > 0:
+        seen_data = set()
+        seen_ids = set()
+        try:
+            cursor.execute("SELECT id, data FROM session_message WHERE session_id = ? AND type = 'assistant'", (session_id,))
+            for (mid, data_str) in cursor.fetchall():
+                seen_ids.add(mid)
+                seen_data.add(data_str)
+                if _has_tokens(data_str):
                     conn.close()
                     return True
-            except (json.JSONDecodeError, KeyError):
-                continue
+        except sqlite3.Error:
+            pass
+        try:
+            cursor.execute("SELECT id, data FROM message WHERE session_id = ?", (session_id,))
+            for (mid, data_str) in cursor.fetchall():
+                if mid in seen_ids:
+                    continue
+                seen_ids.add(mid)
+                if data_str in seen_data:
+                    continue
+                if _has_tokens(data_str):
+                    conn.close()
+                    return True
+        except sqlite3.Error:
+            pass
         conn.close()
         return False
     except Exception:
@@ -252,52 +287,78 @@ def get_session_stats_sqlite(session_id, db_path=None):
         cursor = conn.cursor()
         
         # Get session metadata
-        cursor.execute("SELECT title, time_updated FROM session WHERE id = ?", (session_id,))
-        row = cursor.fetchone()
+        row = None
+        for table in ("session_v2", "session"):
+            try:
+                cursor.execute(f"SELECT title, time_updated FROM {table} WHERE id = ?", (session_id,))
+                row = cursor.fetchone()
+            except sqlite3.Error:
+                continue
+            if row:
+                break
         if row:
             stats["session_title"] = row[0] or ""
             stats["time_updated"] = row[1] or 0
         
         # Get messages
-        cursor.execute("SELECT data FROM message WHERE session_id = ? ORDER BY time_created", (session_id,))
-        for (data_str,) in cursor.fetchall():
+        seen_data = set()
+        seen_ids = set()
+        for table in ("session_message", "message"):
+            if table == "session_message":
+                query = "SELECT id, data FROM session_message WHERE session_id = ? AND type = 'assistant' ORDER BY time_created"
+            else:
+                query = "SELECT id, data FROM message WHERE session_id = ? ORDER BY time_created"
             try:
-                msg = json.loads(data_str)
-            except json.JSONDecodeError:
+                cursor.execute(query, (session_id,))
+            except sqlite3.Error:
                 continue
-            
-            stats["total_messages"] += 1
-            
-            if msg.get("role") != "assistant":
-                continue
-            
-            tokens = msg.get("tokens", {})
-            if not tokens:
-                continue
-            
-            model = msg.get("modelID", "unknown")
-            
-            if model not in stats["by_model"]:
-                stats["by_model"][model] = {
-                    "requests": 0,
-                    "input": 0,
-                    "output": 0,
-                    "reasoning": 0,
-                    "cache": 0,
-                    "cache_read": 0,
-                    "cache_write": 0,
-                }
+            for (mid, data_str) in cursor.fetchall():
+                if mid in seen_ids:
+                    continue
+                seen_ids.add(mid)
+                if data_str in seen_data:
+                    continue
+                seen_data.add(data_str)
+                try:
+                    msg = json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+                
+                stats["total_messages"] += 1
+                
+                if msg.get("role") not in (None, "assistant"):
+                    continue
+                
+                tokens = msg.get("tokens", {})
+                if not tokens:
+                    continue
+                
+                model = (msg.get("modelID")
+                         or (msg.get("model") or {}).get("modelID")
+                         or (msg.get("model") or {}).get("id")
+                         or "unknown")
 
-            stats["by_model"][model]["requests"] += 1
-            cache_obj = tokens.get("cache") or {}
-            cache_read = cache_obj.get("read", 0)
-            cache_write = cache_obj.get("write", 0)
-            stats["by_model"][model]["input"] += abs(tokens.get("input", 0) or 0)
-            stats["by_model"][model]["cache"] += abs(cache_read or 0) + abs(cache_write or 0)
-            stats["by_model"][model]["cache_read"] += abs(cache_read or 0)
-            stats["by_model"][model]["cache_write"] += abs(cache_write or 0)
-            stats["by_model"][model]["output"] += abs(tokens.get("output", 0) or 0)
-            stats["by_model"][model]["reasoning"] += abs(tokens.get("reasoning", 0) or 0)
+                if model not in stats["by_model"]:
+                    stats["by_model"][model] = {
+                        "requests": 0,
+                        "input": 0,
+                        "output": 0,
+                        "reasoning": 0,
+                        "cache": 0,
+                        "cache_read": 0,
+                        "cache_write": 0,
+                    }
+
+                stats["by_model"][model]["requests"] += 1
+                cache_obj = tokens.get("cache") or {}
+                cache_read = cache_obj.get("read", 0)
+                cache_write = cache_obj.get("write", 0)
+                stats["by_model"][model]["input"] += abs(tokens.get("input", 0) or 0)
+                stats["by_model"][model]["cache"] += abs(cache_read or 0) + abs(cache_write or 0)
+                stats["by_model"][model]["cache_read"] += abs(cache_read or 0)
+                stats["by_model"][model]["cache_write"] += abs(cache_write or 0)
+                stats["by_model"][model]["output"] += abs(tokens.get("output", 0) or 0)
+                stats["by_model"][model]["reasoning"] += abs(tokens.get("reasoning", 0) or 0)
         
         conn.close()
     except Exception:
@@ -436,6 +497,33 @@ def capture_all_sessions():
         except Exception:
             pass
 
+    def _save_upsert(sid, entry, source=None):
+        """Guarda siempre (upsert MAX). Usado para la sesión activa de OpenCode
+        (v2): sus mensajes crecen en vivo y con skip-if-exists quedaría
+        congelada en el primer capture."""
+        if not entry:
+            return
+        by_model = entry.get("by_model", {})
+        if not by_model:
+            return
+        try:
+            ts = _parse_timestamp(entry.get("date", ""))
+            cache_tokens = sum(m.get("cache", 0) for m in by_model.values())
+            reasoning_tokens = sum(m.get("reasoning", 0) for m in by_model.values())
+            save_session(
+                sid, source or _detect_source(sid),
+                entry.get("date", ""), ts,
+                entry.get("requests", 0),
+                entry.get("input", 0),
+                entry.get("output", 0),
+                cache_tokens, reasoning_tokens,
+                entry.get("cost", 0.0),
+                by_model, DB_PATH
+            )
+            existing_keys.add(sid)
+        except Exception:
+            pass
+
     # --- Kilo ---
     for sess in get_kilo_sessions():
         sid = sess["id"]
@@ -443,12 +531,14 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid)
         if stats["by_model"]:
-            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000)
+            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000, source="kilo")
             _save_if_new(sid, entry, source="kilo")
             _prune_residual_models(sid, entry["by_model"])
 
     # --- OpenCode SQLite ---
-    for sess in get_opencode_sessions():
+    opencode_sessions = get_opencode_sessions()
+    active_opencode_sid = opencode_sessions[0]["id"] if opencode_sessions else None
+    for sess in opencode_sessions:
         if sess["source"] != "sqlite":
             continue
         sid = sess["id"]
@@ -456,8 +546,11 @@ def capture_all_sessions():
             continue
         stats = get_session_stats_sqlite(sid, OPENCODE_DB_PATH)
         if stats["by_model"]:
-            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000)
-            _save_if_new(sid, entry)
+            entry = _build_session_entry(stats["by_model"], sess["time_updated"] / 1000, source="opencode")
+            if sid == active_opencode_sid:
+                _save_upsert(sid, entry)
+            else:
+                _save_if_new(sid, entry)
             _prune_residual_models(sid, entry["by_model"])
 
     # --- Codex ---
@@ -465,27 +558,40 @@ def capture_all_sessions():
         if not has_real_usage_codex(sess_file):
             continue
         stats = get_codex_session_stats(sess_file)
+        if not stats.get("complete"):
+            continue
         sid = "codex_" + (stats.get("session_id") or sess_file.stem)
-        # Las sesiones de Codex se escriben incrementalmente mientras siguen
-        # activas. save_session usa MAX() por campo, por lo que este upsert
-        # sólo incorpora el uso nuevo y nunca reduce datos ya persistidos.
-        normalized = normalize_model_name(stats["model"])
-        cost = calculate_cost(stats["model"], stats["input"], stats["output"], stats["cache"])
-        _save_if_new(sid, {
-            "date": stats.get("date", ""),
-            "requests": stats["requests"],
-            "input": stats["input"],
-            "output": stats["output"],
-            "cost": cost,
-            "by_model": {normalized: {
-                "requests": stats["requests"], "input": stats["input"],
-                "output": stats["output"], "cache": stats["cache"],
-                "cache_read": stats.get("cache_read", stats["cache"]),
-                "cache_write": stats.get("cache_write", 0),
-                "reasoning": stats.get("reasoning", 0),
-                "cost": cost
-            }}
-        })
+        merged = merge_model_stats(stats.get("by_model", {}))
+        if not merged:
+            continue
+
+        by_model_with_cost = {}
+        session_cost = 0.0
+        for model, mdata in merged.items():
+            model_cost = calculate_cost(
+                model, mdata["input"], mdata["output"], mdata.get("cache", 0), source="codex"
+            )
+            session_cost += model_cost
+            by_model_with_cost[model] = {**mdata, "cost": model_cost}
+
+        was_new = sid not in existing_keys
+        try:
+            save_codex_session(
+                sid, "codex", stats.get("date", ""),
+                _parse_timestamp(stats.get("date", "")),
+                stats.get("requests", 0),
+                sum(m["input"] for m in merged.values()),
+                sum(m["output"] for m in merged.values()),
+                sum(m.get("cache", 0) for m in merged.values()),
+                sum(m.get("reasoning", 0) for m in merged.values()),
+                session_cost, by_model_with_cost, DB_PATH,
+                request_model=normalize_model_name(stats.get("model", "")),
+            )
+            if was_new:
+                new_count += 1
+            existing_keys.add(sid)
+        except Exception:
+            pass
 
     # --- Hermes (siempre upsert: sesiones activas crecen) ---
     for sess in get_hermes_sessions():
@@ -498,7 +604,7 @@ def capture_all_sessions():
             by_model_with_cost = {}
             session_cost = 0
             for model, mdata in by_model.items():
-                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0), source="hermes")
                 session_cost += c
                 by_model_with_cost[model] = {**mdata, "cost": c}
             cache_tokens = sum(m.get("cache", 0) for m in by_model_with_cost.values())
@@ -529,7 +635,7 @@ def capture_all_sessions():
             by_model_with_cost = {}
             session_cost = 0
             for model, mdata in by_model.items():
-                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0), source="cursor")
                 session_cost += c
                 by_model_with_cost[model] = {**mdata, "cost": c}
             cache_tokens = sum(m.get("cache", 0) for m in by_model_with_cost.values())
@@ -560,7 +666,7 @@ def capture_all_sessions():
             by_model_with_cost = {}
             session_cost = 0
             for model, mdata in by_model.items():
-                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
+                c = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0), source="grok")
                 session_cost += c
                 by_model_with_cost[model] = {**mdata, "cost": c}
             cache_tokens = sum(m.get("cache", 0) for m in by_model_with_cost.values())
@@ -648,7 +754,7 @@ def _seed_orphan_costs():
         print(f"[seed] error al sembrar model_costs.json: {e}", file=sys.stderr)
 
 
-def _build_session_entry(by_model, timestamp):
+def _build_session_entry(by_model, timestamp, source=None):
     """Convierte estadisticas por modelo en una entrada de historial con costos."""
     merged = merge_model_stats(by_model)
     if not merged:
@@ -656,7 +762,7 @@ def _build_session_entry(by_model, timestamp):
     session_cost = 0
     by_model_with_cost = {}
     for model, mdata in merged.items():
-        c = calculate_cost(model, mdata["input"], mdata["output"], mdata["cache"])
+        c = calculate_cost(model, mdata["input"], mdata["output"], mdata["cache"], source=source)
         session_cost += c
         by_model_with_cost[model] = {**mdata, "cost": c}
     try:
@@ -675,6 +781,10 @@ def _build_session_entry(by_model, timestamp):
 
 def main():
     init_db()
+
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        print(__doc__)
+        return
 
     if len(sys.argv) > 1 and sys.argv[1] == "--capture-all":
         new = capture_all_sessions()
@@ -700,23 +810,15 @@ def main():
         session_date = datetime.datetime.fromtimestamp(time_updated / 1000).isoformat()
     elif source == "codex":
         codex_stats = get_codex_session_stats(session_ref)
+        if not codex_stats.get("complete"):
+            print("⚠️ Sesion Codex incompleta; no se actualiza el historial")
+            return
         session_id = codex_stats.get("session_id", session_ref.name)
         session_date = codex_stats.get("date", "")
-        # Convertir a formato de stats compatible
-        model = codex_stats["model"]
+        # Usar el desglose completo reconstruido por deltas.
         stats = {
             "total_messages": codex_stats["requests"],
-            "by_model": {
-                model: {
-                    "requests": codex_stats["requests"],
-                    "input": codex_stats["input"],
-                    "output": codex_stats["output"],
-                    "reasoning": codex_stats["reasoning"],
-                    "cache": codex_stats.get("cache", codex_stats.get("cache_read", 0)),
-                    "cache_read": codex_stats.get("cache_read", codex_stats.get("cache", 0)),
-                    "cache_write": codex_stats.get("cache_write", 0),
-                }
-            }
+            "by_model": codex_stats.get("by_model", {}),
         }
     elif source == "hermes":
         hermes_stats = get_hermes_session_stats(session_ref)
@@ -750,8 +852,15 @@ def main():
         session_date = datetime.datetime.fromtimestamp(session_ref.stat().st_mtime).isoformat()
     
     merged_by_model = merge_model_stats(stats["by_model"])
+
+    if source == "codex" and not merged_by_model:
+        print("⚠️ Sesion Codex sin uso de tokens; no se actualiza el historial")
+        return
     
-    total_requests = sum(m["requests"] for m in merged_by_model.values())
+    if source == "codex":
+        total_requests = codex_stats["requests"]
+    else:
+        total_requests = sum(m["requests"] for m in merged_by_model.values())
     total_input = sum(m["input"] for m in merged_by_model.values())
     total_output = sum(m["output"] for m in merged_by_model.values())
     total_cache = sum(m["cache"] for m in merged_by_model.values())
@@ -759,10 +868,15 @@ def main():
     total_session_cost = 0
     by_model_with_cost = {}
     for model, data in merged_by_model.items():
-        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"])
+        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"], source=source)
         total_session_cost += model_cost
         by_model_with_cost[model] = {
-            "requests": data["requests"],
+            "requests": (
+                total_requests
+                if source == "codex"
+                and model == normalize_model_name(codex_stats.get("model", ""))
+                else data["requests"]
+            ),
             "input": data["input"],
             "output": data["output"],
             "cache": data["cache"],
@@ -771,11 +885,22 @@ def main():
             "cost": model_cost
         }
     
-    # Guardar sesión actual en historial (para tracking)
-    update_history(
-        session_id, total_requests, total_input, total_output, 
-        total_session_cost, by_model_with_cost, date=session_date, source=source
-    )
+    # Guardar sesión actual en historial. Codex usa un reemplazo autoritativo
+    # porque sus contadores se reconstruyen completos; las demás fuentes
+    # conservan el upsert MAX() histórico.
+    if source == "codex":
+        save_codex_session(
+            session_id, source, session_date, _parse_timestamp(session_date),
+            total_requests, total_input, total_output, total_cache,
+            sum(m.get("reasoning", 0) for m in by_model_with_cost.values()),
+            total_session_cost, by_model_with_cost, DB_PATH,
+            request_model=normalize_model_name(codex_stats.get("model", "")),
+        )
+    else:
+        update_history(
+            session_id, total_requests, total_input, total_output,
+            total_session_cost, by_model_with_cost, date=session_date, source=source
+        )
     
     # Recalcular TODO desde tokens (misma lógica que session-stats-history)
     hist = recalculate_historical_cost()
@@ -798,7 +923,7 @@ def main():
         short_model = short_model.replace("x-ai", "grok-4.1-fast")
         short_model = short_model.replace("deepseek-v4-flash", "ds-v4-flash")
         short_model = short_model.replace("deepseek-v4-pro", "ds-v4-pro")
-        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"])
+        model_cost = calculate_cost(model, data["input"], data["output"], data["cache"], source=source)
         total_input = data["input"] + data["cache"]
         cache_info = f" (cache:{format_number(data['cache'])})" if data.get("cache", 0) > 0 else ""
         print(f"   └─ {short_model}: {data['requests']} req, in:{format_number(total_input)}{cache_info}, out:{format_number(data['output'])}, cost:{format_cost(model_cost)}")

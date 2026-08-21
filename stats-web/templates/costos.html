@@ -1,48 +1,48 @@
 {% extends "base.html" %}
 {% block content %}
 <section class="page-head">
-  <h1 class="section-title"><strong>Costos con suscripciones.</strong> Estimación de costo real /1M tokens vs costo si aplicara una suscripción paga.</h1>
+  <h1 class="section-title"><strong data-i18n="cos.title_strong">Costos con suscripciones.</strong><span data-i18n="cos.title_rest"> Estimación de costo real /1M tokens vs costo si aplicara una suscripción paga.</span></h1>
   <p style="color:#808080;font-size:12px;margin:12px 0 0 0;font-family:var(--mono);line-height:1.6;">
-    <strong>OpenCode Go:</strong> $10/mes → $60 crédito (6×). Cubre deepseek, glm, mimo, minimax, nex-agi, nemotron.<br>
-    <strong>Codex:</strong> $20/mes → precios reducidos en modelos GPT. Seleccioná el modelo de referencia abajo.
+    <span data-i18n-html="1" data-i18n="cos.ocg_explain"><strong>OpenCode Go:</strong> $10/mes → $60 crédito (6×). Cubre deepseek, glm, mimo, minimax, nex-agi, nemotron.</span><br>
+    <span data-i18n-html="1" data-i18n="cos.codex_explain"><strong>Codex:</strong> $20/mes → precios reducidos en modelos GPT. Seleccioná el modelo de referencia abajo.</span>
   </p>
 </section>
 
 <section class="section-block" id="subscription-section" style="padding-top:24px;border-bottom:none;">
   <div class="calc-grid" id="calc-grid">
     <div class="calc-card calc-card-wide" id="codex-calc-card">
-      <h3 class="calc-title">Calculadora Codex</h3>
+      <h3 class="calc-title" data-i18n="cos.calc_codex">Calculadora Codex</h3>
 
       <div class="calc-cols">
         <div class="calc-col">
-          <div class="calc-subtitle">Parámetros del plan</div>
-          <label class="calc-label">Costo suscripción ($/mes)
+          <div class="calc-subtitle" data-i18n="cos.plan_params">Parámetros del plan</div>
+          <label class="calc-label"><span data-i18n="cos.sub_cost">Costo suscripción ($/mes)</span>
             <input type="number" class="calc-input" id="calc-codex-cost" value="20" min="0" step="1">
           </label>
-          <label class="calc-label">Modelo de referencia
+          <label class="calc-label"><span data-i18n="cos.ref_model">Modelo de referencia</span>
             <select class="calc-input calc-select" id="calc-ref-model">
-              <option value="">— Cargando —</option>
+              <option value="" data-i18n="cos.loading_opt">— Cargando —</option>
             </select>
           </label>
-          <label class="calc-label">Costo efectivo ($/1M)
+          <label class="calc-label"><span data-i18n="cos.eff_cost">Costo efectivo ($/1M)</span>
             <input type="number" class="calc-input calc-save" id="calc-ref-cost" value="0.0183" min="0" step="0.0001">
-            <button type="button" class="save-btn" id="save-cost-btn" style="margin-left:6px;padding:2px 8px;font-size:11px;border:1px solid var(--stats-line);border-radius:4px;background:var(--stats-bg);color:var(--stats-text);cursor:pointer;vertical-align:middle;">Guardar</button>
-            <span id="save-badge" class="badge-saved" style="display:none;font-size:9px;margin-left:6px;color:var(--stats-accent-text);vertical-align:middle;">✓ guardado en servidor</span>
+            <button type="button" class="save-btn" id="save-cost-btn" style="margin-left:6px;padding:2px 8px;font-size:11px;border:1px solid var(--stats-line);border-radius:4px;background:var(--stats-bg);color:var(--stats-text);cursor:pointer;vertical-align:middle;" data-i18n="cos.save">Guardar</button>
+            <span id="save-badge" class="badge-saved" style="display:none;font-size:9px;margin-left:6px;color:var(--stats-accent-text);vertical-align:middle;" data-i18n="cos.saved_server">✓ guardado en servidor</span>
           </label>
         </div>
 
         <div class="calc-col">
-          <div class="calc-subtitle">Uso semanal estimado</div>
-          <label class="calc-label">% del cupo semanal usado
+          <div class="calc-subtitle" data-i18n="cos.weekly_usage">Uso semanal estimado</div>
+          <label class="calc-label"><span data-i18n="cos.pct_quota">% del cupo semanal usado</span>
             <input type="number" class="calc-input" id="calc-codex-pct" value="50" min="0" max="100" step="1">
           </label>
-          <label class="calc-label">Input tokens usados (M)
+          <label class="calc-label"><span data-i18n="cos.in_used">Input tokens usados (M)</span>
             <input type="number" class="calc-input" id="calc-codex-in" value="0" min="0" step="1">
           </label>
-          <label class="calc-label">Output tokens usados (M)
+          <label class="calc-label"><span data-i18n="cos.out_used">Output tokens usados (M)</span>
             <input type="number" class="calc-input" id="calc-codex-out" value="0" min="0" step="1">
           </label>
-          <label class="calc-label">Cache tokens usados (M)
+          <label class="calc-label"><span data-i18n="cos.cache_used">Cache tokens usados (M)</span>
             <input type="number" class="calc-input" id="calc-codex-cache" value="0" min="0" step="1">
           </label>
         </div>
@@ -50,58 +50,79 @@
 
       <div class="calc-results" id="codex-results">
         <div class="calc-result-row">
-          <span class="calc-result-label">Modelo de referencia</span>
+          <span class="calc-result-label" data-i18n="cos.res_ref_model">Modelo de referencia</span>
           <span class="calc-result-value" id="res-ref-model-name" style="color:var(--stats-accent-text);">—</span>
         </div>
         <div class="calc-result-row">
-          <span class="calc-result-label">Costo/1M con sub</span>
+          <span class="calc-result-label" data-i18n="cos.res_ref_entered">Costo efectivo ingresado</span>
           <span class="calc-result-value" id="res-ref-ppm">—</span>
         </div>
         <div class="calc-result-row">
-          <span class="calc-result-label">Costo/1M API directa</span>
+          <span class="calc-result-label" data-i18n="cos.res_api_cost">Costo por API</span>
           <span class="calc-result-value" id="res-ref-api-ppm">—</span>
         </div>
         <div class="calc-result-row" style="border-top:1px solid var(--stats-line);padding-top:6px;margin-top:2px;">
-          <span class="calc-result-label">Costo API directo (sin sub) semanal</span>
+          <span class="calc-result-label" data-i18n="cos.res_api_week">Costo API directo (sin sub) semanal</span>
           <span class="calc-result-value" id="res-codex-api-week">$—</span>
         </div>
         <div class="calc-result-row">
-          <span class="calc-result-label">Ahorro vs API directa</span>
+          <span class="calc-result-label" data-i18n="cos.res_savings">Ahorro vs API directa</span>
           <span class="calc-result-value" id="res-codex-savings-week">—</span>
         </div>
         <div class="calc-result-row">
-          <span class="calc-result-label">Tokens/semana estimados (100%)</span>
+          <span class="calc-result-label" data-i18n="cos.res_week_tokens">Tokens/semana estimados (100%)</span>
           <span class="calc-result-value" id="res-codex-week-tokens">—</span>
         </div>
-        <div class="calc-result-row">
-          <span class="calc-result-label">Costo efectivo /1M (uso actual)</span>
-          <span class="calc-result-value" id="res-codex-eff-actual">—</span>
-        </div>
         <div class="calc-result-row calc-result-highlight">
-          <span class="calc-result-label">Costo efectivo /1M (100% uso)</span>
+          <span class="calc-result-label" data-i18n="cos.res_eff_sub">Costo efectivo por suscripción</span>
           <span class="calc-result-value" id="res-codex-eff-full">—</span>
         </div>
       </div>
     </div>
 
     <div class="calc-card">
-      <h3 class="calc-title">Calculadora OpenCode Go</h3>
-      <label class="calc-label">Costo suscripción ($/mes)
+      <h3 class="calc-title" data-i18n="cos.calc_ocg">Calculadora OpenCode Go</h3>
+      <label class="calc-label"><span data-i18n="cos.sub_cost">Costo suscripción ($/mes)</span>
         <input type="number" class="calc-input" id="calc-ocg-cost" value="10" min="0" step="1">
       </label>
-      <label class="calc-label">Crédito ($)
+      <label class="calc-label"><span data-i18n="cos.credit">Crédito ($)</span>
         <input type="number" class="calc-input" id="calc-ocg-credit" value="60" min="0" step="5">
       </label>
     </div>
   </div>
 
+  <section class="mobile-cost-comparison" id="mobile-cost-comparison" aria-live="polite" aria-label="Comparación de costos por modelo">
+    <div class="mobile-cost-comparison-head">
+      <div>
+        <span class="mobile-cost-eyebrow" data-i18n="cos.mobile_eyebrow">Comparación por costo efectivo</span>
+        <h2 class="mobile-cost-title" data-i18n="cos.mobile_title">Modelo elegido y costos cercanos</h2>
+      </div>
+      <span class="mobile-cost-count" id="mobile-cost-count">—</span>
+      <button type="button" class="mobile-cost-restore" id="mobile-cost-restore" style="display:none;" data-i18n="cos.restore">↻ Restaurar</button>
+    </div>
+
+    <div class="mobile-cost-selected" id="mobile-cost-selected">
+      <div class="mobile-cost-loading" data-i18n="cos.calculating">Calculando comparación…</div>
+    </div>
+
+    <div class="mobile-cost-neighbor-group">
+      <h3 class="mobile-cost-neighbor-title" data-i18n="cos.cheaper5">5 más baratos</h3>
+      <div class="mobile-cost-neighbor-list" id="mobile-cost-cheaper"></div>
+    </div>
+    <div class="mobile-cost-divider" id="mobile-cost-divider"></div>
+    <div class="mobile-cost-neighbor-group">
+      <h3 class="mobile-cost-neighbor-title" data-i18n="cos.pricier5">5 más caros</h3>
+      <div class="mobile-cost-neighbor-list" id="mobile-cost-pricier"></div>
+    </div>
+  </section>
+
   <div class="sort-controls" role="group" aria-label="Ordenar tabla suscripciones" style="margin-bottom:12px;">
-    <span class="sort-label">Ordenar:</span>
-    <button type="button" class="sort-btn" data-sub-sort="cost_sub" data-active="true" aria-pressed="true">Costo con sub</button>
-    <button type="button" class="sort-btn" data-sub-sort="savings">Ahorro</button>
-    <button type="button" class="sort-btn" data-sub-sort="tokens">Tokens</button>
-    <button type="button" class="sort-btn" data-sub-sort="cost_api">Costo API</button>
-    <button type="button" class="sort-btn" data-sub-sort="name">Modelo</button>
+    <span class="sort-label" data-i18n="cos.sort_label">Ordenar:</span>
+    <button type="button" class="sort-btn" data-sub-sort="cost_sub" data-active="true" aria-pressed="true" data-i18n="cos.sort_cost_sub">Costo con sub</button>
+    <button type="button" class="sort-btn" data-sub-sort="savings" data-i18n="cos.savings">Ahorro</button>
+    <button type="button" class="sort-btn" data-sub-sort="tokens" data-i18n="cos.tokens">Tokens</button>
+    <button type="button" class="sort-btn" data-sub-sort="cost_api" data-i18n="cos.cost_api">Costo API</button>
+    <button type="button" class="sort-btn" data-sub-sort="name" data-i18n="mod.sort_name">Modelo</button>
     <button type="button" class="sort-btn" data-sub-sort-dir="asc" id="sub-sort-dir" data-active="true" aria-pressed="true">↑</button>
   </div>
 
@@ -110,17 +131,17 @@
       <thead>
         <tr>
           <th>#</th>
-          <th>Modelo</th>
-          <th class="num">Tokens totales</th>
-          <th class="num">Costo/1M (API real)</th>
-          <th>Plan</th>
-          <th class="num">Costo/1M (con sub)</th>
-          <th class="num">Ahorro</th>
+          <th data-i18n="th.model">Modelo</th>
+          <th class="num" data-i18n="cos.th_total_tokens">Tokens totales</th>
+          <th class="num" data-i18n="cos.th_api_1m">Costo/1M (API real)</th>
+          <th data-i18n="cos.plan">Plan</th>
+          <th class="num" data-i18n="cos.th_sub_1m">Costo/1M (con sub)</th>
+          <th class="num" data-i18n="cos.savings">Ahorro</th>
           <th>vs <span id="ref-col-header">gpt-5.4</span> sub</th>
         </tr>
       </thead>
       <tbody id="subscription-tbody">
-        <tr><td colspan="8" class="loading-row">Cargando...</td></tr>
+        <tr><td colspan="8" class="loading-row" data-i18n="common.loading">Cargando...</td></tr>
       </tbody>
     </table>
   </div>

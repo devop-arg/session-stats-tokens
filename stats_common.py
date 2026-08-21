@@ -371,7 +371,7 @@ def get_kilocode_history():
             cache_tokens = (task.get("cacheReads", 0) or 0) + (
                 task.get("cacheWrites", 0) or 0
             )
-            cost = calculate_cost(normalized_model, tokens_in, tokens_out, cache_tokens)
+            cost = calculate_cost(normalized_model, tokens_in, tokens_out, cache_tokens, source="codex")
 
         ts = task.get("ts", 0)
         try:
@@ -433,10 +433,97 @@ def has_real_usage_codex(session_file):
     return False
 
 
+# Cache de secuencias de token_count de padres (por corrida de captura):
+# los N forks de un mismo padre comparten la lectura de su JSONL.
+_CODEX_PARENT_SEQ_CACHE = {}
+
+
+def _codex_tc_sequence(path):
+    """Extrae la secuencia de (input, output, cache) de los token_count de un JSONL."""
+    seq = []
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    break
+                if d.get("type") == "event_msg":
+                    p = d.get("payload", {}) or {}
+                    if p.get("type") == "token_count":
+                        info = p.get("info", {}) or {}
+                        usage = info.get("total_token_usage") or {}
+                        if usage:
+                            seq.append((
+                                int(usage.get("input_tokens", 0) or 0),
+                                int(usage.get("output_tokens", 0) or 0),
+                                int(usage.get("cached_input_tokens", 0) or 0),
+                            ))
+    except OSError:
+        pass
+    return seq
+
+
+def _codex_parent_sequence(parent_id):
+    """Secuencia de token_count del JSONL padre, con cache por corrida."""
+    if not parent_id:
+        return []
+    cached = _CODEX_PARENT_SEQ_CACHE.get(parent_id)
+    if cached is not None:
+        return cached
+    import glob
+    files = glob.glob(str(CODEX_SESSIONS_DIR / "**" / f"*{parent_id}.jsonl"), recursive=True)
+    seq = _codex_tc_sequence(files[0]) if files else []
+    _CODEX_PARENT_SEQ_CACHE[parent_id] = seq
+    return seq
+
+
+def _codex_copied_base(fork_file, parent_id):
+    """Detecta resume con historial copiado y devuelve (copied_events, base).
+
+    ``codex exec resume`` crea un rollout NUEVO que reproduce el historial
+    del padre: los primeros token_count del fork son IDENTICOS a los del
+    padre (copia literal). Alineando ambas secuencias se encuentra el punto
+    exacto de divergencia; todo lo anterior ya fue contado por la sesion
+    padre y debe excluirse.
+
+    Retorna (copied_events, base_usage) donde base_usage es el ultimo
+    token_count copiado, o (0, None) si no hay copia (spawn limpio con
+    forked_from_id, o padre ausente/borrado) — en ese caso el parser se
+    comporta exactamente como antes.
+    """
+    parent_seq = _codex_parent_sequence(parent_id)
+    if not parent_seq:
+        return 0, None
+    fork_seq = _codex_tc_sequence(fork_file)
+    n = 0
+    for a, b in zip(parent_seq, fork_seq):
+        if a == b:
+            n += 1
+        else:
+            break
+    if n == 0:
+        return 0, None
+    last_in, last_out, last_cache = fork_seq[n - 1]
+    base = {
+        "input": last_in,
+        "output": last_out,
+        "cache": last_cache,
+        "reasoning": 0,
+    }
+    return n, base
+
+
 def get_codex_session_stats(session_file):
     """Extrae estadisticas de tokens de una sesion Codex (archivo JSONL).
 
-    Retorna dict con: model, input, output, cache, reasoning, requests, session_id, date
+    Reconstruye el uso por modelo a partir de los deltas de los contadores
+    acumulados de Codex. ``requests`` conserva la semantica historica del
+    collector como contador global; este parser no modifica ni redistribuye
+    los requests persistidos por modelo.
+
+    Retorna dict con: model, input, output, cache, reasoning, requests,
+    session_id, date, by_model y complete.
     """
     result = {
         "model": "gpt-5.4",
@@ -447,49 +534,164 @@ def get_codex_session_stats(session_file):
         "requests": 0,
         "session_id": "",
         "date": "",
+        "by_model": {},
+        "complete": True,
+        "forked_from_id": "",
+        "copied_events": 0,
     }
 
-    last_token_count = None
+    active_model = None
+    previous_usage = None
+    max_usage = None  # max counter across all parallel task windows
     request_count = 0
+    pending_requests = 0
+    first_session_meta = True
+    by_model = {}
+    copied_events = 0
+    base_usage = None
+    tc_index = 0
+
+    def model_bucket(model):
+        return by_model.setdefault(model, {
+            "requests": 0,
+            "input": 0,
+            "output": 0,
+            "cache": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0,
+        })
 
     try:
         with open(session_file) as f:
             for line in f:
-                data = json.loads(line)
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    # No reemplazar una captura valida con un JSONL parcial.
+                    result["complete"] = False
+                    break
                 typ = data.get("type", "")
 
                 if typ == "session_meta":
-                    result["session_id"] = data.get("payload", {}).get("id", "")
-                    ts_str = data.get("payload", {}).get("timestamp", "")
-                    if ts_str:
-                        result["date"] = ts_str
+                    if first_session_meta:
+                        payload = data.get("payload", {})
+                        result["session_id"] = payload.get("id", "")
+                        result["date"] = payload.get("timestamp", "")
+                        result["forked_from_id"] = payload.get("forked_from_id", "") or ""
+                        first_session_meta = False
+                        # Resume con historial copiado: calcular el punto de
+                        # divergencia con el padre ANTES de acumular deltas.
+                        if result["forked_from_id"]:
+                            copied_events, base_usage = _codex_copied_base(
+                                session_file, result["forked_from_id"]
+                            )
+                            result["copied_events"] = copied_events
 
                 elif typ == "turn_context":
                     model = data.get("payload", {}).get("model", "")
                     if model:
+                        active_model = model
+                        if pending_requests:
+                            pending_requests = 0
                         result["model"] = model
 
                 elif typ == "event_msg":
                     p = data.get("payload", {})
                     if p.get("type") == "token_count":
                         info = p.get("info", {})
-                        if info and "total_token_usage" in info:
-                            last_token_count = info["total_token_usage"]
+                        usage = info.get("total_token_usage") if info else None
+                        if not usage:
+                            continue
+                        if active_model is None:
+                            result["complete"] = False
+                            break
+
+                        # Resume con historial copiado: los primeros
+                        # copied_events token_count son la copia del padre
+                        # (ya contados en su fila) -> ignorarlos. El primer
+                        # evento nuevo arranca con la base del ultimo copiado.
+                        if copied_events:
+                            if tc_index < copied_events:
+                                tc_index += 1
+                                continue
+                            if tc_index == copied_events:
+                                previous_usage = dict(base_usage)
+                                max_usage = dict(base_usage)
+                            tc_index += 1
+
+                        current_usage = {
+                            "input": int(usage.get("input_tokens", 0) or 0),
+                            "output": int(usage.get("output_tokens", 0) or 0),
+                            "cache": int(usage.get("cached_input_tokens", 0) or 0),
+                            "reasoning": int(usage.get("reasoning_output_tokens", 0) or 0),
+                        }
+                        if previous_usage is None:
+                            max_usage = current_usage.copy()
+                            delta = current_usage.copy()
+                        else:
+                            # Codex puede ejecutar tareas paralelas con contadores
+                            # independientes, o compactar su contexto (counter reset).
+                            # En ambos casos el total real es el maximo observado
+                            # de cada campo, no la suma de deltas entre ventanas.
+                            delta = {}
+                            for field in current_usage:
+                                if current_usage[field] > previous_usage[field]:
+                                    delta[field] = current_usage[field] - previous_usage[field]
+                                    max_usage[field] = current_usage[field]
+                                else:
+                                    delta[field] = 0
+                                    if current_usage[field] > max_usage[field]:
+                                        max_usage[field] = current_usage[field]
+
+                        bucket = model_bucket(active_model)
+                        bucket["input"] += delta["input"]
+                        bucket["output"] += delta["output"]
+                        bucket["cache"] += delta["cache"]
+                        bucket["cache_read"] += delta["cache"]
+                        bucket["reasoning"] += delta["reasoning"]
+                        # Solo avanzar previous_usage si hubo consumo real
+                        # (delta positivo). En tareas paralelas el contador
+                        # baja y no debe reiniciar la linea base.
+                        prev = {}
+                        for field in current_usage:
+                            prev_val = previous_usage.get(field, 0) if previous_usage else 0
+                            prev[field] = max(current_usage[field], prev_val)
+                        previous_usage = prev
                     elif p.get("type") == "user_message":
-                        request_count += 1
-    except (json.JSONDecodeError, OSError):
-        pass
+                        if copied_events and tc_index < copied_events:
+                            # user_message del historial copiado: no es un
+                            # request real del fork (ya contado por el padre)
+                            pass
+                        else:
+                            request_count += 1
+                            if active_model is None:
+                                # Algunos JSONL antiguos registran el primer
+                                # user_message antes del primer turn_context.
+                                # Se asigna al modelo cuando aparezca ese contexto.
+                                pending_requests += 1
+    except OSError:
+        result["complete"] = False
 
-    if last_token_count:
-        result["input"] = last_token_count.get("input_tokens", 0)
-        result["output"] = last_token_count.get("output_tokens", 0)
-        cached = last_token_count.get("cached_input_tokens", 0)
-        result["cache"] = cached
-        result["cache_read"] = cached
-        result["cache_write"] = 0
-        result["reasoning"] = last_token_count.get("reasoning_output_tokens", 0)
+    if pending_requests:
+        if active_model is None:
+            result["complete"] = False
+        else:
+            pending_requests = 0
 
-    result["requests"] = request_count if request_count > 0 else 1
+    # Mantener el fallback historico de una request para sesiones con uso pero
+    # sin user_message explicito, sin inventar una segunda request por modelo.
+    if request_count == 0 and previous_usage is not None:
+        request_count = 1
+
+    result["requests"] = request_count
+    result["by_model"] = by_model
+    result["input"] = sum(m["input"] for m in by_model.values())
+    result["output"] = sum(m["output"] for m in by_model.values())
+    result["cache"] = sum(m["cache"] for m in by_model.values())
+    result["cache_read"] = sum(m["cache_read"] for m in by_model.values())
+    result["cache_write"] = sum(m["cache_write"] for m in by_model.values())
+    result["reasoning"] = sum(m["reasoning"] for m in by_model.values())
 
     return result
 
@@ -508,54 +710,90 @@ def get_opencode_sqlite_sessions():
 
         conn = sqlite3.connect(str(OPENCODE_DB_PATH))
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, title, time_updated FROM session ORDER BY time_updated DESC"
-        )
-        sessions_raw = cursor.fetchall()
+        seen = set()
+        sessions_raw = []
+        for table in ("session_v2", "session"):
+            try:
+                cursor.execute(
+                    f"SELECT id, title, time_updated FROM {table} ORDER BY time_updated DESC"
+                )
+                for row in cursor.fetchall():
+                    if row[0] in seen:
+                        continue
+                    seen.add(row[0])
+                    sessions_raw.append(row)
+            except sqlite3.Error:
+                continue
 
         result = {}
         for sid, title, time_updated in sessions_raw:
-            cursor.execute(
-                "SELECT data FROM message WHERE session_id = ? ORDER BY time_created",
-                (sid,),
-            )
             by_model = {}
             requests = 0
+            seen_data = set()
+            seen_ids = set()
 
-            for (data_str,) in cursor.fetchall():
+            for table in ("session_message", "message"):
+                if table == "session_message":
+                    query = (
+                        "SELECT id, data FROM session_message "
+                        "WHERE session_id = ? AND type = 'assistant' ORDER BY time_created"
+                    )
+                else:
+                    query = (
+                        "SELECT id, data FROM message "
+                        "WHERE session_id = ? ORDER BY time_created"
+                    )
                 try:
-                    msg = json.loads(data_str)
-                except json.JSONDecodeError:
+                    cursor.execute(query, (sid,))
+                except sqlite3.Error:
                     continue
 
-                if msg.get("role") != "assistant":
-                    continue
+                for (mid, data_str) in cursor.fetchall():
+                    if mid in seen_ids:
+                        continue
+                    seen_ids.add(mid)
+                    if data_str in seen_data:
+                        continue
+                    seen_data.add(data_str)
 
-                tokens = msg.get("tokens", {})
-                if not tokens:
-                    continue
+                    try:
+                        msg = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
 
-                model = msg.get("modelID", "unknown")
-                if model not in by_model:
-                    by_model[model] = {
-                        "requests": 0,
-                        "input": 0,
-                        "output": 0,
-                        "cache": 0,
-                        "cache_read": 0,
-                        "cache_write": 0,
-                    }
+                    if msg.get("role") not in (None, "assistant"):
+                        continue
 
-                by_model[model]["requests"] += 1
-                requests += 1
-                cache_obj = tokens.get("cache") or {}
-                cache_read = cache_obj.get("read", 0)
-                cache_write = cache_obj.get("write", 0)
-                by_model[model]["input"] += abs(tokens.get("input", 0) or 0)
-                by_model[model]["cache"] += abs(cache_read or 0) + abs(cache_write or 0)
-                by_model[model]["cache_read"] += abs(cache_read or 0)
-                by_model[model]["cache_write"] += abs(cache_write or 0)
-                by_model[model]["output"] += abs(tokens.get("output", 0) or 0)
+                    tokens = msg.get("tokens", {})
+                    if not tokens:
+                        continue
+
+                    model = (
+                        msg.get("modelID")
+                        or (msg.get("model") or {}).get("modelID")
+                        or (msg.get("model") or {}).get("id")
+                        or "unknown"
+                    )
+                    if model not in by_model:
+                        by_model[model] = {
+                            "requests": 0,
+                            "input": 0,
+                            "output": 0,
+                            "cache": 0,
+                            "cache_read": 0,
+                            "cache_write": 0,
+                        }
+
+                    by_model[model]["requests"] += 1
+                    requests += 1
+                    cache_obj = tokens.get("cache") or {}
+                    cache_read = cache_obj.get("read", 0)
+                    cache_write = cache_obj.get("write", 0)
+                    by_model[model]["input"] += abs(tokens.get("input", 0) or 0)
+                    by_model[model]["cache"] += abs(cache_read or 0) + abs(cache_write or 0)
+                    by_model[model]["cache_read"] += abs(cache_read or 0)
+                    by_model[model]["cache_write"] += abs(cache_write or 0)
+                    by_model[model]["output"] += abs(tokens.get("output", 0) or 0)
 
             if requests > 0:
                 # Consolidar en un solo modelo (el más usado)
@@ -601,14 +839,14 @@ def get_hermes_sessions():
     if not HERMES_DB_PATH.exists():
         return []
     try:
-        conn = sqlite3.connect(str(HERMES_DB_PATH))
+        conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
         cursor = conn.cursor()
         cursor.execute("""
             SELECT id, model, input_tokens, output_tokens,
                    cache_read_tokens, cache_write_tokens, reasoning_tokens,
                    estimated_cost_usd, actual_cost_usd, ended_at, started_at, title
             FROM sessions
-            WHERE source IN ('cli', 'telegram', 'subagent') AND input_tokens > 0
+            WHERE source IN ('cli', 'telegram', 'subagent', 'discord') AND input_tokens > 0
             ORDER BY started_at DESC
         """)
         sessions = []
@@ -676,10 +914,10 @@ def has_real_usage_hermes(session_id):
     if not HERMES_DB_PATH.exists():
         return False
     try:
-        conn = sqlite3.connect(str(HERMES_DB_PATH))
+        conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT input_tokens FROM sessions WHERE id = ? AND source IN ('cli', 'telegram')",
+            "SELECT input_tokens FROM sessions WHERE id = ? AND source IN ('cli', 'telegram', 'discord')",
             (session_id,)
         )
         row = cursor.fetchone()
@@ -698,13 +936,13 @@ def get_hermes_session_stats(session_id):
     if not HERMES_DB_PATH.exists():
         return {}
     try:
-        conn = sqlite3.connect(str(HERMES_DB_PATH))
+        conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
         cursor = conn.cursor()
         cursor.execute("""
             SELECT model, input_tokens, output_tokens,
                    cache_read_tokens, cache_write_tokens, reasoning_tokens,
                    estimated_cost_usd, actual_cost_usd, ended_at, started_at, title
-            FROM sessions WHERE id = ? AND source IN ('cli', 'telegram')
+            FROM sessions WHERE id = ? AND source IN ('cli', 'telegram', 'discord')
         """, (session_id,))
         row = cursor.fetchone()
         if not row:
@@ -1133,8 +1371,15 @@ def get_grok_session_stats(session_id):
     return {}
 
 
-def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0):
-    """Calcula costo basado en tokens."""
+def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0, source=None):
+    """Calcula costo basado en tokens.
+
+    La semántica de input_tokens depende del source:
+    - input_includes_cache_read=True (Codex): input_tokens INCLUYE cache reads.
+      Hay que descontar cache para obtener el input no-cacheado.
+    - input_includes_cache_read=False (Hermes, OpenCode, etc.): input_tokens y
+      cache_tokens son datos separados. Input siempre se cobra full.
+    """
     # Sonar: costo fijo por request
     if model == "sonar":
         return 0.0055
@@ -1178,11 +1423,14 @@ def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0):
     if not costs:
         return 0
 
-    if cache_tokens >= input_tokens:
-        input_cost = (input_tokens / 1000000) * costs["input"]
-    else:
-        uncached = input_tokens - cache_tokens
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    if sem["input_includes_cache_read"]:
+        # Codex: input_tokens incluye cache_read → descontar cache
+        uncached = max(0, input_tokens - cache_tokens)
         input_cost = (uncached / 1000000) * costs["input"]
+    else:
+        # Hermes/OpenCode/etc: input_tokens y cache_tokens son separados
+        input_cost = (input_tokens / 1000000) * costs["input"]
     output_cost = (output_tokens / 1000000) * costs["output"]
     cache_cost = (cache_tokens / 1000000) * costs.get("cache", 0)
     return input_cost + output_cost + cache_cost
@@ -1210,6 +1458,16 @@ def effective_cache_read_tokens(cache_tokens=0, cache_read_tokens=0, cache_write
     return cache_read_tokens
 
 
+def effective_uncached_input_tokens(source, input_tokens, cache_read_tokens=0):
+    """Input que no proviene de cache, conservando el input crudo aparte."""
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    input_tokens = input_tokens or 0
+    cache_read_tokens = cache_read_tokens or 0
+    if sem["input_includes_cache_read"]:
+        return max(0, input_tokens - cache_read_tokens)
+    return input_tokens
+
+
 def effective_cache_ratio_input(source, input_tokens, cache_read_tokens=0):
     """Input total considerado para el cálculo de cache ratio."""
     sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
@@ -1235,7 +1493,9 @@ def recalculate_historical_cost():
             "total_sessions": 0,
             "total_requests": 0,
             "total_input": 0,
+            "total_input_uncached": 0,
             "total_output": 0,
+            "total_cache_read": 0,
             "total_tokens": 0,
             "cache_ratio": 0,
             "models_totals": {},
@@ -1270,14 +1530,15 @@ def recalculate_historical_cost():
                     models_totals[normalized] = {
                         "requests": 0, "input": 0, "output": 0,
                         "cache": 0, "cache_read": 0, "cache_write": 0,
-                        "stored_cost": 0.0,
+                        "stored_cost": 0.0, "cost": 0.0,
                     }
                 models_totals[normalized]["requests"] += m_req
                 models_totals[normalized]["input"] += m_in
                 models_totals[normalized]["output"] += m_out
                 models_totals[normalized]["cache"] += m_cache
                 models_totals[normalized]["cache_read"] += m_cache
-                historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache)
+                models_totals[normalized]["cost"] += calculate_cost(normalized, m_in, m_out, m_cache, source="legacy")
+                historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache, source="legacy")
             continue
         if sid == "legacy_price_adjustment":
             # Ajuste de precio legacy: no cuenta como sesión
@@ -1287,6 +1548,7 @@ def recalculate_historical_cost():
     # 2. Agregar tokens por modelo desde sesiones guardadas
     total_requests = 0
     total_input = 0
+    total_input_uncached = 0
     total_output = 0
     total_tokens = 0
     cache_ratio_input = 0
@@ -1296,18 +1558,19 @@ def recalculate_historical_cost():
         placeholders = ",".join("?" for _ in session_keys)
         mrows = conn.execute(
             f"SELECT mu.model, mu.requests, mu.input_tokens, mu.output_tokens, "
-            f"mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens "
-            f"FROM model_usage mu WHERE mu.session_id IN ({placeholders})",
+            f"mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens, s.source "
+            f"FROM model_usage mu JOIN sessions s ON s.id = mu.session_id "
+            f"WHERE mu.session_id IN ({placeholders})",
             session_keys,
         ).fetchall()
-        for model, reqs, inp, out, cache, cache_read, cache_write in mrows:
+        for model, reqs, inp, out, cache, cache_read, cache_write, source in mrows:
             effective_cache_read = effective_cache_read_tokens(cache, cache_read, cache_write)
             normalized = normalize_model_name(model)
             if normalized not in models_totals:
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
                     "cache": 0, "cache_read": 0, "cache_write": 0,
-                    "stored_cost": 0.0,
+                    "stored_cost": 0.0, "cost": 0.0,
                 }
             models_totals[normalized]["requests"] += reqs
             models_totals[normalized]["input"] += inp
@@ -1315,6 +1578,7 @@ def recalculate_historical_cost():
             models_totals[normalized]["cache"] += cache
             models_totals[normalized]["cache_read"] += effective_cache_read
             models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(normalized, inp, out, cache, source=source)
 
         # Totales de sesión desde la tabla sessions
         srows_agg = conn.execute(
@@ -1326,6 +1590,7 @@ def recalculate_historical_cost():
             effective_cache_read = effective_cache_read_tokens(cache, cache_read, cache_write)
             total_requests += reqs
             total_input += inp
+            total_input_uncached += effective_uncached_input_tokens(source, inp, effective_cache_read)
             total_output += out
             total_tokens += effective_billable_tokens(source, inp, out, effective_cache_read, cache_write)
             cache_ratio_input += effective_cache_ratio_input(source, inp, effective_cache_read)
@@ -1344,7 +1609,9 @@ def recalculate_historical_cost():
         for reqs, inp, out in ht_rows:
             total_requests += reqs
             total_input += inp
+            total_input_uncached += inp
             total_output += out
+            total_tokens += effective_billable_tokens("legacy", inp, out, 0, 0)
         conn2.close()
 
     # 3. Agregar sesiones de Codex que NO estan en SQLite
@@ -1362,17 +1629,20 @@ def recalculate_historical_cost():
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
                     "cache": 0, "cache_read": 0, "cache_write": 0,
-                    "stored_cost": 0.0,
+                    "stored_cost": 0.0, "cost": 0.0,
                 }
             models_totals[normalized]["requests"] += stats["requests"]
             models_totals[normalized]["input"] += stats["input"]
             models_totals[normalized]["output"] += stats["output"]
             models_totals[normalized]["cache"] += stats["cache"]
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, stats["input"], stats["output"], stats["cache"], source="codex")
             total_requests += stats["requests"]
             total_input += stats["input"]
             total_output += stats["output"]
             cache_read = stats.get("cache_read", stats.get("cache", 0))
             cache_write = stats.get("cache_write", 0)
+            total_input_uncached += effective_uncached_input_tokens("codex", stats["input"], cache_read)
             total_tokens += effective_billable_tokens("codex", stats["input"], stats["output"], cache_read, cache_write)
             cache_ratio_input += effective_cache_ratio_input("codex", stats["input"], cache_read)
             total_cache_read += cache_read
@@ -1390,7 +1660,7 @@ def recalculate_historical_cost():
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
                     "cache": 0, "cache_read": 0, "cache_write": 0,
-                    "stored_cost": 0.0,
+                    "stored_cost": 0.0, "cost": 0.0,
                 }
             models_totals[normalized]["requests"] += model_data.get("requests", 0)
             models_totals[normalized]["input"] += model_data.get("input", 0)
@@ -1400,10 +1670,14 @@ def recalculate_historical_cost():
             models_totals[normalized]["cache"] += model_data.get("cache", 0)
             models_totals[normalized]["cache_read"] += cache_read
             models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, model_data.get("input", 0), model_data.get("output", 0),
+                model_data.get("cache", 0), source="opencode")
         cache_read = stats.get("cache_read", stats.get("cache", 0))
         cache_write = stats.get("cache_write", 0)
         total_requests += stats["requests"]
         total_input += stats["input"]
+        total_input_uncached += effective_uncached_input_tokens("opencode", stats["input"], cache_read)
         total_output += stats["output"]
         total_tokens += effective_billable_tokens("opencode", stats["input"], stats["output"], cache_read, cache_write)
         cache_ratio_input += effective_cache_ratio_input("opencode", stats["input"], cache_read)
@@ -1422,7 +1696,7 @@ def recalculate_historical_cost():
                 models_totals[normalized] = {
                     "requests": 0, "input": 0, "output": 0,
                     "cache": 0, "cache_read": 0, "cache_write": 0,
-                    "stored_cost": 0.0,
+                    "stored_cost": 0.0, "cost": 0.0,
                 }
             models_totals[normalized]["requests"] += model_data.get("requests", 0)
             models_totals[normalized]["input"] += model_data.get("input", 0)
@@ -1432,25 +1706,26 @@ def recalculate_historical_cost():
             models_totals[normalized]["cache"] += model_data.get("cache", 0)
             models_totals[normalized]["cache_read"] += cache_read
             models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, model_data.get("input", 0), model_data.get("output", 0),
+                model_data.get("cache", 0), source="hermes")
         cache_read = sess.get("cache_read", sess.get("cache", 0))
         cache_write = sess.get("cache_write", 0)
         total_requests += sess.get("requests", 0)
         total_input += sess.get("input", 0)
+        total_input_uncached += effective_uncached_input_tokens("hermes", sess.get("input", 0), cache_read)
         total_output += sess.get("output", 0)
         total_tokens += effective_billable_tokens("hermes", sess.get("input", 0), sess.get("output", 0), cache_read, cache_write)
         cache_ratio_input += effective_cache_ratio_input("hermes", sess.get("input", 0), cache_read)
         total_cache_read += cache_read
         total_sessions += 1
 
-    # 6. Calcular costo total desde tokens + ajuste histórico
-    # Agregar modelos de historical_total a models_totals (mismo comportamiento que versión JSON)
+    # 6. Calcular costo total desde costos acumulados por fila + ajuste histórico
     historical_cost_adjustment = historical_total_cost - historical_models_cost
 
     total_cost = 0
     for model, mdata in models_totals.items():
-        mdata["cost"] = calculate_cost(
-            model, mdata["input"], mdata["output"], mdata.get("cache", 0)
-        )
+        mdata["cost"] = mdata.get("cost", 0.0)
         total_cost += mdata["cost"]
     total_cost += historical_cost_adjustment
 
@@ -1459,7 +1734,9 @@ def recalculate_historical_cost():
         "total_sessions": total_sessions,
         "total_requests": total_requests,
         "total_input": total_input,
+        "total_input_uncached": total_input_uncached,
         "total_output": total_output,
+        "total_cache_read": total_cache_read,
         "total_tokens": total_tokens,
         "cache_ratio": round(total_cache_read / cache_ratio_input * 100, 1) if cache_ratio_input > 0 else 0,
         "models_totals": models_totals,
@@ -1636,6 +1913,131 @@ def save_session(sid, source, date, timestamp, requests, input_tokens,
         )
     conn.commit()
     conn.close()
+
+
+def save_codex_session(sid, source, date, timestamp, requests, input_tokens,
+                       output_tokens, cache_tokens, reasoning_tokens, cost,
+                       by_model, db_path=None,
+                       cache_read_tokens=None, cache_write_tokens=None,
+                       request_model=None):
+    """Reemplaza tokens de Codex preservando requests exactamente.
+
+    Codex expone contadores acumulados y el parser reconstruye el snapshot
+    completo desde el JSONL. Por eso este camino no usa MAX() para tokens:
+    debe poder corregir filas previas que atribuyeron el acumulado al ultimo
+    modelo. Los campos requests se conservan de la fila existente; para una
+    sesion nueva se mantiene la logica historica de poner el total en el
+    modelo actual/final. Las demas fuentes siguen usando save_session().
+    """
+    if not by_model:
+        raise ValueError("No se puede guardar una sesion Codex sin modelos")
+    if cache_read_tokens is None:
+        cache_read_tokens = sum(
+            (m.get("cache_read", m.get("cache", 0)) or 0)
+            for m in by_model.values()
+        )
+    if cache_write_tokens is None:
+        cache_write_tokens = sum(
+            (m.get("cache_write", 0) or 0) for m in by_model.values()
+        )
+
+    path = Path(db_path or DB_PATH)
+    conn = sqlite3.connect(str(path))
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        conn.execute("BEGIN")
+        existing_session = conn.execute(
+            "SELECT requests FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        existing_model_requests = {
+            model: model_requests
+            for model, model_requests in conn.execute(
+                "SELECT model, requests FROM model_usage WHERE session_id = ?",
+                (sid,),
+            ).fetchall()
+        }
+        stored_requests = (
+            existing_session[0] if existing_session is not None else requests
+        )
+        models_to_write = dict(by_model)
+        for model, model_requests in existing_model_requests.items():
+            if model not in models_to_write:
+                # Conservar siempre la fila y sus requests aunque no tenga
+                # token_count; su consumo de tokens correcto es cero.
+                models_to_write[model] = {
+                    "requests": model_requests,
+                    "input": 0,
+                    "output": 0,
+                    "cache": 0,
+                    "cache_read": 0,
+                    "cache_write": 0,
+                    "reasoning": 0,
+                    "cost": 0.0,
+                }
+        conn.execute(
+            """INSERT INTO sessions
+            (id, source, date, timestamp, requests, input_tokens, output_tokens,
+             cache_tokens, reasoning_tokens, cost,
+             cache_read_tokens, cache_write_tokens)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              source = excluded.source,
+              date = MIN(date, excluded.date),
+              timestamp = MIN(timestamp, excluded.timestamp),
+              requests = excluded.requests,
+              input_tokens = excluded.input_tokens,
+              output_tokens = excluded.output_tokens,
+              cache_tokens = excluded.cache_tokens,
+              reasoning_tokens = excluded.reasoning_tokens,
+              cost = excluded.cost,
+              cache_read_tokens = excluded.cache_read_tokens,
+              cache_write_tokens = excluded.cache_write_tokens""",
+            (sid, source, date, timestamp, stored_requests, input_tokens, output_tokens,
+             cache_tokens, reasoning_tokens, cost,
+             cache_read_tokens, cache_write_tokens),
+        )
+
+        for model, mdata in models_to_write.items():
+            mu_cache_read = mdata.get("cache_read", mdata.get("cache", 0))
+            mu_cache_write = mdata.get("cache_write", 0)
+            stored_model_requests = existing_model_requests.get(model)
+            if stored_model_requests is None:
+                stored_model_requests = requests if model == request_model else 0
+            conn.execute(
+                """INSERT INTO model_usage
+                (session_id, model, requests, input_tokens, output_tokens,
+                 cache_tokens, reasoning_tokens, cost,
+                 cache_read_tokens, cache_write_tokens)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id, model) DO UPDATE SET
+                  requests = excluded.requests,
+                  input_tokens = excluded.input_tokens,
+                  output_tokens = excluded.output_tokens,
+                  cache_tokens = excluded.cache_tokens,
+                  reasoning_tokens = excluded.reasoning_tokens,
+                  cost = excluded.cost,
+                  cache_read_tokens = excluded.cache_read_tokens,
+                  cache_write_tokens = excluded.cache_write_tokens""",
+                (sid, model,
+                 stored_model_requests,
+                 mdata.get("input", 0),
+                 mdata.get("output", 0),
+                 mdata.get("cache", mdata.get("cache_read", 0) + mdata.get("cache_write", 0)),
+                 mdata.get("reasoning", 0),
+                 mdata.get("cost", 0.0),
+                 mu_cache_read,
+                 mu_cache_write),
+            )
+
+        # No se eliminan filas model_usage: las ausentes en el JSONL
+        # quedan conservadas con tokens/costo en cero.
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def get_sessions(date_from=None, date_to=None, db_path=None):
