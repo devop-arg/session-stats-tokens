@@ -430,11 +430,6 @@
     "output": 0.0,
     "cache": 0.0
   },
-  "minimaxai/minimax-m2.7": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
   "nemotron-3.5-lightning": {
     "input": 0.08,
     "output": 0.04,

@@ -128,5 +128,11 @@
   "ox-alpha-free": "ox-alpha",
   "stealth/ox-alpha": "ox-alpha",
   "deepseek-v4-flash-vision-exp": "deepseek-v4-flash",
-  "minimaxai/minimax-m3": "minimax-m3"
+  "minimaxai/minimax-m3": "minimax-m3",
+  "minimaxai/minimax-m2.7": "minimax-m2.7",
+  "antigravity-claude-sonnet-4-6": "claude-sonnet-4.5",
+  "arcee-ai/trinity-large-thinking": "trinity-large-preview",
+  "deepseek/deepseek-v3.2": "deepseek-v3.2",
+  "openrouter/healer-alpha": "mimo-v2-pro",
+  "openrouter/hunter-alpha": "mimo-v2-pro"
 }
