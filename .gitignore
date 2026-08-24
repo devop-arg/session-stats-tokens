@@ -36,3 +36,6 @@ db_backups/
 # Session signing secret (auth)
 stats-web/.session_secret
 
+
+# Repair backups locales
+backups/

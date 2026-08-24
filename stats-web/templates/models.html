@@ -19,7 +19,7 @@
   <button type="button" class="sort-btn" data-sort-dir="desc" data-active="true" aria-pressed="true">↓</button>
 </div>
 
-<div class="table-wrap">
+<div class="table-wrap" data-compact-labels>
   <table id="models-table">
     <thead>
       <tr>
@@ -28,9 +28,8 @@
         <th class="num" data-i18n="sess.th_requests">Requests</th>
         <th class="num" title="Input sin cache read" data-i18n-attr="title:sess.tip_input" data-i18n="sess.th_input">Input</th>
         <th class="num" data-i18n="sess.th_output">Output</th>
-        <th class="num" title="Cache read" data-i18n-attr="title:sess.tip_cache" data-i18n="sess.th_cache_input">Cache input</th>
-        <th class="num" title="Input reportado por la fuente; en Codex incluye cache read" data-i18n-attr="title:sess.tip_raw" data-i18n="sess.th_raw_input">Input crudo</th>
-        <th class="num" title="Tokens efectivos según la semántica de cada fuente" data-i18n-attr="title:sess.tip_effective" data-i18n="sess.th_effective">Total efectivo</th>
+        <th class="num" title="Cache read" data-i18n-attr="title:sess.tip_cache" data-i18n-short="Cache IN" data-i18n="sess.th_cache_input">Cache input</th>
+        <th class="num" data-i18n-short="Total" data-i18n="sess.th_effective">Total efectivo</th>
         <th class="num" data-i18n="sess.th_cost">Costo</th>
         <th class="num price-col" data-i18n="sess.th_input">Input</th>
         <th class="num price-col" data-i18n="sess.th_output">Output</th>
@@ -39,7 +38,7 @@
       </tr>
     </thead>
     <tbody id="models-tbody">
-      <tr><td colspan="13" class="loading-row" data-i18n="common.loading">Cargando...</td></tr>
+      <tr><td colspan="12" class="loading-row" data-i18n="common.loading">Cargando...</td></tr>
     </tbody>
   </table>
 </div>

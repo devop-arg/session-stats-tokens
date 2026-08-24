@@ -105,6 +105,7 @@
   "minimax-m2.5": "minimax-m2.5",
   "minimax-m2.5-free": "minimax-m2.5",
   "nemotron-3-ultra-550b-a55b": "nemotron-3-ultra",
+  "nvidia-nemotron-3.5-lightning-30b-a3b-bf16": "nemotron-3.5-lightning",
   "nex-agi/nex-n2-pro": "nex-agi/nex-n2",
   "minimax-m2.7": "minimax-m2.7",
   "pony-alpha": "mimo-v2-pro",
@@ -121,5 +122,10 @@
   "trinity-large-preview-free": "trinity-large-preview",
   "x-ai/grok-4.1-fast": "x-ai/grok-4.1-fast",
   "xiaomi/mimo-v2-pro": "mimo-v2-pro",
-  "zai-org/glm-5.2": "glm-5.2"
+  "zai-org/glm-5.2": "glm-5.2",
+  "x-preview-f": "ox-alpha",
+  "x-preview-f-free": "ox-alpha",
+  "ox-alpha-free": "ox-alpha",
+  "stealth/ox-alpha": "ox-alpha",
+  "deepseek-v4-flash-vision-exp": "deepseek-v4-flash"
 }

@@ -2,6 +2,7 @@
 'use strict';
 
 var BAR_COLORS = ['#ff8904','#ffb900','#00bc7d','#00d3f2','#00d5be','#51a2ff','#7c86ff','#9ae600','#a684ff','#ed6aff'];
+var tokenPriceByModel = Object.create(null);
 
 function fmt(n) {
   if (n == null) return '—';
@@ -14,13 +15,15 @@ function fmt(n) {
 
 function fmtCost(n) {
   if (n == null) return '—';
-  if (n < 0.01) return '$' + n.toFixed(4);
+  if (Number(n) === 0) return '$0.00';
+  if (n < 0.01) return '$' + Number(n).toFixed(4);
   return '$' + Number(n).toFixed(2);
 }
 
 function fmtCostShort(n) {
   if (n == null) return '—';
-  if (n < 0.01) return '$' + n.toFixed(4);
+  if (Number(n) === 0) return '$0.00';
+  if (n < 0.01) return '$' + Number(n).toFixed(4);
   return '$' + Number(n).toFixed(0);
 }
 
@@ -47,6 +50,28 @@ function getPPMColor(price) {
   if (price <= 0.20) return '#facc15';   // amarillo
   if (price <= 0.50) return '#fb923c';   // naranja
   return '#f87171';                       // naranja rojizo
+}
+
+function getEffectiveModelPrice(entry) {
+  if (entry && Object.prototype.hasOwnProperty.call(tokenPriceByModel, entry.model)) {
+    return tokenPriceByModel[entry.model];
+  }
+  return entry && entry.price_per_1m != null ? Number(entry.price_per_1m) : 0;
+}
+
+function cacheMetricMarkup(tokens) {
+  return '<span class="cache-label-full">Cache In</span>' +
+    '<span class="cache-label-short">C. In</span> ' + fmtTokens(tokens || 0);
+}
+
+function refreshModelPrices() {
+  document.querySelectorAll('[data-model-price="true"]').forEach(function(el) {
+    var row = el.closest('[data-model]');
+    var model = row ? row.getAttribute('data-model') : null;
+    if (model && Object.prototype.hasOwnProperty.call(tokenPriceByModel, model)) {
+      el.textContent = 'Cost M/T ' + fmtCost(tokenPriceByModel[model]);
+    }
+  });
 }
 
 function fmtDateTimeArt(ts, fallback) {
@@ -170,6 +195,7 @@ if (document.querySelector('.stats-grid')) {
         d.top_models.forEach(function(m, i) {
           var row = document.createElement('div');
           row.className = 'today-model-row';
+          row.setAttribute('data-model', m.model);
           var barPct = m.percent;
           var cacheRatio = typeof m.cache_ratio === 'number' ? m.cache_ratio : 0;
           row.innerHTML =
@@ -180,13 +206,15 @@ if (document.querySelector('.stats-grid')) {
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-ioc o">Out ' + fmtTokens(m.output_tokens) + '</span>' +
             '<span class="today-model-sep">-</span>' +
-            '<span class="today-model-ioc c">Cache in ' + fmtTokens(displayCacheInput(m)) + '</span>' +
+            '<span class="today-model-ioc c">' + cacheMetricMarkup(displayCacheInput(m)) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-cache-ratio">Ratio ' + fmtPct(cacheRatio) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-total">Total ' + fmtTokens(m.tokens) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-cost">' + (window.SS_I18N ? window.SS_I18N.t('dyn.lbl_cost') : 'Costo') + ' ' + fmtCost(m.cost) + '</span>' +
+            '<span class="today-model-sep">-</span>' +
+            '<span class="today-model-price" data-model-price="true">Cost M/T ' + fmtCost(getEffectiveModelPrice(m)) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-pct">' + barPct + '%</span>';
           todayModels.appendChild(row);
@@ -369,68 +397,56 @@ if (document.querySelector('.stats-grid')) {
 
   function buildLeaderCard(entry, onToggle) {
     var card = document.createElement('div');
-    card.className = 'leader-card';
+    card.className = 'today-model-row leader-card';
     card.setAttribute('data-model', entry.model);
     card.setAttribute('role', 'button');
     card.setAttribute('tabindex', '0');
     card.setAttribute('aria-pressed', 'false');
 
-    var rank = document.createElement('span');
-    rank.className = 'leader-rank';
-    rank.textContent = String(entry.rank).padStart(2, '0');
-    card.appendChild(rank);
+    function addMetric(className, text) {
+      var el = document.createElement('span');
+      el.className = className;
+      el.textContent = text;
+      card.appendChild(el);
+      return el;
+    }
 
-    var inner = document.createElement('div');
-    inner.className = 'leader-inner';
-
-    var row1 = document.createElement('div');
-    row1.className = 'leader-row1';
-
-    var name = document.createElement('span');
-    name.className = 'leader-name';
-    name.textContent = displayModelName(entry.model);
-    row1.appendChild(name);
-
-    var pct = document.createElement('span');
-    pct.className = 'leader-percent';
-    pct.textContent = entry.percent.toFixed(1) + '%';
-    row1.appendChild(pct);
-
-    var cost = document.createElement('span');
-    cost.className = 'leader-cost';
-    cost.textContent = fmtCost(entry.cost);
-    row1.appendChild(cost);
-
-    var ppm = document.createElement('span');
-    ppm.className = 'leader-ppm';
-    ppm.textContent = '$' + (entry.price_per_1m || 0).toFixed(2) + '/M';
-    ppm.style.color = getPPMColor(entry.price_per_1m || 0);
-    row1.appendChild(ppm);
-
-    inner.appendChild(row1);
-
-    var row2 = document.createElement('div');
-    row2.className = 'leader-row2';
-
-    var tokens = document.createElement('span');
-    tokens.className = 'leader-tokens';
     var displayInput = entry.input_tokens_uncached != null
       ? entry.input_tokens_uncached
       : entry.input_tokens;
     var displayCache = entry.cache_input_tokens != null
       ? entry.cache_input_tokens
       : entry.cache_tokens;
-    tokens.textContent = 'I ' + fmtTokens(displayInput || 0).replace('.0', '') +
-                         '  O ' + fmtTokens(entry.output_tokens || 0).replace('.0', '') +
-                         '  CI ' + fmtTokens(displayCache || 0).replace('.0', '') +
-                         '  T ' + fmtTokens(entry.tokens).replace('.0', '') +
-                         '  R ' + fmt(entry.requests || 0);
-    tokens.title = 'Input sin cache · Output · Cache input (cache read) · Total efectivo';
-    row2.appendChild(tokens);
+    var cacheRatio = entry.cache_ratio == null
+      ? '—'
+      : fmtPct(Number(entry.cache_ratio));
 
-    inner.appendChild(row2);
-    card.appendChild(inner);
+    addMetric('today-model-rank', String(entry.rank).padStart(2, '0'));
+    addMetric('today-model-name', displayModelName(entry.model));
+    addMetric('today-model-reqs', fmt(entry.requests || 0) + ' req');
+    addMetric('today-model-ioc i', 'In ' + fmtTokens(displayInput || 0));
+    addMetric('today-model-sep', '-');
+    addMetric('today-model-ioc o', 'Out ' + fmtTokens(entry.output_tokens || 0));
+    addMetric('today-model-sep', '-');
+    var cacheMetric = document.createElement('span');
+    cacheMetric.className = 'today-model-ioc c';
+    cacheMetric.innerHTML = cacheMetricMarkup(displayCache);
+    card.appendChild(cacheMetric);
+    addMetric('today-model-sep', '-');
+    addMetric('today-model-cache-ratio', 'Ratio ' + cacheRatio);
+    addMetric('today-model-sep', '-');
+    addMetric('today-model-total', 'Total ' + fmtTokens(entry.tokens || 0));
+    addMetric('today-model-sep', '-');
+    addMetric('today-model-cost', (window.SS_I18N ? window.SS_I18N.t('dyn.lbl_cost') : 'Costo') + ' ' + fmtCost(entry.cost));
+    addMetric('today-model-sep', '-');
+    var priceMetric = addMetric('today-model-price', 'Cost M/T ' + fmtCost(getEffectiveModelPrice(entry)));
+    priceMetric.setAttribute('data-model-price', 'true');
+    addMetric('today-model-sep', '-');
+    addMetric('today-model-pct', Number(entry.percent || 0).toFixed(1) + '%');
 
+    card.title = entry.author
+      ? entry.author + ' · $' + Number(entry.price_per_1m || 0).toFixed(2) + '/M'
+      : '';
     card.addEventListener('click', function() {
       onToggle(entry.model);
     });
@@ -562,14 +578,21 @@ if (document.querySelector('.stats-grid')) {
 
         var sc = config.statsContainerId ? document.getElementById(config.statsContainerId) : null;
         if (sc && data.total_cost != null) {
-          sc.querySelector('[data-stat-30d="total-input"]').textContent = fmt(data.total_input_tokens_uncached);
-          sc.querySelector('[data-stat-30d="total-output"]').textContent = fmt(data.total_output_tokens);
-          sc.querySelector('[data-stat-30d="total-cache"]').textContent = fmt(data.total_cache_input_tokens);
-          sc.querySelector('[data-stat-30d="cache-ratio"]').textContent = fmtPct(data.cache_ratio);
-          sc.querySelector('[data-stat-30d="total-sessions"]').textContent = fmt(data.total_sessions);
-          sc.querySelector('[data-stat-30d="total-requests"]').textContent = fmt(data.total_requests);
-          sc.querySelector('[data-stat-30d="total-tokens"]').textContent = fmt(data.total_tokens);
-          sc.querySelector('[data-stat-30d="total-cost"]').textContent = fmtCostShort(data.total_cost);
+          var statAttr = config.statsAttr || 'data-stat-30d';
+          var statValues = {
+            'total-input': fmt(data.total_input_tokens_uncached),
+            'total-output': fmt(data.total_output_tokens),
+            'total-cache': fmt(data.total_cache_input_tokens),
+            'cache-ratio': fmtPct(data.cache_ratio),
+            'total-sessions': fmt(data.total_sessions),
+            'total-requests': fmt(data.total_requests),
+            'total-tokens': fmt(data.total_tokens),
+            'total-cost': fmtCostShort(data.total_cost)
+          };
+          Object.keys(statValues).forEach(function(key) {
+            var el = sc.querySelector('[' + statAttr + '="' + key + '"]');
+            if (el) el.textContent = statValues[key];
+          });
         }
 
         if (yAxisEl) {
@@ -618,7 +641,9 @@ if (document.querySelector('.stats-grid')) {
     selectionLabelId: 'top-models-selection',
     clearButtonId: 'top-models-clear',
     endpoint: '/api/top-models',
-    rangeKey: '12M'
+    rangeKey: '12M',
+    statsContainerId: 'yearly-stats',
+    statsAttr: 'data-stat-yearly'
   });
 
   // --- Activity (weekly timeseries) ---
@@ -903,7 +928,11 @@ if (document.querySelector('.stats-grid')) {
       document.getElementById('overall-price-per-1m').textContent = fmtCost(data.overall.price_per_1m);
       document.getElementById('token-total-tokens').textContent = fmt(data.overall.total_tokens);
       tokenCostData = data;
+      data.models.forEach(function(m) {
+        tokenPriceByModel[m.model] = Number(m.price_per_1m || 0);
+      });
       renderTokenCost();
+      refreshModelPrices();
 
       var sortBtns = document.querySelectorAll('.sort-btn');
       sortBtns.forEach(function(btn) {
@@ -1099,7 +1128,6 @@ if (document.getElementById('models-tbody')) {
         '<td class="num col-input">' + fmt(modelInputTokens(m)) + '</td>' +
         '<td class="num col-output">' + fmt(m.output_tokens) + '</td>' +
         '<td class="num col-cache">' + fmt(modelCacheInputTokens(m)) + '</td>' +
-        '<td class="num col-raw-input">' + fmt(m.input_tokens) + '</td>' +
         '<td class="num col-total">' + fmt(totalT) + '</td>' +
         '<td class="num col-cost">' + fmtCost(m.cost) + '</td>' +
         '<td class="num price-cell">' + formatPriceDisplay(inpPrice) + '</td>' +

@@ -533,6 +533,11 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
                 if m["cache_ratio_input_tokens"] > 0 else 0,
                 1,
             ),
+            "price_per_1m": round(
+                (m["cost"] / m["tokens"] * 1_000_000)
+                if m["tokens"] > 0 else 0,
+                4,
+            ),
             "percent": round(m["tokens"] / total_tokens * 100, 1),
         })
 
@@ -987,6 +992,13 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
     model_cache_input_sql = _sql_cache_input(
         "mu.cache_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens"
     )
+    model_effective_cache_read_sql = _sql_effective_cache_read(
+        "mu.cache_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens"
+    )
+    model_cache_ratio_input_sql = _sql_cache_ratio_input(
+        "s.source", "mu.input_tokens", "mu.cache_tokens",
+        "mu.cache_read_tokens", "mu.cache_write_tokens"
+    )
 
     model_rows = conn.execute(f"""
         SELECT mu.model,
@@ -996,6 +1008,8 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
                COALESCE(SUM(mu.output_tokens),0) as output_tokens,
                COALESCE(SUM(mu.cache_tokens),0) as cache_tokens,
                {model_cache_input_sql} as cache_input_tokens,
+               COALESCE(SUM({model_effective_cache_read_sql}),0) as cache_read_tokens,
+               {model_cache_ratio_input_sql} as cache_ratio_input_tokens,
                COALESCE(SUM(mu.requests),0) as requests,
                COALESCE(SUM(mu.cost),0) as total_cost
         FROM model_usage mu
@@ -1016,6 +1030,8 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
             "output_tokens": 0,
             "cache_tokens": 0,
             "cache_input_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_ratio_input_tokens": 0,
             "requests": 0,
             "total_cost": 0.0,
         })
@@ -1025,6 +1041,8 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
         acc["output_tokens"] += row["output_tokens"] or 0
         acc["cache_tokens"] += row["cache_tokens"] or 0
         acc["cache_input_tokens"] += row["cache_input_tokens"] or 0
+        acc["cache_read_tokens"] += row["cache_read_tokens"] or 0
+        acc["cache_ratio_input_tokens"] += row["cache_ratio_input_tokens"] or 0
         acc["requests"] += row["requests"] or 0
         acc["total_cost"] += row["total_cost"] or 0.0
 
@@ -1113,6 +1131,11 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
             "output_tokens": row["output_tokens"],
             "cache_tokens": row["cache_tokens"],
             "cache_input_tokens": row["cache_input_tokens"],
+            "cache_ratio": round(
+                (row["cache_read_tokens"] / row["cache_ratio_input_tokens"] * 100)
+                if row["cache_ratio_input_tokens"] > 0 else 0,
+                1,
+            ),
             "requests": row["requests"],
             "cost": round(row["total_cost"], 2),
             "price_per_1m": round(row["total_cost"] / tt * 1_000_000, 4) if tt > 0 else 0,

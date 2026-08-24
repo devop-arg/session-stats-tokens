@@ -380,6 +380,12 @@
     var lang = getLang();
     scope.querySelectorAll('[data-i18n]').forEach(function (el) {
       var key = el.getAttribute('data-i18n');
+      // etiqueta corta opcional (data-i18n-short) para tablas compactas
+      var shortKey = el.getAttribute('data-i18n-short');
+      if (el.hasAttribute('data-short') || el.closest('[data-compact-labels]')) {
+        var shortVal = shortKey || null;
+        if (shortVal != null) { el.textContent = shortVal; return; }
+      }
       var val = t(key);
       if (el.getAttribute('data-i18n-html') === '1') {
         el.innerHTML = val;

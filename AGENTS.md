@@ -2,10 +2,59 @@
 
 > **Mantener actualizado.** Si cambian paths, archivos críticos o procedimientos de recuperación, editar este archivo y commitear.
 
+> **LEER ANTES DE TOCAR NADA.** Toda la sección "Repository Strategy" del
+> `README.md` antes de cualquier operación git (commit, push, merge, sync).
+> El flujo de publicación al público **no es push directo** — ver
+> [Publicación al público](#publicación-al-público-flujo-oficial) más abajo.
+
+## Publicación al público (flujo oficial)
+
+> **Regla dura, reforzada por incidente 2026-08-24**: la rama canónica del
+> repo público es **`origin/public`**, NO `origin/main`. `origin/main` es un
+> espejo sanitizado que mantiene el script `sync-public.sh`.
+
+**Antes de hacer cualquier push a `origin`:**
+
+1. **Leer** la sección "Repository Strategy" del `README.md` de este repo
+   (cubre reglas, exclusiones, y commit hygiene).
+2. **Verificar** las ramas remotas con:
+   ```bash
+   git remote -v
+   git branch -vv
+   git ls-remote origin          # ver qué ramas existen en el público
+   git ls-remote private         # ver qué ramas existen en el privado
+   ```
+3. **Nunca** hacer `git push origin main` directamente. La rama canónica
+   del público es `origin/public`, y se sincroniza con `./sync-public.sh`.
+   El script hace: push a `private` → checkout `public` → squash merge de
+   `main` → borrar archivos sensibles → push a `origin/public` →
+   force-push a `origin/main` (sanitizado) → volver a la branch original.
+4. **Si vas a pushear a `private` desde el working tree** y el archivo es
+   `session_history.db` u otro ignorado por `.gitignore`, usar `git add -f`
+   (con el `-f` explícito) y verificar post-push con
+   `git ls-tree -r private/main --name-only | grep session_history.db`.
+5. **Después de cualquier push**, verificar que el árbol remoto tiene lo
+   que esperás:
+   ```bash
+   # privado debe tener la DB trackeada
+   git ls-tree -r private/main --name-only | grep session_history.db
+   # público NO debe tener la DB trackeada
+   ! git ls-tree -r origin/public --name-only | grep -q session_history.db
+   ```
+
+**`git add -f` solo se usa para `session_history.db` contra `private`.**
+Contra `origin` (público) **NUNCA** se usa `-f` para la DB: si el `.gitignore`
+la ignora y vos la querés subir al público, **algo está mal** y hay que
+frenar.
+
 ## ⚠️ `session_history.db` y `session_history.json`
 
-- **NUNCA commitear a `origin`** (repo público)
-- **Sí trackear en `private`** con `git add -f` (repo de backup)
+- **NUNCA commitear a `origin`** (repo público) — des-trackeada desde 2026-08-22
+  (commit `4ccc7cb`); el `.gitignore` ya la excluye, NO hacer `git add -f` sobre main.
+- **Sí trackear en `private`** (repo de backup). Como `private` tiene historia
+  divergente de origin, la sync se hace con worktree temporal:
+  `git worktree add /tmp/ss-wt private/main` → copiar DB/JSONs vivos → commit →
+  `git push private HEAD:main` → `git worktree remove --force /tmp/ss-wt`.
 
 Cualquier operación git destructiva (`rebase`, `stash pop`, `reset --hard`) los puede borrar sin aviso.
 
