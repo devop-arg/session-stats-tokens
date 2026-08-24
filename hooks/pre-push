@@ -1,0 +1,53 @@
+#!/bin/bash
+# pre-push — barrera dura contra leaks al repo público (incidente 2026-08-24).
+#
+# - Rechaza CUALQUIER push a `origin` (público) cuyo árbol contenga datos sensibles.
+# - Rechaza un push a `private/main` que NO incluya session_history.db
+#   (evita commits incompletos tipo "salió sin la DB").
+#
+# Para saltearlo hace falta --no-verify explícito, y eso queda registrado
+# en el historial de shell. NO usar salvo causa justificada.
+
+REMOTE="$1"
+ZERO="0000000000000000000000000000000000000000"
+
+SENSITIVE_RE='^(session_history\.db|session_history\.json|session_history_legacy_freeze\.json|codex_sub_costs\.json|capture\.log)$|^db_backups/.*\.db$'
+
+reject() {
+  echo "" >&2
+  echo "✋ PUSH RECHAZADO por hook pre-push." >&2
+  echo "$@" >&2
+  echo "" >&2
+  exit 1
+}
+
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+  # Borrado de rama remota: nada que inspeccionar.
+  [ "$local_sha" = "$ZERO" ] && continue
+
+  tree_files=$(git ls-tree -r "$local_sha" --name-only 2>/dev/null) || continue
+
+  case "$REMOTE" in
+    origin)
+      leaks=$(printf '%s\n' "$tree_files" | grep -E "$SENSITIVE_RE")
+      if [ -n "$leaks" ]; then
+        reject "Datos sensibles van al PÚBLICO ($REMOTE):
+$leaks
+
+El público se sincroniza SOLO con ./sync-public.sh
+(ver README 'Repository Strategy'). No fuerces esto con --no-verify."
+      fi
+      ;;
+    private)
+      if [ "$remote_ref" = "refs/heads/main" ]; then
+        if ! printf '%s\n' "$tree_files" | grep -q '^session_history\.db$'; then
+          reject "Push a private/main SIN session_history.db (commit incompleto).
+Si la DB no estaba commiteada, hacé: git add -f session_history.db
+y volvé a commitear. Saltear solo si es realmente intencional: --no-verify"
+        fi
+      fi
+      ;;
+  esac
+done
+
+exit 0

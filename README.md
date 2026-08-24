@@ -136,6 +136,24 @@ Este proyecto mantiene **dos remotos** con contenido diferente:
    ```
    Esto mergea `main` a `public`, excluye datos sensibles y pushea a `origin/public`.
 
+### Barreras automáticas anti-leak (incidente 2026-08-24)
+
+La separación privado/público no depende de recordar reglas:
+
+- **Hook `pre-push`** (`.git/hooks/pre-push`): rechaza cualquier push a
+  `origin` cuyo árbol contenga datos sensibles, y cualquier push a
+  `private/main` que no incluya la DB. Saltearlo requiere `--no-verify`
+  explícito (prohibido salvo causa justificada).
+- **`sync-public.sh` se auto-verifica**: chequea el commit local antes de
+  pushear (paso 5b) y ambos remotos después (paso 7b); aborta ante cualquier
+  rastro de datos sensibles.
+- El script usa `git rm --cached` para excluir datos: **no volver a
+  `git rm -f`** (con la DB como modificación del squash, `-f` fallaba en
+  silencio y el commit público salía con la DB adentro).
+
+Si el repo se reclona, restaurar el hook desde `.git/hooks/pre-push` (está
+versionado su lógica en este README; copiarlo de otra máquina o recrearlo).
+
 ### ¿Qué se excluye del público?
 
 Los siguientes archivos están en `.gitignore` del branch `public`:
