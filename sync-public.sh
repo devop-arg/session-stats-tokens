@@ -65,6 +65,17 @@ for F in $(git diff --name-only --diff-filter=U 2>/dev/null); do
   esac
 done
 
+# Conflictos de contenido en archivos normales (code/doc/config): el squash de
+# main -> public genera conflictos recurrentes porque public tiene historia
+# propia. La resolución canónica es SIEMPRE la versión de main (la fuente).
+for F in $(git diff --name-only --diff-filter=U 2>/dev/null); do
+  echo "=== 4c. Resolviendo conflicto de contenido: $F (gana main) ==="
+  git checkout --theirs -- "$F" && git add -- "$F" || {
+    echo "ERROR: no se pudo resolver $F automáticamente"
+    exit 1
+  }
+done
+
 if git diff --name-only --diff-filter=U | grep -q .; then
   echo "ERROR: quedan conflictos no resueltos después de excluir datos sensibles"
   git diff --name-only --diff-filter=U
