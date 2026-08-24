@@ -127,5 +127,6 @@
   "x-preview-f-free": "ox-alpha",
   "ox-alpha-free": "ox-alpha",
   "stealth/ox-alpha": "ox-alpha",
-  "deepseek-v4-flash-vision-exp": "deepseek-v4-flash"
+  "deepseek-v4-flash-vision-exp": "deepseek-v4-flash",
+  "minimaxai/minimax-m3": "minimax-m3"
 }
