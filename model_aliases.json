@@ -134,5 +134,6 @@
   "arcee-ai/trinity-large-thinking": "trinity-large-preview",
   "deepseek/deepseek-v3.2": "deepseek-v3.2",
   "openrouter/healer-alpha": "mimo-v2-pro",
-  "openrouter/hunter-alpha": "mimo-v2-pro"
+  "openrouter/hunter-alpha": "mimo-v2-pro",
+  "codex-auto-review": "gpt-5.6-luna"
 }

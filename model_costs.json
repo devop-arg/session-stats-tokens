@@ -350,11 +350,6 @@
     "output": 30.0,
     "cache": 0.5
   },
-  "codex-auto-review": {
-    "input": 0.2,
-    "output": 1.2,
-    "cache": 0.02
-  },
   "qwen3.7-plus": {
     "input": 0.4,
     "output": 1.6,
