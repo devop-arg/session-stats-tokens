@@ -123,6 +123,7 @@
   "x-ai/grok-4.1-fast": "x-ai/grok-4.1-fast",
   "xiaomi/mimo-v2-pro": "mimo-v2-pro",
   "zai-org/glm-5.2": "glm-5.2",
+  "zai/glm-5.3-flash": "glm-5.3-flash",
   "x-preview-f": "glm-5.3-flash",
   "x-preview-f-free": "glm-5.3-flash",
   "ox-alpha": "glm-5.3-flash",
