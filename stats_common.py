@@ -1440,7 +1440,9 @@ def get_zcode_session_stats(session_file):
                 out = usage.get("outputTokens", 0) or 0
                 if inp + out <= 0:
                     continue
-                model = (d.get("model") or {}).get("modelId") or "unknown"
+                model = normalize_model_name(
+                    (d.get("model") or {}).get("modelId") or "unknown"
+                )
                 cache_read = usage.get("cacheReadTokens", 0) or 0
                 cache_write = usage.get("cacheWriteTokens", 0) or 0
                 m = by_model.setdefault(model, {

@@ -10,7 +10,7 @@ Track token usage and estimated costs across Kilo, OpenCode, Codex, Hermes, and 
 - **Auto-detection**: Finds the most recently active session across all tools
 - **Token tracking**: Input, output, cache, and reasoning tokens per model
 - **Cost estimation**: Based on hardcoded per-model pricing ($/1M tokens)
-- **Persistent history**: Sessions saved to `session_history.json`, survives chat deletion
+- **Persistent history**: Sessions saved to `session_history.db` (SQLite), survives chat deletion
 - **Auto-capture**: Cron-ready `--capture-all` mode for background persistence
 
 ## Requirements
@@ -63,7 +63,7 @@ Prevents data loss when chat sessions are deleted:
 
 ### Data Backup (Automático)
 
-- **Cada 5 min**: `session-stats --capture-all` persiste sesiones a `session_history.db` y `session_history.json`
+- **Cada 5 min**: `session-stats --capture-all` persiste sesiones a `session_history.db`
 - **Diario 6 AM**: backup SQLite con rotación de 7 días en `db_backups/`
 - Cron configurado localmente, no trackeado en el repo
 
