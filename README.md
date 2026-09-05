@@ -1,12 +1,12 @@
 # Session Stats Tokens
 
-Track token usage and estimated costs across Kilo, OpenCode, Codex, and Hermes sessions.
+Track token usage and estimated costs across Kilo, OpenCode, Codex, Hermes, and ZCode sessions.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ## Features
 
-- **Multi-tool**: Reads from Kilo (SQLite), OpenCode (SQLite), Codex (JSONL), and Hermes (SQLite)
+- **Multi-tool**: Reads from Kilo (SQLite), OpenCode (SQLite), Codex (JSONL), Hermes (SQLite), and ZCode (JSONL)
 - **Auto-detection**: Finds the most recently active session across all tools
 - **Token tracking**: Input, output, cache, and reasoning tokens per model
 - **Cost estimation**: Based on hardcoded per-model pricing ($/1M tokens)
@@ -103,16 +103,20 @@ session-stats --capture-all
 
 El dashboard muestra dos métricas de cache con alcances distintos:
 
-- **Cache Ratio** del encabezado: ratio global histórico calculado con todas las
-  sesiones y la semántica de cache de cada fuente.
-- **Proporción de cache — modelos con cache**: ratio sólo sobre modelos/filas que
-  tuvieron `cache_read_tokens > 0`; sirve para comparar qué modelos aprovechan
-  más cache y puede ser mayor que el ratio global.
+- **Cache Ratio** del encabezado: ratio global histórico sobre sesiones
+  elegibles. Una sesión con menos de 5 requests se incluye; con 5 o más,
+  necesita un ratio de cache de al menos 5%.
+- **Proporción de cache — sesiones elegibles**: ratio global y por modelo usando
+  únicamente las filas de modelos pertenecientes a sesiones elegibles. Los
+  misses dentro de una sesión elegible permanecen en el denominador. Una sesión
+  de 5 o más requests con ratio menor al 5% se excluye completa, incluidos todos
+  sus modelos; tokens, requests, costos y datos históricos no se modifican.
 
-En la tabla **Uso diario de modelos y costos**, cada modelo muestra `Cache`,
-`Ratio`, `Total` y `Costo`. El `Ratio` diario usa el mismo denominador semántico:
-si la fuente ya incluye cache en input no duplica esos tokens; si no lo incluye,
-usa input efectivo más cache read.
+El ratio se calcula con la semántica de cada fuente: Codex usa el input que ya
+incluye cache; las demás fuentes usan input más cache read. El umbral se evalúa
+con el valor sin redondear y `cache_write_tokens` no cuenta como cache leído.
+Cuando no hay sesiones elegibles con cache medible, el ratio mostrado es `0%`
+por compatibilidad del payload, pero no representa un hit observado.
 
 ## Repository Strategy
 
@@ -201,6 +205,7 @@ En el branch `main` (privado) estos archivos **sí** están trackeados para back
 | Hermes | `~/.hermes/state.db` | SQLite |
 | Cursor | `~/.cursor/usage-events.jsonl` | JSONL (hook local) |
 | Grok CLI | `~/.grok/sessions/**/summary.json` | JSON + estimación de contexto |
+| ZCode | `~/.zcode/cli/rollout/model-io-sess_*.jsonl` | JSONL (usage real por request) |
 
 ## Model Pricing
 

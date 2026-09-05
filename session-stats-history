@@ -22,6 +22,7 @@ from stats_common import (
     normalize_model_name, calculate_cost,
     get_codex_sessions, has_real_usage_codex, get_codex_session_stats,
     get_opencode_sqlite_sessions, get_hermes_sessions, get_hermes_session_stats,
+    get_zcode_sessions, has_real_usage_zcode, get_zcode_session_stats,
 )
 
 WIDTH = 84
@@ -263,6 +264,26 @@ def load_full_data_by_month():
         else:
             normalized = normalize_model_name(sess.get("model", "unknown"))
             add_to_month(mmyy, normalized, sess.get("requests", 0), sess.get("input", 0), sess.get("output", 0), sess.get("cache", 0))
+
+    # 5. ZCode sessions not yet in SQLite
+    existing_zcode_ids = {s.replace("zcode_", "", 1) for s in existing_sids if s.startswith("zcode_")}
+    for sess_file in get_zcode_sessions():
+        if not has_real_usage_zcode(sess_file):
+            continue
+        stats = get_zcode_session_stats(sess_file)
+        sid = stats.get("session_id", "")
+        if not sid or sid in existing_zcode_ids:
+            continue
+        mmyy = date_to_mmyy(stats.get("date", ""))
+        if not mmyy:
+            continue
+        monthly[mmyy]["sessions"] += 1
+        monthly[mmyy]["requests"] += stats.get("requests", 0)
+        monthly[mmyy]["input"] += stats.get("input", 0)
+        monthly[mmyy]["output"] += stats.get("output", 0)
+        monthly[mmyy]["cache"] += stats.get("cache", 0)
+        for model, mdata in stats.get("by_model", {}).items():
+            add_to_month(mmyy, normalize_model_name(model), mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
 
     return monthly, historical_adjustment
 

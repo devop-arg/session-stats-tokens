@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import TimestampSigner, BadSignature, SignatureExpired
 from passlib.apache import HtpasswdFile
-from stats_common import DB_PATH, get_monthly_data, recalculate_historical_cost, effective_billable_tokens, effective_cache_read_tokens, effective_uncached_input_tokens, effective_cache_ratio_input, SOURCE_CACHE_SEMANTICS, init_db, normalize_model_name
+from stats_common import DB_PATH, get_monthly_data, recalculate_historical_cost, effective_billable_tokens, effective_cache_read_tokens, effective_uncached_input_tokens, effective_cache_ratio_input, SOURCE_CACHE_SEMANTICS, init_db, normalize_model_name, calculate_session_cache_ratio
 from pydantic import BaseModel
 
 app = FastAPI(title="session-stats dashboard")
@@ -28,6 +28,16 @@ app.mount("/vendor", StaticFiles(directory=str(SCRIPT_DIR / "stats-web/vendor"))
 
 ART_TZ = zoneinfo.ZoneInfo("America/Argentina/Buenos_Aires")
 ART_SQL_OFFSET = "-3 hours"
+
+# Fuentes por semántica de cache, derivadas de SOURCE_CACHE_SEMANTICS para que
+# el SQL no quede desincronizado cuando se agregue una fuente nueva.
+_SQL_IN_CLAUSE = lambda sources: "(" + ", ".join(f"'{s}'" for s in sources) + ")"
+SQL_SOURCES_INPUT_INCL_CACHE = _SQL_IN_CLAUSE(sorted(
+    s for s, sem in SOURCE_CACHE_SEMANTICS.items() if sem["input_includes_cache_read"]
+))
+SQL_SOURCES_CACHE_WRITE_BILLABLE = _SQL_IN_CLAUSE(sorted(
+    s for s, sem in SOURCE_CACHE_SEMANTICS.items() if sem["cache_write_billable"]
+))
 
 
 def _db():
@@ -78,6 +88,11 @@ def _row_cache_read_tokens(row):
     )
 
 
+def _session_cache_ratio(rows):
+    """Calcula el ratio sobre sesiones elegibles, sin I/O por sesión."""
+    return calculate_session_cache_ratio([dict(row) for row in rows])
+
+
 def _sql_effective_cache_read(cache_col: str, cache_read_col: str, cache_write_col: str) -> str:
     return (
         f"CASE WHEN ({cache_read_col}) = 0 AND ({cache_write_col}) = 0 AND ({cache_col}) > 0 "
@@ -90,8 +105,8 @@ def _sql_effective_tokens(source_col: str, input_col: str, output_col: str,
     effective_cache_read = _sql_effective_cache_read(cache_col, cache_read_col, cache_write_col)
     return (
         f"COALESCE(SUM(({input_col}) + ({output_col}) + "
-        f"CASE WHEN {source_col} = 'codex' THEN 0 ELSE ({effective_cache_read}) END + "
-        f"CASE WHEN {source_col} IN ('codex', 'hermes') THEN ({cache_write_col}) ELSE 0 END),0)"
+        f"CASE WHEN {source_col} IN {SQL_SOURCES_INPUT_INCL_CACHE} THEN 0 ELSE ({effective_cache_read}) END + "
+        f"CASE WHEN {source_col} IN {SQL_SOURCES_CACHE_WRITE_BILLABLE} THEN ({cache_write_col}) ELSE 0 END),0)"
     )
 
 
@@ -102,8 +117,8 @@ def _sql_effective_tokens_row(source_col: str, input_col: str, output_col: str,
     effective_cache_read = _sql_effective_cache_read(cache_col, cache_read_col, cache_write_col)
     return (
         f"COALESCE(({input_col}) + ({output_col}) + "
-        f"CASE WHEN {source_col} = 'codex' THEN 0 ELSE ({effective_cache_read}) END + "
-        f"CASE WHEN {source_col} IN ('codex', 'hermes') THEN ({cache_write_col}) ELSE 0 END, 0)"
+        f"CASE WHEN {source_col} IN {SQL_SOURCES_INPUT_INCL_CACHE} THEN 0 ELSE ({effective_cache_read}) END + "
+        f"CASE WHEN {source_col} IN {SQL_SOURCES_CACHE_WRITE_BILLABLE} THEN ({cache_write_col}) ELSE 0 END, 0)"
     )
 
 
@@ -112,7 +127,7 @@ def _sql_uncached_input(source_col: str, input_col: str, cache_col: str,
     """Input sin cache read; no modifica ni reemplaza el input crudo."""
     effective_cache_read = _sql_effective_cache_read(cache_col, cache_read_col, cache_write_col)
     return (
-        f"COALESCE(SUM(CASE WHEN {source_col} = 'codex' THEN "
+        f"COALESCE(SUM(CASE WHEN {source_col} IN {SQL_SOURCES_INPUT_INCL_CACHE} THEN "
         f"CASE WHEN ({input_col}) > ({effective_cache_read}) "
         f"THEN ({input_col}) - ({effective_cache_read}) ELSE 0 END "
         f"ELSE ({input_col}) END),0)"
@@ -124,7 +139,7 @@ def _sql_uncached_input_row(source_col: str, input_col: str, cache_col: str,
     """Input sin cache read para una fila individual, sin agregación SQL."""
     effective_cache_read = _sql_effective_cache_read(cache_col, cache_read_col, cache_write_col)
     return (
-        f"COALESCE(CASE WHEN {source_col} = 'codex' THEN "
+        f"COALESCE(CASE WHEN {source_col} IN {SQL_SOURCES_INPUT_INCL_CACHE} THEN "
         f"CASE WHEN ({input_col}) > ({effective_cache_read}) "
         f"THEN ({input_col}) - ({effective_cache_read}) ELSE 0 END "
         f"ELSE ({input_col}) END,0)"
@@ -147,7 +162,7 @@ def _sql_cache_ratio_input(source_col: str, input_col: str,
     effective_cache_read = _sql_effective_cache_read(cache_col, cache_read_col, cache_write_col)
     return (
         f"COALESCE(SUM(({input_col}) + "
-        f"CASE WHEN {source_col} = 'codex' THEN 0 ELSE ({effective_cache_read}) END),0)"
+        f"CASE WHEN {source_col} IN {SQL_SOURCES_INPUT_INCL_CACHE} THEN 0 ELSE ({effective_cache_read}) END),0)"
     )
 
 
@@ -377,7 +392,18 @@ def api_summary():
         (window_30d["start_ts"], window_30d["end_ts"])
     ).fetchone()[0]
 
+    ratio_rows = conn.execute("""
+        SELECT mu.session_id, mu.model, s.source,
+               s.requests AS session_requests,
+               mu.input_tokens, mu.cache_tokens,
+               mu.cache_read_tokens, mu.cache_write_tokens
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy'
+    """).fetchall()
+
     conn.close()
+    observed_ratio = _session_cache_ratio(ratio_rows)["ratio"]
 
     try:
         rh = recalculate_historical_cost()
@@ -407,7 +433,7 @@ def api_summary():
         "total_cache_input_tokens": overall["total_cache_input_tokens"],
         "total_tokens": overall["total_tokens"],
         "total_cost": round(overall["total_cost"], 2),
-        "cache_ratio": round((overall["total_cache_read_tokens"] / overall["cache_ratio_input_tokens"] * 100) if overall["cache_ratio_input_tokens"] > 0 else 0, 1),
+        "cache_ratio": observed_ratio,
         "cost_7d": round(cost_7d, 2),
         "cost_30d": round(cost_30d, 2),
         "header_totals_cli": totals_cli,
@@ -491,7 +517,20 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
         ORDER BY tokens DESC
     """, (start_utc, end_utc)).fetchall()
 
+    ratio_rows = conn.execute("""
+        SELECT mu.session_id, mu.model, s.source,
+               s.requests AS session_requests,
+               mu.input_tokens, mu.cache_tokens,
+               mu.cache_read_tokens, mu.cache_write_tokens
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
+    """, (start_utc, end_utc)).fetchall()
+
     conn.close()
+    ratio_result = _session_cache_ratio(ratio_rows)
+    observed_ratio = ratio_result["ratio"]
+    ratio_by_model = ratio_result["by_model"]
 
     # Reagrupar por nombre canónico (normalize + aliases) — mismo patrón que api_models
     agg = {}
@@ -528,11 +567,7 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
             "output_tokens": m["output_tokens"],
             "cache_tokens": m["cache_tokens"],
             "cache_input_tokens": m["cache_input_tokens"],
-            "cache_ratio": round(
-                (m["cache_read_tokens"] / m["cache_ratio_input_tokens"] * 100)
-                if m["cache_ratio_input_tokens"] > 0 else 0,
-                1,
-            ),
+            "cache_ratio": ratio_by_model.get(m["model"], {}).get("ratio", 0.0),
             "price_per_1m": round(
                 (m["cost"] / m["tokens"] * 1_000_000)
                 if m["tokens"] > 0 else 0,
@@ -541,10 +576,7 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
             "percent": round(m["tokens"] / total_tokens * 100, 1),
         })
 
-    cache_ratio = round(
-        (sess["total_cache_read_tokens"] / sess["cache_ratio_input_tokens"] * 100)
-        if sess["cache_ratio_input_tokens"] > 0 else 0, 1,
-    )
+    cache_ratio = observed_ratio
 
     return {
         "range": range,
@@ -1085,6 +1117,18 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
         WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
     """, (start_ts, end_ts)).fetchone()
 
+    ratio_rows = conn.execute("""
+        SELECT mu.session_id, mu.model, s.source,
+               s.requests AS session_requests,
+               mu.input_tokens, mu.cache_tokens,
+               mu.cache_read_tokens, mu.cache_write_tokens
+        FROM model_usage mu
+        JOIN sessions s ON s.id = mu.session_id
+        WHERE s.source != 'legacy' AND s.timestamp >= ? AND s.timestamp < ?
+    """, (start_ts, end_ts)).fetchall()
+    ratio_result = _session_cache_ratio(ratio_rows)
+    ratio_by_model = ratio_result["by_model"]
+
     conn.close()
 
     grouped_by_model: dict[str, dict[str, dict]] = {}
@@ -1131,11 +1175,7 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
             "output_tokens": row["output_tokens"],
             "cache_tokens": row["cache_tokens"],
             "cache_input_tokens": row["cache_input_tokens"],
-            "cache_ratio": round(
-                (row["cache_read_tokens"] / row["cache_ratio_input_tokens"] * 100)
-                if row["cache_ratio_input_tokens"] > 0 else 0,
-                1,
-            ),
+            "cache_ratio": ratio_by_model.get(row["model"], {}).get("ratio", 0.0),
             "requests": row["requests"],
             "cost": round(row["total_cost"], 2),
             "price_per_1m": round(row["total_cost"] / tt * 1_000_000, 4) if tt > 0 else 0,
@@ -1159,7 +1199,7 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
         "total_input_tokens_uncached": agg["input_tokens_uncached"],
         "total_output_tokens": agg["output_tokens"],
         "total_cache_input_tokens": agg["cache_input_tokens"],
-        "cache_ratio": round((agg["cache_read"] / agg["cache_input"] * 100) if agg["cache_input"] > 0 else 0, 1),
+        "cache_ratio": ratio_result["ratio"],
     }
 
 
@@ -1247,49 +1287,38 @@ def api_token_cost():
 
 @app.get("/api/cache-ratio")
 def api_cache_ratio():
-    """Proporción de tokens input servidos desde cache por modelo."""
+    """Proporción de tokens input servidos desde cache por sesiones elegibles."""
     conn = _db()
     rows = conn.execute("""
-        SELECT s.source, mu.model,
+        SELECT mu.session_id, s.requests AS session_requests, s.source, mu.model,
                mu.input_tokens, mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens
         FROM model_usage mu
         JOIN sessions s ON s.id = mu.session_id
         WHERE s.source != 'legacy'
-          AND (mu.cache_read_tokens > 0 OR (mu.cache_tokens > 0 AND mu.cache_write_tokens = 0))
     """).fetchall()
     conn.close()
 
-    from collections import defaultdict
-    agg = defaultdict(lambda: {"input": 0, "cache_read": 0})
-    overall_input = 0
-    overall_cache_read = 0
-    for r in rows:
-        model = normalize_model_name(r["model"])
-        cache_read = _row_cache_read_tokens(r)
-        eff_input = effective_cache_ratio_input(
-            r["source"], r["input_tokens"], cache_read
-        )
-        agg[model]["input"] += eff_input
-        agg[model]["cache_read"] += cache_read
-        overall_input += eff_input
-        overall_cache_read += cache_read
-
+    ratio_result = _session_cache_ratio(rows)
     models = []
-    for model, d in sorted(agg.items(), key=lambda x: x[1]["cache_read"] / max(1, x[1]["input"]), reverse=True):
-        if d["cache_read"] == 0 or d["input"] < 1000000:
+    for model, data in sorted(
+        ratio_result["by_model"].items(),
+        key=lambda item: item[1]["cache_read_tokens"] / max(1, item[1]["ratio_input_tokens"]),
+        reverse=True,
+    ):
+        if data["cache_read_tokens"] == 0 or data["ratio_input_tokens"] < 1_000_000:
             continue
         models.append({
             "model": model,
-            "input_tokens": d["input"],
-            "cache_tokens": d["cache_read"],
-            "ratio": round(d["cache_read"] / d["input"] * 100, 1),
+            "input_tokens": data["ratio_input_tokens"],
+            "cache_tokens": data["cache_read_tokens"],
+            "ratio": data["ratio"],
         })
 
     return {
         "overall": {
-            "ratio": round(overall_cache_read / overall_input * 100, 1) if overall_input > 0 else 0,
-            "cached": overall_cache_read,
-            "uncached": overall_input - overall_cache_read,
+            "ratio": ratio_result["ratio"],
+            "cached": ratio_result["cache_read_tokens"],
+            "uncached": ratio_result["ratio_input_tokens"] - ratio_result["cache_read_tokens"],
         },
         "models": models,
     }

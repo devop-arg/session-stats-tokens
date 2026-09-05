@@ -84,6 +84,7 @@
   "gpt-5.2-codex": "gpt-5.2-codex",
   "gpt-5.3-codex": "gpt-5.3-codex",
   "gpt-5.4": "gpt-5.4",
+  "gpt-5.6-sol-900k": "gpt-5.6-sol",
   "grok-4.1-fast": "x-ai/grok-4.1-fast",
   "grok-code": "grok-code-fast-1-optimized-free",
   "grok-code-fast": "grok-code-fast-1-optimized-free",

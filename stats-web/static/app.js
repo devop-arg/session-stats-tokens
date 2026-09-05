@@ -657,6 +657,7 @@ if (document.querySelector('.stats-grid')) {
     hermes: '#ff8904',
     opencode: '#3b82f6',
     codex: '#22c55e',
+    zcode: '#06b6d4',
     cursor: '#a855f7',
     kilocode: '#64748b',
     legacy: '#94a3b8',
