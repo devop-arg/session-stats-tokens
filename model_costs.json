@@ -390,16 +390,6 @@
     "output": 0.12,
     "cache": 0.006
   },
-  "poolside/laguna-s-2.1": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "meituan/longcat-2.0": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
   "poolside/laguna-xs-2.1": {
     "input": 0.0,
     "output": 0.0,
@@ -414,11 +404,6 @@
     "input": 0.15,
     "output": 0.5,
     "cache": 0.03
-  },
-  "zai/glm-5.3": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
   },
   "nemotron-3.5-lightning": {
     "input": 0.08,
