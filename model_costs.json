@@ -1,4 +1,9 @@
 {
+  "big-pickle": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
   "claude-haiku-4.5": {
     "cache": 0.1,
     "input": 1,
@@ -39,6 +44,11 @@
     "input": 0.22,
     "output": 0.66
   },
+  "deepseek-v4-flash-vision-exp": {
+    "cache": 0.007,
+    "input": 0.22,
+    "output": 0.66
+  },
   "deepseek-v4-pro": {
     "cache": 0.0037,
     "input": 0.435,
@@ -49,10 +59,25 @@
     "input": 0.435,
     "output": 0.87
   },
+  "deepseek-v4.1-flash": {
+    "cache": 0.003,
+    "input": 0.15,
+    "output": 0.6
+  },
+  "default": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
+  "free": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
   "gemini-3-flash": {
+    "cache": 0.0,
     "input": 0.5,
-    "output": 3,
-    "cache": 0.0
+    "output": 3
   },
   "gemini-3-pro": {
     "input": 2,
@@ -72,25 +97,40 @@
     "input": 0.25,
     "output": 1.5
   },
+  "gemini-3.1-flash-lite-preview": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
   "gemini-3.1-pro": {
     "cache": 0.2,
     "input": 2,
     "output": 12
   },
+  "gemini-3.5-flash": {
+    "cache": 0.15,
+    "input": 1.5,
+    "output": 9.0
+  },
   "gemma-4-26b": {
+    "cache": 0.0,
     "input": 0.15,
-    "output": 0.6,
-    "cache": 0.0
+    "output": 0.6
   },
   "gemma-4-31b": {
+    "cache": 0.0,
     "input": 0.15,
-    "output": 0.4,
-    "cache": 0.0
+    "output": 0.4
   },
   "gemma-4-31b-it": {
     "cache": 0.09,
     "input": 0.12,
     "output": 0.35
+  },
+  "giga-potato": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
   },
   "glm-4.7": {
     "cache": 0.195,
@@ -117,10 +157,20 @@
     "input": 1.4,
     "output": 4.4
   },
+  "glm-5.3": {
+    "cache": 0.26,
+    "input": 1.4,
+    "output": 4.4
+  },
+  "glm-5.3-flash": {
+    "cache": 0.03,
+    "input": 0.15,
+    "output": 0.5
+  },
   "gpt-5-mini": {
+    "cache": 0.0,
     "input": 0.25,
-    "output": 2,
-    "cache": 0.0
+    "output": 2
   },
   "gpt-5.1-codex-max": {
     "input": 1.25,
@@ -131,9 +181,9 @@
     "output": 14
   },
   "gpt-5.2-codex": {
+    "cache": 0.0,
     "input": 1.75,
-    "output": 14,
-    "cache": 0.0
+    "output": 14
   },
   "gpt-5.3-codex": {
     "cache": 0.175,
@@ -155,20 +205,90 @@
     "input": 5.0,
     "output": 30.0
   },
+  "gpt-5.6-luna": {
+    "cache": 0.02,
+    "input": 0.2,
+    "output": 1.2
+  },
+  "gpt-5.6-sol": {
+    "cache": 0.5,
+    "input": 5.0,
+    "output": 30.0
+  },
+  "gpt-5.6-terra": {
+    "cache": 0.25,
+    "input": 2.5,
+    "output": 15.0
+  },
+  "gpt-6-astra": {
+    "cache": 1.0,
+    "input": 10.0,
+    "output": 50.0
+  },
+  "grok-4": {
+    "cache": 0.5,
+    "input": 2.0,
+    "output": 6.0
+  },
+  "grok-4.1": {
+    "cache": 0.5,
+    "input": 2.0,
+    "output": 6.0
+  },
+  "grok-4.5": {
+    "cache": 0.5,
+    "input": 2.0,
+    "output": 6.0
+  },
   "grok-code-fast-1-optimized-free": {
     "cache": 0.02,
     "input": 0.2,
     "output": 1.5
+  },
+  "kilo-auto/balanced": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
+  "kilo-auto/free": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
   },
   "kimi-k2.5": {
     "cache": 0.09,
     "input": 0.5,
     "output": 2.6
   },
+  "kimi-k2.7-code": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
+  "kimi-k3": {
+    "cache": 0.3,
+    "input": 3.0,
+    "output": 15.0
+  },
+  "laguna-s-2.1": {
+    "cache": 0.01,
+    "input": 0.1,
+    "output": 0.2
+  },
   "ling-2.6-lt": {
     "cache": 0.015,
     "input": 0.075,
     "output": 0.625
+  },
+  "ling-3.0-flash": {
+    "cache": 0.0042,
+    "input": 0.021,
+    "output": 0.063
+  },
+  "longcat-2.0": {
+    "cache": 0.006,
+    "input": 0.3,
+    "output": 1.2
   },
   "mimo-v2-omni": {
     "cache": 0.003,
@@ -176,9 +296,9 @@
     "output": 0.28
   },
   "mimo-v2-pro": {
+    "cache": 0.0,
     "input": 1,
-    "output": 3,
-    "cache": 0.0
+    "output": 3
   },
   "mimo-v2.5": {
     "cache": 0.003,
@@ -191,9 +311,9 @@
     "output": 0.87
   },
   "minimax-m2.1": {
+    "cache": 0.0,
     "input": 0.27,
-    "output": 0.95,
-    "cache": 0.0
+    "output": 0.95
   },
   "minimax-m2.5": {
     "cache": 0.03,
@@ -210,10 +330,25 @@
     "input": 0.3,
     "output": 1.2
   },
+  "muse-spark-1.2-cont": {
+    "cache": 0.002,
+    "input": 0.1,
+    "output": 0.2
+  },
+  "muse-spark-1.3-cont": {
+    "cache": 0.002,
+    "input": 0.1,
+    "output": 0.2
+  },
   "nemotron-3-ultra": {
     "cache": 0.1,
     "input": 0.5,
     "output": 2.2
+  },
+  "nemotron-3.5-lightning": {
+    "cache": 0.2,
+    "input": 0.08,
+    "output": 0.04
   },
   "nex-agi/nex-n2": {
     "cache": 0.025,
@@ -225,10 +360,40 @@
     "input": 5.0,
     "output": 25.0
   },
+  "owl-alpha": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
+  "poolside/laguna-xs-2.1": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
+  "qwen3.6-flash": {
+    "cache": 0.0,
+    "input": 0.188,
+    "output": 1.125
+  },
   "qwen3.6-plus": {
     "cache": 0.5,
     "input": 0.5,
     "output": 3.0
+  },
+  "qwen3.7-plus": {
+    "cache": 0.04,
+    "input": 0.4,
+    "output": 1.6
+  },
+  "qwen3.8-flash": {
+    "cache": 0.016,
+    "input": 0.15,
+    "output": 0.47
+  },
+  "qwen3.8-max": {
+    "cache": 0.25,
+    "input": 2.0,
+    "output": 6.0
   },
   "step-3.5-flash": {
     "cache": 0.02,
@@ -240,194 +405,39 @@
     "input": 0.2,
     "output": 1.15
   },
+  "taste-1": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
+  "tencent/hy3": {
+    "cache": 0.035,
+    "input": 0.14,
+    "output": 0.58
+  },
+  "trinity": {
+    "cache": 0.0,
+    "input": 0.0,
+    "output": 0.0
+  },
   "trinity-large-preview": {
+    "cache": 0.0,
     "input": 0.25,
-    "output": 1.0,
-    "cache": 0.0
+    "output": 1.0
+  },
+  "trinity-large-thinking": {
+    "cache": 0.06,
+    "input": 0.25,
+    "output": 0.8
+  },
+  "upstage/solar-pro4": {
+    "cache": 0.006,
+    "input": 0.03,
+    "output": 0.12
   },
   "x-ai/grok-4.1-fast": {
     "cache": 0.05,
     "input": 0.2,
     "output": 0.5
-  },
-  "tencent/hy3": {
-    "input": 0.14,
-    "output": 0.58,
-    "cache": 0.035
-  },
-  "big-pickle": {
-    "input": 0.0,
-    "cache": 0.0,
-    "output": 0.0
-  },
-  "free": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "gemini-3.1-flash-lite-preview": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "gemini-3.5-flash": {
-    "input": 1.5,
-    "output": 9.0,
-    "cache": 0.15
-  },
-  "giga-potato": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "kilo-auto/balanced": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "kilo-auto/free": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "kimi-k2.7-code": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "owl-alpha": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "taste-1": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "trinity": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "trinity-large-thinking": {
-    "input": 0.25,
-    "output": 0.8,
-    "cache": 0.06
-  },
-  "default": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "grok-4.5": {
-    "input": 2.0,
-    "output": 6.0,
-    "cache": 0.5
-  },
-  "grok-4": {
-    "input": 2.0,
-    "output": 6.0,
-    "cache": 0.5
-  },
-  "grok-4.1": {
-    "input": 2.0,
-    "output": 6.0,
-    "cache": 0.5
-  },
-  "gpt-5.6-luna": {
-    "input": 0.2,
-    "output": 1.2,
-    "cache": 0.02
-  },
-  "gpt-5.6-terra": {
-    "input": 2.5,
-    "output": 15.0,
-    "cache": 0.25
-  },
-  "gpt-5.6-sol": {
-    "input": 5.0,
-    "output": 30.0,
-    "cache": 0.5
-  },
-  "qwen3.7-plus": {
-    "input": 0.4,
-    "output": 1.6,
-    "cache": 0.04
-  },
-  "ling-3.0-flash": {
-    "input": 0.021,
-    "output": 0.063,
-    "cache": 0.0042
-  },
-  "laguna-s-2.1": {
-    "input": 0.1,
-    "output": 0.2,
-    "cache": 0.01
-  },
-  "qwen3.6-flash": {
-    "input": 0.188,
-    "output": 1.125,
-    "cache": 0.0
-  },
-  "longcat-2.0": {
-    "input": 0.3,
-    "output": 1.2,
-    "cache": 0.006
-  },
-  "qwen3.8-max": {
-    "input": 2.0,
-    "output": 6.0,
-    "cache": 0.25
-  },
-  "upstage/solar-pro4": {
-    "input": 0.03,
-    "output": 0.12,
-    "cache": 0.006
-  },
-  "poolside/laguna-xs-2.1": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
-  },
-  "glm-5.3": {
-    "input": 1.4,
-    "output": 4.4,
-    "cache": 0.26
-  },
-  "glm-5.3-flash": {
-    "input": 0.15,
-    "output": 0.5,
-    "cache": 0.03
-  },
-  "nemotron-3.5-lightning": {
-    "input": 0.08,
-    "output": 0.04,
-    "cache": 0.2
-  },
-  "qwen3.8-flash": {
-    "input": 0.15,
-    "output": 0.47,
-    "cache": 0.016
-  },
-  "kimi-k3": {
-    "input": 3.0,
-    "output": 15.0,
-    "cache": 0.3
-  },
-  "gpt-6-astra": {
-    "input": 10.0,
-    "output": 50.0,
-    "cache": 1.0
-  },
-  "muse-spark-1.3-cont": {
-    "input": 0.1,
-    "output": 0.2,
-    "cache": 0.002
-  },
-  "muse-spark-1.2-cont": {
-    "input": 0.1,
-    "output": 0.2,
-    "cache": 0.002
   }
 }

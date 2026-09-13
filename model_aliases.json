@@ -143,5 +143,10 @@
   "meituan/longcat-2.0": "longcat-2.0",
   "poolside/laguna-s-2.1": "laguna-s-2.1",
   "muse-spark-1.3-contributor": "muse-spark-1.3-cont",
-  "muse-spark-1.2-contributor": "muse-spark-1.2-cont"
+  "muse-spark-1.2-contributor": "muse-spark-1.2-cont",
+  "gpt-5.6-luna-900k": "gpt-5.6-luna",
+  "gpt-5.6-terra-900k": "gpt-5.6-terra",
+  "gpt-5.4-900k": "gpt-5.4",
+  "gpt-6-astra-900k": "gpt-6-astra",
+  "gpt-daybreak-blue-latest-900k": "gpt-5.6-sol"
 }
