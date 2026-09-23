@@ -1543,10 +1543,14 @@ def get_claude_session_stats(session):
     cache_write (se factura aparte, ~2x input para TTL 1h — verificado
     empíricamente contra totalCostUSD, no es input normal).
 
-    Costo: si hay evento cost-state con totalCostUSD > 0, se usa como costo
-    real y se reparte entre modelos vía modelUsage.costUSD. Fallback:
-    estimación con calculate_cost (fuente 'claude', incluye cache_write a su
-    precio 'cache_write' de model_costs.json).
+    Costo y tokens: si hay evento cost-state con totalCostUSD > 0, el costo y
+    los tokens de modelUsage son AUTORITATIVOS (Claude Code los factura aunque
+    el evento assistant no haya quedado persistido en el JSONL, y ahí aparecen
+    modelos sin eventos propios, ej. el haiku generador de títulos).
+    modelUsage no trae requests: para filas sintetizadas se usa 1 (mínimo
+    factual: usage>0 implica al menos un request). Fallback: eventos
+    deduplicados + estimación con calculate_cost (fuente 'claude', incluye
+    cache_write a su precio 'cache_write' de model_costs.json).
 
     Dedupe (2026-09-23): el JSONL re-emite cada evento assistant 2-5 veces
     (mismo message.id + requestId, usage idéntico; verificado empíricamente,
@@ -1565,6 +1569,7 @@ def get_claude_session_stats(session):
     requests = 0
     real_cost = 0.0
     model_usage_cost = {}
+    model_usage_tokens = {}
     # Dedupe por (modelo, message.id): {clave: [requests, input, output, cr, cw, thinking]}
     seen_msgs = {}
 
@@ -1640,33 +1645,73 @@ def get_claude_session_stats(session):
                         mc = mdata.get("costUSD")
                         if mc:
                             model_usage_cost[normalize_model_name(mname)] = float(mc)
+                        # Tokens autoritativos del cost-state (último gana).
+                        model_usage_tokens[normalize_model_name(mname)] = {
+                            "input": mdata.get("inputTokens") or 0,
+                            "output": mdata.get("outputTokens") or 0,
+                            "cache_read": mdata.get("cacheReadInputTokens") or 0,
+                            "cache_write": mdata.get("cacheCreationInputTokens") or 0,
+                            "reasoning": mdata.get("thinkingTokens") or 0,
+                        }
 
-    # Costo por modelo: real (modelUsage) si existe; fallback estimación.
+    # Costo y tokens por modelo. Si el cost-state es válido, modelUsage es
+    # autoritativo (tokens facturados; incluye modelos sin eventos
+    # persistidos). Para esos modelos sintetizados: requests=1 (mínimo
+    # factual: usage>0 implica al menos un request) y el costo del modelUsage.
     by_model_with_cost = {}
-    for model, mdata in by_model.items():
-        if model in model_usage_cost:
-            c = model_usage_cost[model]
-        else:
-            c = calculate_cost(model, mdata["input"], mdata["output"],
-                               mdata["cache"], source="claude",
-                               cache_write_tokens=mdata["cache_write"])
-        by_model_with_cost[model] = {**mdata, "cost": c}
+    if real_cost > 0 and model_usage_tokens:
+        for model, t in model_usage_tokens.items():
+            ev = by_model.get(model) or {}
+            by_model_with_cost[model] = {
+                "requests": ev.get("requests") or 1,
+                "input": t["input"],
+                "output": t["output"],
+                "cache_read": t["cache_read"],
+                "cache_write": t["cache_write"],
+                "cache": t["cache_read"],  # cache = solo lectura; write va aparte
+                "reasoning": t["reasoning"],
+                "cost": model_usage_cost.get(model, 0.0),
+            }
+        # Modelos con eventos pero ausentes en modelUsage (no debería pasar):
+        # conservar eventos con costo estimado.
+        for model, mdata in by_model.items():
+            if model not in by_model_with_cost:
+                by_model_with_cost[model] = {**mdata, "cost": calculate_cost(
+                    model, mdata["input"], mdata["output"], mdata["cache"],
+                    source="claude",
+                    cache_write_tokens=mdata["cache_write"])}
+    else:
+        # Fallback: eventos deduplicados; costo real por modelo si modelUsage
+        # lo trajo, si no estimación (con cache_write).
+        for model, mdata in by_model.items():
+            if model in model_usage_cost:
+                c = model_usage_cost[model]
+            else:
+                c = calculate_cost(model, mdata["input"], mdata["output"],
+                                   mdata["cache"], source="claude",
+                                   cache_write_tokens=mdata["cache_write"])
+            by_model_with_cost[model] = {**mdata, "cost": c}
 
     # Fallback de fecha: mtime del archivo más nuevo.
     if first_ts is None:
         first_ts = session.get("mtime") or 0
 
+    # Con cost-state válido, los totales salen de by_model_with_cost (que
+    # incluye los tokens autoritativos de modelUsage, incluso modelos sin
+    # eventos persistidos). Sin cost-state, de los eventos deduplicados.
+    src_models = by_model_with_cost if (real_cost > 0 and model_usage_tokens) else by_model
+
     return {
         "session_id": session_id,
         "date": (datetime.datetime.fromtimestamp(first_ts).isoformat()
                  if first_ts else ""),
-        "requests": requests,
-        "input": sum(m["input"] for m in by_model.values()),
-        "output": sum(m["output"] for m in by_model.values()),
-        "cache": sum(m["cache"] for m in by_model.values()),
-        "cache_read": sum(m["cache_read"] for m in by_model.values()),
-        "cache_write": sum(m["cache_write"] for m in by_model.values()),
-        "reasoning": sum(m["reasoning"] for m in by_model.values()),
+        "requests": sum(m.get("requests", 0) for m in src_models.values()),
+        "input": sum(m["input"] for m in src_models.values()),
+        "output": sum(m["output"] for m in src_models.values()),
+        "cache": sum(m["cache"] for m in src_models.values()),
+        "cache_read": sum(m["cache_read"] for m in src_models.values()),
+        "cache_write": sum(m["cache_write"] for m in src_models.values()),
+        "reasoning": sum(m["reasoning"] for m in src_models.values()),
         "cost": (real_cost if real_cost > 0
                  else sum(m["cost"] for m in by_model_with_cost.values())),
         "has_real_cost": real_cost > 0,

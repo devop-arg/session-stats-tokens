@@ -225,9 +225,11 @@ En el branch `main` (privado) estos archivos **sí** están trackeados para back
   (mismo `message.id` + `requestId`, usage idéntico). El parser dedupea por
   `message.id` (1 request por id, merge `max()` por campo); sin id no se
   dedupea. Sin esto tokens/requests/reasoning quedan inflados ~2.4x.
-- **Costo**: si el JSONL trae evento `cost-state` con `totalCostUSD > 0`, ese es
-  el costo real y se reparte por modelo vía `modelUsage.costUSD`. Fallback:
-  estimación con `calculate_cost(source="claude")`.
+- **Costo y tokens**: si el JSONL trae evento `cost-state` con `totalCostUSD > 0`,
+  el costo y los tokens de `modelUsage` son autoritativos (los factura aunque el
+  evento `assistant` no haya quedado persistido, e incluye modelos sin eventos
+  propios, ej. el haiku generador de títulos; para esos, requests=1). Fallback:
+  eventos deduplicados + estimación con `calculate_cost(source="claude")`.
 - **Upsert**: en `--capture-all` se re-captura (upsert) toda sesión cuyo JSONL
   tenga mtime < 15 min; las más viejas usan skip-if-exists. Las sesiones son
   cortas y el recambio alto: sin la ventana, una sesión que cierra entre dos
