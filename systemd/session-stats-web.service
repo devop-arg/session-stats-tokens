@@ -17,8 +17,7 @@ StandardError=append:/var/log/session-stats-web.err.log
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
-BindReadOnlyPaths=/home/capw/scripts/session-stats/session_history.db
-ReadWritePaths=
+ReadWritePaths=/home/capw/scripts/session-stats/session_history.db /home/capw/scripts/session-stats/model_costs.json /home/capw/scripts/session-stats/model_backups
 
 [Install]
 WantedBy=multi-user.target

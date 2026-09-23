@@ -321,5 +321,78 @@ class EndpointCacheRatioTests(unittest.TestCase):
         self.assertNotIn("mixed_model_a", cache_models)
 
 
+class CacheWriteDenominatorTests(unittest.TestCase):
+    """El cache write entra al denominador solo para fuentes billable-aparte.
+
+    Decisión del dueño (2026-09-23): el cache write es cache miss facturado
+    aparte; para claude/hermes suma al denominador del ratio. Para codex/zcode
+    (input_includes_cache_read) el denominador no cambia.
+    """
+
+    def test_claude_write_enters_denominator(self):
+        result = calculate_session_cache_ratio([
+            {
+                "session_id": "claude_sess",
+                "session_requests": 10,
+                "source": "claude",
+                "model": "claude-opus-5-5",
+                "input_tokens": 100,
+                "cache_tokens": 0,
+                "cache_read_tokens": 8000,
+                "cache_write_tokens": 4000,
+            },
+        ])
+        # denominador = 100 + 8000 + 4000 = 12100 → ratio = 8000/12100
+        self.assertAlmostEqual(result["ratio"], round(8000 / 12100 * 100, 1), places=5)
+
+    def test_hermes_write_enters_denominator(self):
+        result = calculate_session_cache_ratio([
+            {
+                "session_id": "hermes_sess",
+                "session_requests": 10,
+                "source": "hermes",
+                "model": "m",
+                "input_tokens": 1000,
+                "cache_tokens": 0,
+                "cache_read_tokens": 1000,
+                "cache_write_tokens": 1000,
+            },
+        ])
+        # denominador = 1000 + 1000 + 1000 = 3000 → ratio = 1000/3000
+        self.assertAlmostEqual(result["ratio"], round(1000 / 3000 * 100, 1), places=5)
+
+    def test_codex_denominator_unchanged_with_write(self):
+        result = calculate_session_cache_ratio([
+            {
+                "session_id": "codex_sess",
+                "session_requests": 10,
+                "source": "codex",
+                "model": "gpt-5.6-luna",
+                "input_tokens": 10000,
+                "cache_tokens": 4000,
+                "cache_read_tokens": 4000,
+                "cache_write_tokens": 5000,
+            },
+        ])
+        # codex: input ya incluye cache; el write NO entra al denominador.
+        # cache read efectivo = 4000 → 4000/10000
+        self.assertAlmostEqual(result["ratio"], 40.0, places=5)
+
+    def test_zero_write_keeps_legacy_behavior(self):
+        result = calculate_session_cache_ratio([
+            {
+                "session_id": "legacy",
+                "session_requests": 10,
+                "source": "hermes",
+                "model": "m",
+                "input_tokens": 9000,
+                "cache_tokens": 1000,
+                "cache_read_tokens": 1000,
+                "cache_write_tokens": 0,
+            },
+        ])
+        self.assertAlmostEqual(result["ratio"], 10.0, places=5)
+
+
 if __name__ == "__main__":
     unittest.main()

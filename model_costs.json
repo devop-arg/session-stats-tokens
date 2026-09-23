@@ -450,5 +450,10 @@
     "input": 0.0,
     "output": 0.0,
     "cache": 0.0
+  },
+  "mimo-v2.6-flash": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
   }
 }

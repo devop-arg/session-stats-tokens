@@ -56,7 +56,7 @@ denominator = effective_cache_ratio_input(
 ratio = cache_read / denominator * 100 if denominator else 0.0
 ```
 
-La comparación contra `5.0` usa el valor no redondeado; el redondeo ocurre solo al formar el payload visible. La semántica existente se conserva: Codex usa el input que ya incluye cache; las demás fuentes usan input más cache read. `cache_write_tokens` solo no produce cache read. El fallback legacy de `cache_tokens` sí produce cache read cuando read/write son cero.
+La comparación contra `5.0` usa el valor no redondeado; el redondeo ocurre solo al formar el payload visible. La semántica existente se conserva: Codex usa el input que ya incluye cache; las demás fuentes usan input más cache read. **Actualización 2026-09-23 (decisión del dueño)**: para las fuentes que facturan el cache write aparte y no incluyen cache en el input (claude, hermes), el cache write también suma al denominador como cache miss facturado (`effective_cache_ratio_input` y su espejo SQL `_sql_cache_ratio_input`). El fallback legacy de `cache_tokens` sí produce cache read cuando read/write son cero.
 
 Una vez elegible una sesión, todas sus filas `model_usage` participan del ratio del modelo, incluidos sus cache misses. Una sesión multi-modelo se filtra completa, según la decisión del dueño.
 

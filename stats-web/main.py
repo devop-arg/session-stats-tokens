@@ -38,6 +38,14 @@ SQL_SOURCES_INPUT_INCL_CACHE = _SQL_IN_CLAUSE(sorted(
 SQL_SOURCES_CACHE_WRITE_BILLABLE = _SQL_IN_CLAUSE(sorted(
     s for s, sem in SOURCE_CACHE_SEMANTICS.items() if sem["cache_write_billable"]
 ))
+# Fuentes donde el cache write es facturable APARTE y además el input NO
+# incluye el cache read: su write entra al denominador del cache ratio como
+# cache miss (claude, hermes). Para input_includes_cache_read (codex/zcode)
+# el denominador no cambia.
+SQL_SOURCES_RATIO_WRITE = _SQL_IN_CLAUSE(sorted(
+    s for s, sem in SOURCE_CACHE_SEMANTICS.items()
+    if sem["cache_write_billable"] and not sem["input_includes_cache_read"]
+))
 
 
 def _db():
@@ -160,9 +168,12 @@ def _sql_cache_input_row(cache_col: str, cache_read_col: str, cache_write_col: s
 def _sql_cache_ratio_input(source_col: str, input_col: str,
                            cache_col: str, cache_read_col: str, cache_write_col: str) -> str:
     effective_cache_read = _sql_effective_cache_read(cache_col, cache_read_col, cache_write_col)
+    # El cache write suma al denominador solo para fuentes que lo facturan
+    # aparte y no incluyen cache en el input (claude/hermes): es cache miss.
     return (
         f"COALESCE(SUM(({input_col}) + "
-        f"CASE WHEN {source_col} IN {SQL_SOURCES_INPUT_INCL_CACHE} THEN 0 ELSE ({effective_cache_read}) END),0)"
+        f"CASE WHEN {source_col} IN {SQL_SOURCES_INPUT_INCL_CACHE} THEN 0 ELSE ({effective_cache_read}) END + "
+        f"CASE WHEN {source_col} IN {SQL_SOURCES_RATIO_WRITE} THEN ({cache_write_col}) ELSE 0 END),0)"
     )
 
 
@@ -865,30 +876,40 @@ def api_recalculate_history():
     conn = sqlite3.connect(str(DB_PATH))
     mrows = conn.execute(
         "SELECT mu.id, mu.session_id, mu.model, mu.input_tokens, mu.output_tokens, "
-        "mu.cache_tokens, mu.cost, s.source "
+        "mu.cache_tokens, mu.cache_write_tokens, mu.cost, s.source "
         "FROM model_usage mu JOIN sessions s ON s.id = mu.session_id"
     ).fetchall()
     updated = 0
+    claude_touched = 0
     for mr in mrows:
         mu_id = mr[0]
         model = mr[2]
         inp = mr[3]
         out = mr[4]
         cache = mr[5]
-        old_cost = mr[6]
-        source = mr[7]
-        new_cost = calculate_cost(model, inp, out, cache, source=source)
+        cw = mr[6] or 0
+        old_cost = mr[7]
+        source = mr[8]
+        sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+        cw_billable = sem["cache_write_billable"] and not sem["input_includes_cache_read"]
+        new_cost = calculate_cost(model, inp, out, cache, source=source,
+                                  cache_write_tokens=cw if cw_billable else 0)
         if abs(new_cost - old_cost) > 0.0001:
             conn.execute("UPDATE model_usage SET cost=? WHERE id=?", (new_cost, mu_id))
             updated += 1
+            if source == "claude":
+                claude_touched += 1
     if updated:
         conn.commit()
+        # El costo de las sesiones claude es autoritativo (sale del cost-state
+        # del JSONL de Claude Code): no se pisa con la suma de model_usage.
         conn.execute(
-            "UPDATE sessions SET cost = (SELECT COALESCE(SUM(cost), 0) FROM model_usage WHERE session_id = sessions.id)"
+            "UPDATE sessions SET cost = (SELECT COALESCE(SUM(cost), 0) FROM model_usage WHERE session_id = sessions.id) "
+            "WHERE source != 'claude'"
         )
         conn.commit()
     conn.close()
-    return {"success": True, "updated": updated}
+    return {"success": True, "updated": updated, "claude_updated": claude_touched}
 
 
 @app.get("/api/sessions")

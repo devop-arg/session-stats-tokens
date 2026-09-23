@@ -12,7 +12,7 @@ from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from stats_common import calculate_cost, DB_PATH
+from stats_common import calculate_cost, DB_PATH, SOURCE_CACHE_SEMANTICS
 
 DRY_RUN = "--dry-run" in sys.argv
 
@@ -28,7 +28,7 @@ def main():
     # 1. Recalcular model_usage
     rows = conn.execute(
         "SELECT mu.session_id, mu.model, mu.requests, mu.input_tokens, mu.output_tokens, "
-        "mu.cache_tokens, mu.cost, s.source "
+        "mu.cache_tokens, mu.cache_write_tokens, mu.cost, s.source "
         "FROM model_usage mu JOIN sessions s ON s.id = mu.session_id"
     ).fetchall()
 
@@ -38,7 +38,11 @@ def main():
     changed = 0
 
     for r in rows:
-        new_cost = calculate_cost(r["model"], r["input_tokens"], r["output_tokens"], r["cache_tokens"], source=r["source"])
+        cw = r["cache_write_tokens"] or 0
+        sem = SOURCE_CACHE_SEMANTICS.get(r["source"], SOURCE_CACHE_SEMANTICS["unknown"])
+        cw_billable = sem["cache_write_billable"] and not sem["input_includes_cache_read"]
+        new_cost = calculate_cost(r["model"], r["input_tokens"], r["output_tokens"], r["cache_tokens"], source=r["source"],
+                                  cache_write_tokens=cw if cw_billable else 0)
         old_cost = r["cost"]
         total_old += old_cost
         total_new += new_cost

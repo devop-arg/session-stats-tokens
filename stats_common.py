@@ -1545,7 +1545,16 @@ def get_claude_session_stats(session):
 
     Costo: si hay evento cost-state con totalCostUSD > 0, se usa como costo
     real y se reparte entre modelos vía modelUsage.costUSD. Fallback:
-    estimación con calculate_cost (fuente 'claude').
+    estimación con calculate_cost (fuente 'claude', incluye cache_write a su
+    precio 'cache_write' de model_costs.json).
+
+    Dedupe (2026-09-23): el JSONL re-emite cada evento assistant 2-5 veces
+    (mismo message.id + requestId, usage idéntico; verificado empíricamente,
+    0 ids con usage divergente). Contarlas inflaba tokens/requests/reasoning
+    ~2.4x. Se dedupea por message.id: 1 request por id, merge max() campo a
+    campo (monotónico, seguro para el MAX() del upsert). Sin message.id no
+    se dedupea (la línea cuenta aparte). El dict de ids es por sesión
+    agregada (los archivos de un mismo sessionId se procesan juntos).
 
     El archivo es append-only: el agregado crece de forma monotónica y es
     seguro para upsert MAX().
@@ -1556,6 +1565,8 @@ def get_claude_session_stats(session):
     requests = 0
     real_cost = 0.0
     model_usage_cost = {}
+    # Dedupe por (modelo, message.id): {clave: [requests, input, output, cr, cw, thinking]}
+    seen_msgs = {}
 
     for f in session["files"]:
         try:
@@ -1590,6 +1601,22 @@ def get_claude_session_stats(session):
                                 first_ts = iso
                         except (ValueError, TypeError):
                             pass
+                    thinking = ((u.get("output_tokens_details") or {})
+                                .get("thinking_tokens") or 0)
+                    mid = m.get("id")
+                    if mid:
+                        # Re-emisión de un request ya contado: merge max() por
+                        # campo (nunca pierde tokens ni rompe monotonicidad).
+                        key = (model, mid)
+                        prev = seen_msgs.get(key)
+                        if prev is not None:
+                            prev[1] = max(prev[1], inp)
+                            prev[2] = max(prev[2], out)
+                            prev[3] = max(prev[3], cr)
+                            prev[4] = max(prev[4], cw)
+                            prev[5] = max(prev[5], thinking)
+                            continue
+                        seen_msgs[key] = [1, inp, out, cr, cw, thinking]
                     mm = by_model.setdefault(model, {
                         "requests": 0, "input": 0, "output": 0,
                         "cache": 0, "cache_read": 0, "cache_write": 0,
@@ -1601,8 +1628,6 @@ def get_claude_session_stats(session):
                     mm["cache_read"] += cr
                     mm["cache_write"] += cw
                     mm["cache"] += cr  # cache = solo lectura; write va aparte
-                    thinking = ((u.get("output_tokens_details") or {})
-                                .get("thinking_tokens") or 0)
                     mm["reasoning"] += thinking
                     requests += 1
                 elif t == "cost-state":
@@ -1623,7 +1648,8 @@ def get_claude_session_stats(session):
             c = model_usage_cost[model]
         else:
             c = calculate_cost(model, mdata["input"], mdata["output"],
-                               mdata["cache"], source="claude")
+                               mdata["cache"], source="claude",
+                               cache_write_tokens=mdata["cache_write"])
         by_model_with_cost[model] = {**mdata, "cost": c}
 
     # Fallback de fecha: mtime del archivo más nuevo.
@@ -1759,12 +1785,20 @@ def effective_uncached_input_tokens(source, input_tokens, cache_read_tokens=0):
     return input_tokens
 
 
-def effective_cache_ratio_input(source, input_tokens, cache_read_tokens=0):
-    """Input total considerado para el cálculo de cache ratio."""
+def effective_cache_ratio_input(source, input_tokens, cache_read_tokens=0,
+                                cache_write_tokens=0):
+    """Input total considerado para el cálculo de cache ratio.
+
+    Para fuentes que facturan el cache write aparte (claude/hermes), el write
+    es cache miss: entra al denominador junto al input y el cache read
+    (decisión del dueño 2026-09-23). Para fuentes cuyo input ya incluye el
+    cache read (codex/zcode) no se suma nada extra.
+    """
     sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
     if sem["input_includes_cache_read"]:
         return input_tokens or 0
-    return (input_tokens or 0) + (cache_read_tokens or 0)
+    return ((input_tokens or 0) + (cache_read_tokens or 0)
+            + (cache_write_tokens or 0))
 
 
 CACHE_RATIO_MIN_REQUESTS = 5
@@ -1816,8 +1850,12 @@ def calculate_session_cache_ratio(rows):
             value(row, "cache_write_tokens", 0),
         )
         cache_read_tokens = nonnegative_int(cache_read_tokens)
+        # El denominador usa el cache_write CRUDO de la fila (no el fallback
+        # legacy de effective_cache_read_tokens, que puede devolver
+        # cache_tokens y duplicaría el write si la fila lo incluyera).
         ratio_input_tokens = nonnegative_int(effective_cache_ratio_input(
-            source, input_tokens, cache_read_tokens
+            source, input_tokens, cache_read_tokens,
+            nonnegative_int(value(row, "cache_write_tokens", 0)),
         ))
 
         session = sessions.setdefault(session_id, {
@@ -1984,7 +2022,15 @@ def recalculate_historical_cost():
             models_totals[normalized]["cache"] += cache
             models_totals[normalized]["cache_read"] += effective_cache_read
             models_totals[normalized]["cache_write"] += cache_write
-            models_totals[normalized]["cost"] += calculate_cost(normalized, inp, out, cache, source=source)
+            # El write es un componente facturable aparte (claude/hermes);
+            # para fuentes cuyo input ya incluye cache (codex/zcode) NO se
+            # pasa: su cache_tokens legacy ya lo cubre.
+            sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+            cw_billable = (sem["cache_write_billable"]
+                           and not sem["input_includes_cache_read"])
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, inp, out, cache, source=source,
+                cache_write_tokens=cache_write if cw_billable else 0)
             ratio_row = {
                 "session_id": session_id,
                 "session_requests": session_requests,

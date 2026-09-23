@@ -1,12 +1,12 @@
 # Session Stats Tokens
 
-Track token usage and estimated costs across Kilo, OpenCode, Codex, Hermes, and ZCode sessions.
+Track token usage and estimated costs across Kilo, OpenCode, Codex, Hermes, ZCode, and Claude Code sessions.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 ## Features
 
-- **Multi-tool**: Reads from Kilo (SQLite), OpenCode (SQLite), Codex (JSONL), Hermes (SQLite), and ZCode (JSONL)
+- **Multi-tool**: Reads from Kilo (SQLite), OpenCode (SQLite), Codex (JSONL), Hermes (SQLite), ZCode (JSONL), and Claude Code (JSONL)
 - **Auto-detection**: Finds the most recently active session across all tools
 - **Token tracking**: Input, output, cache, and reasoning tokens per model
 - **Cost estimation**: Based on hardcoded per-model pricing ($/1M tokens)
@@ -113,8 +113,11 @@ El dashboard muestra dos métricas de cache con alcances distintos:
   sus modelos; tokens, requests, costos y datos históricos no se modifican.
 
 El ratio se calcula con la semántica de cada fuente: Codex usa el input que ya
-incluye cache; las demás fuentes usan input más cache read. El umbral se evalúa
-con el valor sin redondear y `cache_write_tokens` no cuenta como cache leído.
+incluye cache; las demás fuentes usan input más cache read. Para las fuentes
+que facturan el cache write aparte y no incluyen cache en el input (claude,
+hermes), el cache write también suma al denominador: es cache miss facturado
+(decisión del dueño, 2026-09-23). El umbral se evalúa
+con el valor sin redondeo y `cache_write_tokens` no cuenta como cache leído.
 Cuando no hay sesiones elegibles con cache medible, el ratio mostrado es `0%`
 por compatibilidad del payload, pero no representa un hit observado.
 
@@ -206,6 +209,48 @@ En el branch `main` (privado) estos archivos **sí** están trackeados para back
 | Cursor | `~/.cursor/usage-events.jsonl` | JSONL (hook local) |
 | Grok CLI | `~/.grok/sessions/**/summary.json` | JSON + estimación de contexto |
 | ZCode | `~/.zcode/cli/rollout/model-io-sess_*.jsonl` | JSONL (usage real por request) |
+| Claude Code | `~/.claude/projects/*/<uuid>.jsonl` | JSONL (usage real por request) |
+
+### Claude Code (fuente `claude`)
+
+- **Descubrimiento**: un JSONL por sesión en `~/.claude/projects/<cwd-slug>/`.
+  Un mismo `sessionId` puede aparecer en varios directorios (resume desde otro
+  cwd): se agrupa por `sessionId` y se suman todos los archivos. Las sesiones
+  bridge/sdk-cli sin llamadas al modelo se descartan (`has_real_usage_claude`).
+- **Semántica de tokens (Anthropic)**: `input_tokens`, `cache_read_input_tokens`
+  y `cache_creation_input_tokens` son campos separados (ninguno incluye al otro).
+  Mapeo: `cache_read` → columna `cache_read_tokens` (precio `cache`),
+  `cache_creation` → columna `cache_write_tokens` (precio `cache_write`).
+- **Dedupe (2026-09-23)**: el JSONL re-emite cada evento `assistant` 2-5 veces
+  (mismo `message.id` + `requestId`, usage idéntico). El parser dedupea por
+  `message.id` (1 request por id, merge `max()` por campo); sin id no se
+  dedupea. Sin esto tokens/requests/reasoning quedan inflados ~2.4x.
+- **Costo**: si el JSONL trae evento `cost-state` con `totalCostUSD > 0`, ese es
+  el costo real y se reparte por modelo vía `modelUsage.costUSD`. Fallback:
+  estimación con `calculate_cost(source="claude")`.
+- **Upsert**: en `--capture-all` se re-captura (upsert) toda sesión cuyo JSONL
+  tenga mtime < 15 min; las más viejas usan skip-if-exists. Las sesiones son
+  cortas y el recambio alto: sin la ventana, una sesión que cierra entre dos
+  captures quedaría congelada a mitad de consumo.
+- **Retención**: Claude Code limpia sesiones viejas; una que muere antes del
+  primer capture del cron se pierde para siempre (aceptado).
+
+### Precios de cache_write (Anthropic)
+
+`calculate_cost` acepta `cache_write_tokens` y un precio opcional `"cache_write"`
+en `model_costs.json`. Si el modelo no tiene ese precio pero la fuente marca
+`cache_write_billable: True` en `SOURCE_CACHE_SEMANTICS`, se cobra al precio de
+input (retrocompatible). Para `claude-opus-5-5` los precios fueron calibrados
+empíricamente contra `totalCostUSD` de 3 sesiones reales (match exacto):
+
+```json
+"claude-opus-5-5": { "input": 4, "output": 20, "cache": 0.2, "cache_write": 8 }
+```
+
+`cache_write: 8` corresponde a escritura de cache con TTL 1h (~2x input). Son
+precios de suscripción reverse-engineered, no tarifa API publicada: si Anthropic
+cambia lo que cobra la sub, recalibrar comparando tokens contra un nuevo
+`totalCostUSD`.
 
 ## Model Pricing
 
@@ -227,8 +272,8 @@ Costs per 1M tokens (USD). Some models include cache pricing.
   Actualizar los precios API no modifica `cost_sub`: son valores independientes.
 
 El costo se calcula en `stats_common.calculate_cost` como
-`input·price_in + output·price_out + cache_tokens·price_cache` (si el modelo no
-registra cache tokens, el término cache es 0 da igual el precio).
+`input·price_in + output·price_out + cache_tokens·price_cache [+ cache_write_tokens·price_cache_write]`
+(si el modelo no registra cache tokens, el término cache es 0 da igual el precio).
 
 ### Comparador de costos en Android (`/costos`)
 
@@ -268,11 +313,12 @@ Esto ocurre cuando el proceso de Hermes se mata abruptamente (ej: `kill`, crash 
 ## Troubleshooting
 
 ### "No active session found"
-- Make sure at least one tool (Kilo, OpenCode, Codex, or Hermes) has an active session with token usage
+- Make sure at least one tool (Kilo, OpenCode, Codex, Hermes, or Claude Code) has an active session with token usage
 - Kilo: `~/.local/share/kilo/kilo.db` must exist
 - OpenCode: `~/.local/share/opencode/opencode.db` must exist
 - Codex: `~/.codex/sessions/` must exist
 - Hermes: `~/.hermes/state.db` must exist
+- Claude Code: `~/.claude/projects/` must exist (sesiones sin llamadas al modelo se descartan)
 
 ### History lost after deleting a chat session
 - Set up the cron auto-capture (see above) to persist sessions before deletion
