@@ -659,6 +659,7 @@ if (document.querySelector('.stats-grid')) {
     codex: '#22c55e',
     zcode: '#06b6d4',
     cursor: '#a855f7',
+    claude: '#d97757',
     kilocode: '#64748b',
     legacy: '#94a3b8',
     unknown: '#ef4444'
@@ -698,7 +699,7 @@ if (document.querySelector('.stats-grid')) {
     sortedSources.forEach(function(source) {
       var data = periods.map(function(p) { return sourceMap[source][p] || 0; });
       datasets.push({
-        label: source.charAt(0).toUpperCase() + source.slice(1),
+        label: source === 'claude' ? 'Claude Code' : source.charAt(0).toUpperCase() + source.slice(1),
         data: data,
         backgroundColor: SOURCE_COLORS[source] || '#808080',
         borderWidth: 0,

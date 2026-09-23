@@ -29,6 +29,9 @@ GROK_SESSIONS_DIR = Path.home() / ".grok" / "sessions"
 # Rutas de ZCode CLI (rollouts model-io en ~/.zcode/cli/rollout/)
 ZCODE_ROLLOUT_DIR = Path.home() / ".zcode" / "cli" / "rollout"
 
+# Rutas de Claude Code (JSONL por sesión en ~/.claude/projects/<cwd-slug>/)
+CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
 # Directorio del script (para JSON de modelos)
 SCRIPT_DIR = Path(__file__).resolve().parent
 MODEL_COSTS_FILE = SCRIPT_DIR / "model_costs.json"
@@ -210,6 +213,7 @@ SOURCE_CACHE_SEMANTICS = {
     "hermes":   {"input_includes_cache_read": False, "cache_write_billable": True},
     "kilocode": {"input_includes_cache_read": False, "cache_write_billable": False},
     "cursor":   {"input_includes_cache_read": False, "cache_write_billable": False},
+    "claude":   {"input_includes_cache_read": False, "cache_write_billable": True},
     "unknown":  {"input_includes_cache_read": False, "cache_write_billable": False},
     "grok":     {"input_includes_cache_read": False, "cache_write_billable": False},
 }
@@ -1472,7 +1476,180 @@ def get_zcode_session_stats(session_file):
     }
 
 
-def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0, source=None):
+def get_claude_sessions():
+    """Retorna archivos JSONL de sesiones de Claude Code, agrupados por sessionId.
+
+    Claude Code guarda un JSONL por sesión en ~/.claude/projects/<cwd-slug>/.
+    Un mismo sessionId puede aparecer en más de un directorio (resume desde
+    otro cwd): se agrupa por sessionId y se concatenan los archivos (M6).
+    Ordenados por mtime del archivo más nuevo (más reciente primero).
+    """
+    if not CLAUDE_PROJECTS_DIR.exists():
+        return []
+    grouped = {}
+    for f in CLAUDE_PROJECTS_DIR.glob("*/*.jsonl"):
+        if not f.is_file():
+            continue
+        sid = f.stem
+        if sid not in grouped:
+            grouped[sid] = {"files": [], "mtime": 0}
+        grouped[sid]["files"].append(f)
+        grouped[sid]["mtime"] = max(grouped[sid]["mtime"], f.stat().st_mtime)
+    sessions = [
+        {"session_id": sid, "files": data["files"], "mtime": data["mtime"]}
+        for sid, data in grouped.items()
+    ]
+    sessions.sort(key=lambda x: x["mtime"], reverse=True)
+    return sessions
+
+
+def has_real_usage_claude(session):
+    """Check si una sesión de Claude Code tiene uso real de tokens.
+
+    ``session`` es el dict de get_claude_sessions(). 3 de cada 4 JSONL son
+    sesiones bridge/sdk-cli sin llamadas al modelo: sin este filtro insertarían
+    filas de 0 tokens/0 costo (B4 del review).
+    """
+    for f in session["files"]:
+        try:
+            with open(f) as fh:
+                for line in fh:
+                    try:
+                        d = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if d.get("type") != "assistant":
+                        continue
+                    u = (d.get("message") or {}).get("usage") or {}
+                    total = (
+                        (u.get("input_tokens") or 0)
+                        + (u.get("output_tokens") or 0)
+                        + (u.get("cache_read_input_tokens") or 0)
+                        + (u.get("cache_creation_input_tokens") or 0)
+                    )
+                    if total > 0:
+                        return True
+        except OSError:
+            continue
+    return False
+
+
+def get_claude_session_stats(session):
+    """Agrega usage por modelo de una sesión de Claude Code.
+
+    Cada línea type=assistant con message.usage es un request. Semántica
+    Anthropic: input_tokens y cache_* son separados (no incluidos entre sí).
+    cache_read_input_tokens va a cache_read; cache_creation_input_tokens va a
+    cache_write (se factura aparte, ~2x input para TTL 1h — verificado
+    empíricamente contra totalCostUSD, no es input normal).
+
+    Costo: si hay evento cost-state con totalCostUSD > 0, se usa como costo
+    real y se reparte entre modelos vía modelUsage.costUSD. Fallback:
+    estimación con calculate_cost (fuente 'claude').
+
+    El archivo es append-only: el agregado crece de forma monotónica y es
+    seguro para upsert MAX().
+    """
+    by_model = {}
+    session_id = session["session_id"]
+    first_ts = None
+    requests = 0
+    real_cost = 0.0
+    model_usage_cost = {}
+
+    for f in session["files"]:
+        try:
+            fh = open(f)
+        except OSError:
+            continue
+        with fh:
+            for line in fh:
+                # Línea parcialmente escrita (append en vivo): descartar solo
+                # esa línea, no abortar el parseo completo (B5).
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                t = d.get("type")
+                if t == "assistant":
+                    m = d.get("message") or {}
+                    u = m.get("usage") or {}
+                    inp = u.get("input_tokens") or 0
+                    out = u.get("output_tokens") or 0
+                    cr = u.get("cache_read_input_tokens") or 0
+                    cw = u.get("cache_creation_input_tokens") or 0
+                    if inp + out + cr + cw <= 0:
+                        continue
+                    model = normalize_model_name(m.get("model") or "unknown")
+                    ts = d.get("timestamp")
+                    if ts:
+                        try:
+                            iso = datetime.datetime.fromisoformat(
+                                ts.replace("Z", "+00:00")).timestamp()
+                            if first_ts is None or iso < first_ts:
+                                first_ts = iso
+                        except (ValueError, TypeError):
+                            pass
+                    mm = by_model.setdefault(model, {
+                        "requests": 0, "input": 0, "output": 0,
+                        "cache": 0, "cache_read": 0, "cache_write": 0,
+                        "reasoning": 0,
+                    })
+                    mm["requests"] += 1
+                    mm["input"] += inp
+                    mm["output"] += out
+                    mm["cache_read"] += cr
+                    mm["cache_write"] += cw
+                    mm["cache"] += cr  # cache = solo lectura; write va aparte
+                    thinking = ((u.get("output_tokens_details") or {})
+                                .get("thinking_tokens") or 0)
+                    mm["reasoning"] += thinking
+                    requests += 1
+                elif t == "cost-state":
+                    # Varios eventos por archivo: tomar el último no nulo (B6).
+                    c = d.get("totalCostUSD")
+                    if c:
+                        real_cost = float(c)
+                    mu = d.get("modelUsage") or {}
+                    for mname, mdata in mu.items():
+                        mc = mdata.get("costUSD")
+                        if mc:
+                            model_usage_cost[normalize_model_name(mname)] = float(mc)
+
+    # Costo por modelo: real (modelUsage) si existe; fallback estimación.
+    by_model_with_cost = {}
+    for model, mdata in by_model.items():
+        if model in model_usage_cost:
+            c = model_usage_cost[model]
+        else:
+            c = calculate_cost(model, mdata["input"], mdata["output"],
+                               mdata["cache"], source="claude")
+        by_model_with_cost[model] = {**mdata, "cost": c}
+
+    # Fallback de fecha: mtime del archivo más nuevo.
+    if first_ts is None:
+        first_ts = session.get("mtime") or 0
+
+    return {
+        "session_id": session_id,
+        "date": (datetime.datetime.fromtimestamp(first_ts).isoformat()
+                 if first_ts else ""),
+        "requests": requests,
+        "input": sum(m["input"] for m in by_model.values()),
+        "output": sum(m["output"] for m in by_model.values()),
+        "cache": sum(m["cache"] for m in by_model.values()),
+        "cache_read": sum(m["cache_read"] for m in by_model.values()),
+        "cache_write": sum(m["cache_write"] for m in by_model.values()),
+        "reasoning": sum(m["reasoning"] for m in by_model.values()),
+        "cost": (real_cost if real_cost > 0
+                 else sum(m["cost"] for m in by_model_with_cost.values())),
+        "has_real_cost": real_cost > 0,
+        "by_model": by_model_with_cost,
+    }
+
+
+def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0, source=None,
+                   cache_write_tokens=0):
     """Calcula costo basado en tokens.
 
     La semántica de input_tokens depende del source:
@@ -1480,6 +1657,13 @@ def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0, source=No
       Hay que descontar cache para obtener el input no-cacheado.
     - input_includes_cache_read=False (Hermes, OpenCode, etc.): input_tokens y
       cache_tokens son datos separados. Input siempre se cobra full.
+
+    cache_write_tokens: escritura de cache (cache_creation de Anthropic).
+    Si el modelo tiene precio "cache_write" en MODEL_COSTS, se cobra aparte a
+    ese precio (ej. claude-opus-5-5: ~2x input para TTL 1h). Si no tiene
+    precio y source marca cache_write_billable, se cobra al precio de input
+    (comportamiento retrocompatible). Default 0 => sin cambio para fuentes
+    existentes.
     """
     # Sonar: costo fijo por request
     if model == "sonar":
@@ -1534,7 +1718,13 @@ def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0, source=No
         input_cost = (input_tokens / 1000000) * costs["input"]
     output_cost = (output_tokens / 1000000) * costs["output"]
     cache_cost = (cache_tokens / 1000000) * costs.get("cache", 0)
-    return input_cost + output_cost + cache_cost
+    cache_write_cost = 0.0
+    if cache_write_tokens:
+        cw_price = costs.get("cache_write")
+        if cw_price is None and sem["cache_write_billable"]:
+            cw_price = costs["input"]
+        cache_write_cost = (cache_write_tokens / 1000000) * (cw_price or 0)
+    return input_cost + output_cost + cache_cost + cache_write_cost
 
 
 def effective_billable_tokens(source, input_tokens, output_tokens,
@@ -1978,6 +2168,56 @@ def recalculate_historical_cost():
         total_cache_read += cache_read
         total_sessions += 1
 
+    # 5b. Agregar sesiones de Claude Code que NO estan en SQLite
+    for sess in get_claude_sessions():
+        sid = "claude_" + sess["session_id"]
+        if sid in session_keys:
+            continue
+        if not has_real_usage_claude(sess):
+            continue
+        stats = get_claude_session_stats(sess)
+        by_model = stats.get("by_model", {})
+        for model, model_data in by_model.items():
+            normalized = normalize_model_name(model)
+            if normalized not in models_totals:
+                models_totals[normalized] = {
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0, "cost": 0.0,
+                }
+            models_totals[normalized]["requests"] += model_data.get("requests", 0)
+            models_totals[normalized]["input"] += model_data.get("input", 0)
+            models_totals[normalized]["output"] += model_data.get("output", 0)
+            cache_read = model_data.get("cache_read", model_data.get("cache", 0))
+            cache_write = model_data.get("cache_write", 0)
+            models_totals[normalized]["cache"] += model_data.get("cache", 0)
+            models_totals[normalized]["cache_read"] += cache_read
+            models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, model_data.get("input", 0), model_data.get("output", 0),
+                model_data.get("cache", 0), source="claude",
+                cache_write_tokens=cache_write)
+            cache_ratio_rows.append({
+                "session_id": sid,
+                "session_requests": stats.get("requests", 0),
+                "model": model,
+                "source": "claude",
+                "input_tokens": model_data.get("input", 0),
+                "cache_tokens": model_data.get("cache", 0),
+                "cache_read_tokens": cache_read,
+                "cache_write_tokens": cache_write,
+            })
+        cache_read = stats.get("cache_read", stats.get("cache", 0))
+        cache_write = stats.get("cache_write", 0)
+        total_requests += stats.get("requests", 0)
+        total_input += stats.get("input", 0)
+        total_input_uncached += effective_uncached_input_tokens("claude", stats.get("input", 0), cache_read)
+        total_output += stats.get("output", 0)
+        total_tokens += effective_billable_tokens("claude", stats.get("input", 0), stats.get("output", 0), cache_read, cache_write)
+        cache_ratio_input += effective_cache_ratio_input("claude", stats.get("input", 0), cache_read)
+        total_cache_read += cache_read
+        total_sessions += 1
+
     # 6. Calcular costo total desde costos acumulados por fila + ajuste histórico
     historical_cost_adjustment = historical_total_cost - historical_models_cost
 
@@ -2024,6 +2264,8 @@ def _detect_source(session_id):
         return "codex"
     if session_id.startswith("zcode_"):
         return "zcode"
+    if session_id.startswith("claude_"):
+        return "claude"
     if re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", session_id):
         try:
             if any(session_id in Path(p).name for p in get_codex_sessions()):

@@ -19,6 +19,12 @@
     "input": 5,
     "output": 25
   },
+  "claude-opus-5-5": {
+    "cache": 0.2,
+    "cache_write": 8,
+    "input": 4,
+    "output": 20
+  },
   "claude-sonnet-4.5": {
     "cache": 0.3,
     "input": 3,
@@ -439,5 +445,10 @@
     "cache": 0.05,
     "input": 0.2,
     "output": 0.5
+  },
+  "stealth/union-alpha": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
   }
 }

@@ -18,6 +18,7 @@ Features:
 import json
 import sqlite3
 import datetime
+import time
 from pathlib import Path
 import sys
 import os
@@ -25,7 +26,7 @@ import fcntl
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from stats_common import MODEL_COSTS, MODEL_ALIASES, MODEL_COSTS_FILE, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, get_cursor_sessions, has_real_usage_cursor, get_cursor_session_stats, get_grok_sessions, has_real_usage_grok, get_grok_session_stats, get_zcode_sessions, has_real_usage_zcode, get_zcode_session_stats, save_session, save_codex_session, init_db, _parse_timestamp, _detect_source, DB_PATH
+from stats_common import MODEL_COSTS, MODEL_ALIASES, MODEL_COSTS_FILE, normalize_model_name, calculate_cost, recalculate_historical_cost, get_codex_sessions, has_real_usage_codex, get_codex_session_stats, get_hermes_sessions, has_real_usage_hermes, get_hermes_session_stats, get_cursor_sessions, has_real_usage_cursor, get_cursor_session_stats, get_grok_sessions, has_real_usage_grok, get_grok_session_stats, get_zcode_sessions, has_real_usage_zcode, get_zcode_session_stats, get_claude_sessions, has_real_usage_claude, get_claude_session_stats, save_session, save_codex_session, init_db, _parse_timestamp, _detect_source, DB_PATH
 
 KILO_DB_PATH = Path.home() / ".local/share/kilo/kilo.db"
 OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
@@ -213,6 +214,12 @@ def get_current_session():
         if has_real_usage_zcode(sess_file):
             ts_ms = int(sess_file.stat().st_mtime * 1000)
             candidates.append(("zcode", sess_file, ts_ms))
+
+    # Collect Claude Code sessions with real usage
+    for sess in get_claude_sessions():
+        if has_real_usage_claude(sess):
+            ts_ms = int(sess["mtime"] * 1000)
+            candidates.append(("claude", sess, ts_ms))
 
     if not candidates:
         return None
@@ -728,6 +735,45 @@ def capture_all_sessions():
         except Exception:
             pass
 
+    # --- Claude Code (upsert para sesiones modificadas recientemente) ---
+    # Las sesiones de Claude Code son cortas y el recambio es alto (B8): si
+    # una sesión cierra entre dos captures, con skip-if-exists quedaría
+    # congelada a mitad de consumo. Upsert para toda sesión cuyo JSONL tenga
+    # mtime dentro de la ventana del cron (15 min, 3 ciclos de margen).
+    _claude_recent_window = 15 * 60
+    _now = time.time()
+    for sess in get_claude_sessions():
+        if not has_real_usage_claude(sess):
+            continue
+        stats = get_claude_session_stats(sess)
+        by_model = stats.get("by_model", {})
+        if not by_model:
+            continue
+        sid = "claude_" + stats.get("session_id", sess["session_id"])
+        recent = (_now - sess["mtime"]) <= _claude_recent_window
+        if not recent and sid in existing_keys:
+            continue
+        was_new = sid not in existing_keys
+        try:
+            ts = _parse_timestamp(stats.get("date", "")) or int(sess["mtime"])
+            save_session(
+                sid, "claude",
+                stats.get("date", ""), ts,
+                stats.get("requests", 0),
+                stats.get("input", 0),
+                stats.get("output", 0),
+                stats.get("cache", 0), stats.get("reasoning", 0),
+                stats.get("cost", 0.0),
+                by_model, DB_PATH,
+                cache_read_tokens=stats.get("cache_read", 0),
+                cache_write_tokens=stats.get("cache_write", 0),
+            )
+            if was_new:
+                new_count += 1
+            existing_keys.add(sid)
+        except Exception:
+            pass
+
     # --- Sembrar modelos huérfanos usados en la DB a 0/0/0 ---
     try:
         _seed_orphan_costs()
@@ -895,6 +941,14 @@ def main():
             "total_messages": zcode_stats.get("requests", 0),
             "by_model": zcode_stats.get("by_model", {}),
         }
+    elif source == "claude":
+        claude_stats = get_claude_session_stats(session_ref)
+        session_id = "claude_" + claude_stats.get("session_id", session_ref["session_id"])
+        session_date = claude_stats.get("date", "")
+        stats = {
+            "total_messages": claude_stats.get("requests", 0),
+            "by_model": claude_stats.get("by_model", {}),
+        }
     else:
         # opencode_json
         stats = get_session_stats_json(session_ref)
@@ -957,7 +1011,7 @@ def main():
     total_historical_cost = hist["total_cost"]
     total_sessions = hist["total_sessions"]
     
-    source_label = {"kilo": "Kilo", "opencode_sqlite": "OpenCode", "opencode_json": "OpenCode", "codex": "Codex", "hermes": "Hermes", "cursor": "Cursor", "grok": "Grok", "zcode": "ZCode"}.get(source, source)
+    source_label = {"kilo": "Kilo", "opencode_sqlite": "OpenCode", "opencode_json": "OpenCode", "codex": "Codex", "hermes": "Hermes", "cursor": "Cursor", "grok": "Grok", "zcode": "ZCode", "claude": "Claude Code"}.get(source, source)
     title_info = ""
     if source in ("kilo", "opencode_sqlite", "hermes", "cursor") and stats.get("session_title"):
         title_info = f" ({stats['session_title'][:50]})"
