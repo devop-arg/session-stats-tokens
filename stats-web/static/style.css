@@ -294,6 +294,9 @@ a:hover { text-decoration: underline; }
 .today-model-ioc.c {
   color: #a78bfa;
 }
+.today-model-ioc.cw {
+  color: #7dd3fc;
+}
 .cache-label-short {
   display: none;
 }

@@ -320,6 +320,48 @@ class EndpointCacheRatioTests(unittest.TestCase):
         self.assertNotIn("excluded_model", cache_models)
         self.assertNotIn("mixed_model_a", cache_models)
 
+    def test_cache_write_exposed_gated_by_billable_source(self):
+        """El campo cache_write_tokens de leaderboard/today usa solo fuentes
+        con write facturable aparte (claude/hermes); para otras fuentes el
+        write guardado NO se expone (no entra al Total ni al ratio)."""
+        conn = sqlite3.connect(self.db_path)
+        date = datetime.datetime.now().isoformat()
+        now = int(time.time()) - 300
+        conn.execute(
+            "INSERT INTO sessions (id, source, date, timestamp, requests, input_tokens,"
+            " output_tokens, cache_tokens, reasoning_tokens, cost, cache_read_tokens,"
+            " cache_write_tokens) VALUES (?, 'claude', ?, ?, 1, 100, 50, 0, 0, 1.0, 8000, 4000)",
+            ("claude_sess", date, now),
+        )
+        conn.execute(
+            "INSERT INTO model_usage (session_id, model, requests, input_tokens,"
+            " output_tokens, cache_tokens, reasoning_tokens, cost, cache_read_tokens,"
+            " cache_write_tokens) VALUES ('claude_sess', 'claude_model', 1, 100, 50, 0, 0, 1.0, 8000, 4000)",
+        )
+        # Fuente NO billable con write guardado: no debe exponerse.
+        conn.execute(
+            "INSERT INTO sessions (id, source, date, timestamp, requests, input_tokens,"
+            " output_tokens, cache_tokens, reasoning_tokens, cost, cache_read_tokens,"
+            " cache_write_tokens) VALUES (?, 'opencode', ?, ?, 1, 100, 50, 0, 0, 1.0, 0, 9999)",
+            ("oc_sess", date, now + 1),
+        )
+        conn.execute(
+            "INSERT INTO model_usage (session_id, model, requests, input_tokens,"
+            " output_tokens, cache_tokens, reasoning_tokens, cost, cache_read_tokens,"
+            " cache_write_tokens) VALUES ('oc_sess', 'oc_model', 1, 100, 50, 0, 0, 1.0, 0, 9999)",
+        )
+        conn.commit()
+        conn.close()
+
+        today = self.main.api_today_summary(range="today")
+        today_models = {row["model"]: row for row in today["top_models"]}
+        self.assertEqual(today_models["claude_model"]["cache_write_tokens"], 4000)
+
+        top12 = self.main._build_top_models_payload(days=364, bucket="week", limit=20)
+        leaders = {row["model"]: row for row in top12["leaderboard"]}
+        self.assertEqual(leaders["claude_model"]["cache_write_tokens"], 4000)
+        self.assertEqual(leaders["oc_model"]["cache_write_tokens"], 0)
+
 
 class CacheWriteDenominatorTests(unittest.TestCase):
     """El cache write entra al denominador solo para fuentes billable-aparte.

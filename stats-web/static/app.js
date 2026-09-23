@@ -208,6 +208,9 @@ if (document.querySelector('.stats-grid')) {
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-ioc c">' + cacheMetricMarkup(displayCacheInput(m)) + '</span>' +
             '<span class="today-model-sep">-</span>' +
+            ((m.cache_write_tokens || 0) > 0 ?
+              '<span class="today-model-ioc cw">Cache W ' + fmtTokens(m.cache_write_tokens) + '</span>' +
+              '<span class="today-model-sep">-</span>' : '') +
             '<span class="today-model-cache-ratio">Ratio ' + fmtPct(cacheRatio) + '</span>' +
             '<span class="today-model-sep">-</span>' +
             '<span class="today-model-total">Total ' + fmtTokens(m.tokens) + '</span>' +
@@ -433,6 +436,10 @@ if (document.querySelector('.stats-grid')) {
     cacheMetric.innerHTML = cacheMetricMarkup(displayCache);
     card.appendChild(cacheMetric);
     addMetric('today-model-sep', '-');
+    if ((entry.cache_write_tokens || 0) > 0) {
+      addMetric('today-model-ioc cw', 'Cache W ' + fmtTokens(entry.cache_write_tokens));
+      addMetric('today-model-sep', '-');
+    }
     addMetric('today-model-cache-ratio', 'Ratio ' + cacheRatio);
     addMetric('today-model-sep', '-');
     addMetric('today-model-total', 'Total ' + fmtTokens(entry.tokens || 0));
@@ -2050,6 +2057,7 @@ function injectTodayModelLabels() {
     'today-model-ioc i': T('dyn.lbl_input_nocache'),
     'today-model-ioc o': T('dyn.lbl_output'),
     'today-model-ioc c': T('dyn.lbl_cache_input'),
+    'today-model-ioc cw': T('dyn.lbl_cache_write'),
     'today-model-cache-ratio': T('dyn.lbl_cache_pct'),
     'today-model-total': T('dyn.lbl_total'),
     'today-model-cost': T('dyn.lbl_cost'),

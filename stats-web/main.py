@@ -519,6 +519,7 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
                COALESCE(SUM(mu.cache_tokens),0) as cache_tokens,
                {model_cache_input_sql} as cache_input_tokens,
                COALESCE(SUM({model_effective_cache_read_sql}),0) as cache_read_tokens,
+               COALESCE(SUM(CASE WHEN s.source IN {SQL_SOURCES_CACHE_WRITE_BILLABLE} THEN mu.cache_write_tokens ELSE 0 END),0) as cache_write_tokens,
                {_sql_cache_ratio_input("s.source", "mu.input_tokens", "mu.cache_tokens", "mu.cache_read_tokens", "mu.cache_write_tokens")} as cache_ratio_input_tokens,
                {model_total_sql} as tokens
         FROM model_usage mu
@@ -551,6 +552,7 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
             "model": canon, "requests": 0, "cost": 0.0,
             "input_tokens": 0, "input_tokens_uncached": 0,
             "output_tokens": 0, "cache_tokens": 0, "cache_input_tokens": 0,
+            "cache_write_tokens": 0,
             "cache_read_tokens": 0, "cache_ratio_input_tokens": 0, "tokens": 0,
         })
         b["requests"] += m["requests"]
@@ -560,6 +562,7 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
         b["output_tokens"] += m["output_tokens"]
         b["cache_tokens"] += m["cache_tokens"]
         b["cache_input_tokens"] += m["cache_input_tokens"]
+        b["cache_write_tokens"] += m["cache_write_tokens"]
         b["cache_read_tokens"] += m["cache_read_tokens"]
         b["cache_ratio_input_tokens"] += m["cache_ratio_input_tokens"]
         b["tokens"] += m["tokens"]
@@ -578,6 +581,7 @@ def api_today_summary(range: str = Query("today", pattern=r"^(today|yesterday|48
             "output_tokens": m["output_tokens"],
             "cache_tokens": m["cache_tokens"],
             "cache_input_tokens": m["cache_input_tokens"],
+            "cache_write_tokens": m["cache_write_tokens"],
             "cache_ratio": ratio_by_model.get(m["model"], {}).get("ratio", 0.0),
             "price_per_1m": round(
                 (m["cost"] / m["tokens"] * 1_000_000)
@@ -1062,6 +1066,7 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
                COALESCE(SUM(mu.cache_tokens),0) as cache_tokens,
                {model_cache_input_sql} as cache_input_tokens,
                COALESCE(SUM({model_effective_cache_read_sql}),0) as cache_read_tokens,
+               COALESCE(SUM(CASE WHEN s.source IN {SQL_SOURCES_CACHE_WRITE_BILLABLE} THEN mu.cache_write_tokens ELSE 0 END),0) as cache_write_tokens,
                {model_cache_ratio_input_sql} as cache_ratio_input_tokens,
                COALESCE(SUM(mu.requests),0) as requests,
                COALESCE(SUM(mu.cost),0) as total_cost
@@ -1083,6 +1088,7 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
             "output_tokens": 0,
             "cache_tokens": 0,
             "cache_input_tokens": 0,
+            "cache_write_tokens": 0,
             "cache_read_tokens": 0,
             "cache_ratio_input_tokens": 0,
             "requests": 0,
@@ -1094,6 +1100,7 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
         acc["output_tokens"] += row["output_tokens"] or 0
         acc["cache_tokens"] += row["cache_tokens"] or 0
         acc["cache_input_tokens"] += row["cache_input_tokens"] or 0
+        acc["cache_write_tokens"] += row["cache_write_tokens"] or 0
         acc["cache_read_tokens"] += row["cache_read_tokens"] or 0
         acc["cache_ratio_input_tokens"] += row["cache_ratio_input_tokens"] or 0
         acc["requests"] += row["requests"] or 0
@@ -1196,6 +1203,7 @@ def _build_top_models_payload(days: int, bucket: str, limit: int = 20):
             "output_tokens": row["output_tokens"],
             "cache_tokens": row["cache_tokens"],
             "cache_input_tokens": row["cache_input_tokens"],
+            "cache_write_tokens": row["cache_write_tokens"],
             "cache_ratio": ratio_by_model.get(row["model"], {}).get("ratio", 0.0),
             "requests": row["requests"],
             "cost": round(row["total_cost"], 2),
