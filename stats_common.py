@@ -1544,13 +1544,19 @@ def get_claude_session_stats(session):
     empíricamente contra totalCostUSD, no es input normal).
 
     Costo y tokens: si hay evento cost-state con totalCostUSD > 0, el costo y
-    los tokens de modelUsage son AUTORITATIVOS (Claude Code los factura aunque
-    el evento assistant no haya quedado persistido en el JSONL, y ahí aparecen
-    modelos sin eventos propios, ej. el haiku generador de títulos).
-    modelUsage no trae requests: para filas sintetizadas se usa 1 (mínimo
-    factual: usage>0 implica al menos un request). Fallback: eventos
-    deduplicados + estimación con calculate_cost (fuente 'claude', incluye
-    cache_write a su precio 'cache_write' de model_costs.json).
+    los tokens de modelUsage son AUTORITATIVOS para el tramo que cubren
+    (Claude Code los factura aunque el evento assistant no haya quedado
+    persistido en el JSONL, y ahí aparecen modelos sin eventos propios, ej.
+    el haiku generador de títulos). Pero el cost-state se emite solo en
+    hitos (cierre de sesión), NO periódicamente: en una sesión activa queda
+    viejo. Fix híbrido (snapshot+delta, 2026-09-24): al parsear un cs
+    válido se guarda snapshot del acumulado de eventos; al final, los
+    eventos posteriores al último cs (delta = acumulado - snapshot, con
+    max(0,...) por campo) se SUMAN al modelUsage y su costo se estima con
+    calculate_cost. Cs acumulativo: el final será >= A+B_est y el MAX() del
+    upsert corrige hacia arriba al cierre. modelUsage no trae requests:
+    requests sigue siendo el conteo dedup total de eventos (or 1 para filas
+    sintetizadas). Fallback sin cs: eventos deduplicados + estimación.
 
     Dedupe (2026-09-23): el JSONL re-emite cada evento assistant 2-5 veces
     (mismo message.id + requestId, usage idéntico; verificado empíricamente,
@@ -1570,6 +1576,9 @@ def get_claude_session_stats(session):
     real_cost = 0.0
     model_usage_cost = {}
     model_usage_tokens = {}
+    # Snapshot del acumulado de eventos al momento del último cost-state
+    # válido: los eventos posteriores son el delta que se suma al modelUsage.
+    event_snapshot = {}
     # Dedupe por (modelo, message.id): {clave: [requests, input, output, cr, cw, thinking]}
     seen_msgs = {}
 
@@ -1640,37 +1649,59 @@ def get_claude_session_stats(session):
                     c = d.get("totalCostUSD")
                     if c:
                         real_cost = float(c)
+                        # Snapshot del acumulado de eventos al momento del cs:
+                        # el delta posterior se suma al modelUsage (híbrido).
+                        event_snapshot = {m: dict(v) for m, v in by_model.items()}
                     mu = d.get("modelUsage") or {}
                     for mname, mdata in mu.items():
                         mc = mdata.get("costUSD")
                         if mc:
                             model_usage_cost[normalize_model_name(mname)] = float(mc)
                         # Tokens autoritativos del cost-state (último gana).
-                        model_usage_tokens[normalize_model_name(mname)] = {
-                            "input": mdata.get("inputTokens") or 0,
-                            "output": mdata.get("outputTokens") or 0,
-                            "cache_read": mdata.get("cacheReadInputTokens") or 0,
-                            "cache_write": mdata.get("cacheCreationInputTokens") or 0,
-                            "reasoning": mdata.get("thinkingTokens") or 0,
-                        }
+                        # Solo con cs válido: un cs con totalCostUSD=0 no debe
+                        # pisar tokens (dejaría tramo A en 0 con costo > 0).
+                        if c:
+                            model_usage_tokens[normalize_model_name(mname)] = {
+                                "input": mdata.get("inputTokens") or 0,
+                                "output": mdata.get("outputTokens") or 0,
+                                "cache_read": mdata.get("cacheReadInputTokens") or 0,
+                                "cache_write": mdata.get("cacheCreationInputTokens") or 0,
+                                "reasoning": mdata.get("thinkingTokens") or 0,
+                            }
 
     # Costo y tokens por modelo. Si el cost-state es válido, modelUsage es
-    # autoritativo (tokens facturados; incluye modelos sin eventos
-    # persistidos). Para esos modelos sintetizados: requests=1 (mínimo
-    # factual: usage>0 implica al menos un request) y el costo del modelUsage.
+    # autoritativo para el tramo que cubre (tramo A) y los eventos dedup
+    # posteriores al último cs (delta) se suman encima (tramo B, estimado).
     by_model_with_cost = {}
+    delta_cost_total = 0.0
     if real_cost > 0 and model_usage_tokens:
         for model, t in model_usage_tokens.items():
             ev = by_model.get(model) or {}
+            sn = event_snapshot.get(model) or {}
+            # Delta de eventos posteriores al último cs (por campo, >= 0).
+            delta = {
+                "requests": max(0, ev.get("requests", 0) - sn.get("requests", 0)),
+                "input": max(0, ev.get("input", 0) - sn.get("input", 0)),
+                "output": max(0, ev.get("output", 0) - sn.get("output", 0)),
+                "cache_read": max(0, ev.get("cache_read", 0) - sn.get("cache_read", 0)),
+                "cache_write": max(0, ev.get("cache_write", 0) - sn.get("cache_write", 0)),
+                "reasoning": max(0, ev.get("reasoning", 0) - sn.get("reasoning", 0)),
+            }
+            # Tramo A: costo real del modelUsage (no recalcular: el cs es el
+            # dato facturado). Tramo B: estimación del delta con calculate_cost.
+            d_cost = calculate_cost(
+                model, delta["input"], delta["output"], delta["cache_read"],
+                source="claude", cache_write_tokens=delta["cache_write"])
+            delta_cost_total += d_cost
             by_model_with_cost[model] = {
                 "requests": ev.get("requests") or 1,
-                "input": t["input"],
-                "output": t["output"],
-                "cache_read": t["cache_read"],
-                "cache_write": t["cache_write"],
-                "cache": t["cache_read"],  # cache = solo lectura; write va aparte
-                "reasoning": t["reasoning"],
-                "cost": model_usage_cost.get(model, 0.0),
+                "input": t["input"] + delta["input"],
+                "output": t["output"] + delta["output"],
+                "cache_read": t["cache_read"] + delta["cache_read"],
+                "cache_write": t["cache_write"] + delta["cache_write"],
+                "cache": t["cache_read"] + delta["cache_read"],  # cache = solo lectura
+                "reasoning": t["reasoning"] + delta["reasoning"],
+                "cost": model_usage_cost.get(model, 0.0) + d_cost,
             }
         # Modelos con eventos pero ausentes en modelUsage (no debería pasar):
         # conservar eventos con costo estimado.
@@ -1712,7 +1743,7 @@ def get_claude_session_stats(session):
         "cache_read": sum(m["cache_read"] for m in src_models.values()),
         "cache_write": sum(m["cache_write"] for m in src_models.values()),
         "reasoning": sum(m["reasoning"] for m in src_models.values()),
-        "cost": (real_cost if real_cost > 0
+        "cost": (real_cost + delta_cost_total if real_cost > 0
                  else sum(m["cost"] for m in by_model_with_cost.values())),
         "has_real_cost": real_cost > 0,
         "by_model": by_model_with_cost,
