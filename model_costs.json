@@ -455,5 +455,36 @@
     "input": 0.0,
     "output": 0.0,
     "cache": 0.0
+  },
+  "gpt-6-luna": {
+    "input": 0.1,
+    "output": 0.5,
+    "cache": 0.01
+  },
+  "claude-sonnet-5-5": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "gpt-6.1-sol": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "claude-haiku-5-5": {
+    "input": 0.1,
+    "output": 0.5,
+    "cache": 0.01,
+    "cache_write": 0.2
+  },
+  "step-5-preview": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "minimax-m3.1-flash": {
+    "input": 0.15,
+    "output": 0.6,
+    "cache": 0.015
   }
 }

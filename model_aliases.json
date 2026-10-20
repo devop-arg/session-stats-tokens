@@ -149,5 +149,8 @@
   "gpt-5.6-terra-900k": "gpt-5.6-terra",
   "gpt-5.4-900k": "gpt-5.4",
   "gpt-6-astra-900k": "gpt-6-astra",
-  "gpt-daybreak-blue-latest-900k": "gpt-5.6-sol"
+  "gpt-daybreak-blue-latest-900k": "gpt-5.6-sol",
+  "deepseek-v4.1-flash-1017": "deepseek-v4.1-flash",
+  "space-bunny": "minimax-m3.1-flash",
+  "stealth/space-bunny-alpha": "minimax-m3.1-flash"
 }

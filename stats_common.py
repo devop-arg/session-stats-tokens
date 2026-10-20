@@ -1483,20 +1483,30 @@ def get_claude_sessions():
     Un mismo sessionId puede aparecer en más de un directorio (resume desde
     otro cwd): se agrupa por sessionId y se concatenan los archivos (M6).
     Ordenados por mtime del archivo más nuevo (más reciente primero).
+
+    Subagentes (Task/Agent): sus requests NO están en el JSONL padre sino en
+    <slug>/<sid>/subagents/agent-*.jsonl. Se agregan al sessionId padre en
+    "subagent_files", después de los archivos padre ("files" incluye ambos):
+    get_claude_session_stats necesita parsear el padre primero.
     """
     if not CLAUDE_PROJECTS_DIR.exists():
         return []
     grouped = {}
+
+    def _add(sid, f, sub):
+        g = grouped.setdefault(sid, {"parent": [], "sub": [], "mtime": 0})
+        g["sub" if sub else "parent"].append(f)
+        g["mtime"] = max(g["mtime"], f.stat().st_mtime)
+
     for f in CLAUDE_PROJECTS_DIR.glob("*/*.jsonl"):
-        if not f.is_file():
-            continue
-        sid = f.stem
-        if sid not in grouped:
-            grouped[sid] = {"files": [], "mtime": 0}
-        grouped[sid]["files"].append(f)
-        grouped[sid]["mtime"] = max(grouped[sid]["mtime"], f.stat().st_mtime)
+        if f.is_file():
+            _add(f.stem, f, False)
+    for f in CLAUDE_PROJECTS_DIR.glob("*/*/subagents/agent-*.jsonl"):
+        if f.is_file():
+            _add(f.parent.parent.name, f, True)
     sessions = [
-        {"session_id": sid, "files": data["files"], "mtime": data["mtime"]}
+        {"session_id": sid, "files": data["parent"] + data["sub"],
+         "subagent_files": data["sub"], "mtime": data["mtime"]}
         for sid, data in grouped.items()
     ]
     sessions.sort(key=lambda x: x["mtime"], reverse=True)
@@ -1534,6 +1544,19 @@ def has_real_usage_claude(session):
     return False
 
 
+def _acc_usage(acc, requests, vals):
+    """Suma (input, output, cache_read, cache_write, reasoning) a un acumulador."""
+    inp, out, cr, cw, thinking = vals
+    acc["requests"] = acc.get("requests", 0) + requests
+    acc["input"] = acc.get("input", 0) + inp
+    acc["output"] = acc.get("output", 0) + out
+    acc["cache_read"] = acc.get("cache_read", 0) + cr
+    acc["cache_write"] = acc.get("cache_write", 0) + cw
+    acc["reasoning"] = acc.get("reasoning", 0) + thinking
+    if "cache" in acc:
+        acc["cache"] += cr  # cache = solo lectura; write va aparte
+
+
 def get_claude_session_stats(session):
     """Agrega usage por modelo de una sesión de Claude Code.
 
@@ -1562,7 +1585,9 @@ def get_claude_session_stats(session):
     (mismo message.id + requestId, usage idéntico; verificado empíricamente,
     0 ids con usage divergente). Contarlas inflaba tokens/requests/reasoning
     ~2.4x. Se dedupea por message.id: 1 request por id, merge max() campo a
-    campo (monotónico, seguro para el MAX() del upsert). Sin message.id no
+    campo (monotónico, seguro para el MAX() del upsert). En subagentes el
+    usage SÍ diverge (1ª emisión = parcial del streaming): se suma el
+    incremento sobre el max ya contado (2026-10-08). Sin message.id no
     se dedupea (la línea cuenta aparte). El dict de ids es por sesión
     agregada (los archivos de un mismo sessionId se procesan juntos).
 
@@ -1581,8 +1606,16 @@ def get_claude_session_stats(session):
     event_snapshot = {}
     # Dedupe por (modelo, message.id): {clave: [requests, input, output, cr, cw, thinking]}
     seen_msgs = {}
+    # Subagentes: el cs del padre se asume acumulativo del proceso (incluye
+    # sus requests). Eventos de subagente con ts <= último assistant padre
+    # previo al cs válido entran también al snapshot (no al delta), para no
+    # sumarlos dos veces. Ante duda (sin ts / sin corte) se asumen cubiertos.
+    sub_files = set(session.get("subagent_files") or ())
+    last_parent_ts = None
+    cs_cutoff_ts = None
 
     for f in session["files"]:
+        is_sub = f in sub_files
         try:
             fh = open(f)
         except OSError:
@@ -1607,6 +1640,7 @@ def get_claude_session_stats(session):
                         continue
                     model = normalize_model_name(m.get("model") or "unknown")
                     ts = d.get("timestamp")
+                    iso = None
                     if ts:
                         try:
                             iso = datetime.datetime.fromisoformat(
@@ -1614,36 +1648,40 @@ def get_claude_session_stats(session):
                             if first_ts is None or iso < first_ts:
                                 first_ts = iso
                         except (ValueError, TypeError):
-                            pass
+                            iso = None
+                    if not is_sub and iso is not None:
+                        last_parent_ts = iso
                     thinking = ((u.get("output_tokens_details") or {})
                                 .get("thinking_tokens") or 0)
-                    mid = m.get("id")
-                    if mid:
-                        # Re-emisión de un request ya contado: merge max() por
-                        # campo (nunca pierde tokens ni rompe monotonicidad).
-                        key = (model, mid)
-                        prev = seen_msgs.get(key)
-                        if prev is not None:
-                            prev[1] = max(prev[1], inp)
-                            prev[2] = max(prev[2], out)
-                            prev[3] = max(prev[3], cr)
-                            prev[4] = max(prev[4], cw)
-                            prev[5] = max(prev[5], thinking)
-                            continue
-                        seen_msgs[key] = [1, inp, out, cr, cw, thinking]
+                    vals = (inp, out, cr, cw, thinking)
+                    covered = is_sub and real_cost > 0 and (
+                        iso is None or cs_cutoff_ts is None
+                        or iso <= cs_cutoff_ts)
                     mm = by_model.setdefault(model, {
                         "requests": 0, "input": 0, "output": 0,
                         "cache": 0, "cache_read": 0, "cache_write": 0,
                         "reasoning": 0,
                     })
-                    mm["requests"] += 1
-                    mm["input"] += inp
-                    mm["output"] += out
-                    mm["cache_read"] += cr
-                    mm["cache_write"] += cw
-                    mm["cache"] += cr  # cache = solo lectura; write va aparte
-                    mm["reasoning"] += thinking
+                    mid = m.get("id")
+                    if mid:
+                        key = (model, mid)
+                        prev = seen_msgs.get(key)
+                        if prev is not None:
+                            # Re-emisión: sumar solo el incremento sobre el max
+                            # ya contado. En subagentes la 1ª emisión trae el
+                            # usage parcial del streaming (output de 1-2 tokens).
+                            inc = [max(0, v - p) for v, p in zip(vals, prev[1:6])]
+                            for i, v in enumerate(vals):
+                                prev[1 + i] = max(prev[1 + i], v)
+                            _acc_usage(mm, 0, inc)
+                            if prev[6]:
+                                _acc_usage(event_snapshot.setdefault(model, {}), 0, inc)
+                            continue
+                        seen_msgs[key] = [1, *vals, covered]
+                    _acc_usage(mm, 1, vals)
                     requests += 1
+                    if covered:
+                        _acc_usage(event_snapshot.setdefault(model, {}), 1, vals)
                 elif t == "cost-state":
                     # Varios eventos por archivo: tomar el último no nulo (B6).
                     c = d.get("totalCostUSD")
@@ -1652,6 +1690,7 @@ def get_claude_session_stats(session):
                         # Snapshot del acumulado de eventos al momento del cs:
                         # el delta posterior se suma al modelUsage (híbrido).
                         event_snapshot = {m: dict(v) for m, v in by_model.items()}
+                        cs_cutoff_ts = last_parent_ts
                     mu = d.get("modelUsage") or {}
                     for mname, mdata in mu.items():
                         mc = mdata.get("costUSD")
