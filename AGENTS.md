@@ -103,6 +103,30 @@ python3 -c 'import stats_common; stats_common.init_db()'
 session-stats --capture-all
 ```
 
+## ZCode (rollouts + DB interna)
+
+ZCode se captura desde **dos fuentes** en cada `--capture-all`; ambas usan la
+misma key `zcode_<sessionId>` y como la DB interna siempre reporta ≥ rollout,
+el upsert MAX de `save_session` converge sin duplicar.
+
+| Fuente | Path | Cubre |
+|---|---|---|
+| Rollouts JSONL | `~/.zcode/cli/rollout/model-io-sess*.jsonl` | Formato viejo `model-io-sess_<uuid>` (hasta ~2026-09-13), actual `model-io-session_<hash>`, subagentes `subagent_agent_*` y workflows `dwf-*`. El glob unificado `model-io-sess*` cubre todos. |
+| DB interna | `~/.zcode/cli/db/db.sqlite`, tabla `model_usage` (1 fila por request) | Lo que el rollout PIERDE: compactación de contexto (reinicia el JSONL a cero con el mismo sessionId) y borrado del rollout al cerrar sesión/workflow (tramo final o workflows <5min enteros). |
+
+- Semántica verificada 2026-10-23 (idéntica en ambas fuentes): `inputTokens`
+  INCLUYE `cacheReadTokens`; `cacheWriteTokens` siempre 0 (ZAI). En la DB
+  interna las columnas análogas son `input_tokens` / `cache_read_input_tokens`
+  / `cache_creation_input_tokens`, y `started_at` es epoch ms (se convierte a
+  ISO Z).
+- Filtro: solo filas con `input+output > 0` (excluye requests cancelados sin
+  usage, igual que `has_real_usage_zcode` hace con el rollout).
+- La DB se abre `mode=ro` por URI (WAL activo de zcode, sin bloquear).
+- Bonus de `model_usage` (aún no explotado): `time_to_first_token_ms` (TTFT
+  real medido) y `reasoning_tokens` por columna.
+- Si zcode cambia el esquema en una actualización, `get_zcode_sqlite_*`
+  devuelve `[]` silenciosamente y la fuente rollout sigue capturando.
+
 ## OpenCode v2 (`opencode2`)
 
 `opencode2` es el CLI v2 de OpenCode (`@opencode-ai/cli`, binario `~/.local/bin/opencode2`).

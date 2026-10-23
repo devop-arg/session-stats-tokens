@@ -28,6 +28,8 @@ GROK_SESSIONS_DIR = Path.home() / ".grok" / "sessions"
 
 # Rutas de ZCode CLI (rollouts model-io en ~/.zcode/cli/rollout/)
 ZCODE_ROLLOUT_DIR = Path.home() / ".zcode" / "cli" / "rollout"
+# DB interna de ZCode (tabla model_usage: un registro por request)
+ZCODE_DB_PATH = Path.home() / ".zcode" / "cli" / "db" / "db.sqlite"
 
 # Rutas de Claude Code (JSONL por sesión en ~/.claude/projects/<cwd-slug>/)
 CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
@@ -1468,6 +1470,94 @@ def get_zcode_session_stats(session_file):
     return {
         "session_id": session_id or session_file.stem.replace("model-io-sess_", ""),
         "date": first_started or "",
+        "requests": requests,
+        "input": sum(m["input"] for m in by_model.values()),
+        "output": sum(m["output"] for m in by_model.values()),
+        "cache": sum(m["cache"] for m in by_model.values()),
+        "cache_read": sum(m["cache_read"] for m in by_model.values()),
+        "cache_write": sum(m["cache_write"] for m in by_model.values()),
+        "by_model": by_model,
+    }
+
+
+def get_zcode_sqlite_sessions():
+    """Retorna [(session_id, last_started_ms)] con usage real en la DB interna.
+
+    La DB de ZCode (db.sqlite, tabla model_usage) persiste un registro por
+    request y sobrevive a los dos huecos del rollout: la compactacion de
+    contexto (que reinicia el JSONL a cero con el mismo sessionId) y el
+    borrado del rollout al cerrar sesion o workflow (tramo final o workflows
+    cortos enteros). Los session_id coinciden con los internos de los
+    rollouts, asi que el upsert MAX contra lo capturado por rollout converge
+    sin duplicar: la DB siempre reporta >= rollout para la misma sesion.
+    """
+    if not ZCODE_DB_PATH.exists():
+        return []
+    try:
+        conn = sqlite3.connect(f"file:{ZCODE_DB_PATH}?mode=ro", uri=True)
+        c = conn.cursor()
+        c.execute(
+            "SELECT session_id, max(started_at) FROM model_usage "
+            "WHERE input_tokens + output_tokens > 0 GROUP BY session_id"
+        )
+        rows = c.fetchall()
+        conn.close()
+        return rows
+    except sqlite3.Error:
+        return []
+
+
+def get_zcode_sqlite_session_stats(session_id):
+    """Agrega usage por modelo desde la tabla model_usage de la DB de ZCode.
+
+    Semantica identica al rollout (verificada 2026-10-23): input_tokens
+    INCLUYE cache_read_input_tokens y los cache_creation (write) van aparte
+    (ZAI los reporta en 0). started_at es epoch ms; se convierte a ISO Z
+    para mantener el formato de date del resto de las fuentes.
+    """
+    by_model = {}
+    first_started_ms = None
+    requests = 0
+    try:
+        conn = sqlite3.connect(f"file:{ZCODE_DB_PATH}?mode=ro", uri=True)
+        c = conn.cursor()
+        c.execute(
+            "SELECT model_id, count(*), sum(input_tokens), sum(output_tokens), "
+            "sum(cache_read_input_tokens), sum(cache_creation_input_tokens), "
+            "min(started_at) FROM model_usage "
+            "WHERE session_id = ? AND input_tokens + output_tokens > 0 "
+            "GROUP BY model_id",
+            (session_id,),
+        )
+        for model_id, n, inp, out, cr, cw, started_ms in c.fetchall():
+            model = normalize_model_name(model_id or "unknown")
+            m = by_model.setdefault(model, {
+                "requests": 0, "input": 0, "output": 0,
+                "cache": 0, "cache_read": 0, "cache_write": 0,
+            })
+            m["requests"] += n or 0
+            m["input"] += inp or 0
+            m["output"] += out or 0
+            m["cache_read"] += cr or 0
+            m["cache_write"] += cw or 0
+            m["cache"] += (cr or 0) + (cw or 0)
+            requests += n or 0
+            if started_ms and (first_started_ms is None or started_ms < first_started_ms):
+                first_started_ms = started_ms
+        conn.close()
+    except sqlite3.Error:
+        pass
+
+    date = ""
+    if first_started_ms:
+        date = (
+            datetime.datetime.fromtimestamp(first_started_ms / 1000, tz=datetime.timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
+    return {
+        "session_id": session_id,
+        "date": date,
         "requests": requests,
         "input": sum(m["input"] for m in by_model.values()),
         "output": sum(m["output"] for m in by_model.values()),
