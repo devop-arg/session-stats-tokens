@@ -1386,12 +1386,14 @@ def get_grok_session_stats(session_id):
 def get_zcode_sessions():
     """Retorna lista de archivos JSONL model-io de sesiones de ZCode CLI.
 
-    Cada model-io-sess_*.jsonl contiene un registro por request con usage
-    real. Ordenados por mtime (más nuevo primero).
+    Hay dos formatos de nombre según versión de ZCode: el viejo
+    model-io-sess_<uuid>.jsonl (hasta ~2026-09-13) y el actual
+    model-io-session_<hash>.jsonl. El glob model-io-sess* cubre ambos.
+    Ordenados por mtime (más nuevo primero).
     """
     if not ZCODE_ROLLOUT_DIR.exists():
         return []
-    sessions = [p for p in ZCODE_ROLLOUT_DIR.glob("model-io-sess_*.jsonl") if p.is_file()]
+    sessions = [p for p in ZCODE_ROLLOUT_DIR.glob("model-io-sess*.jsonl") if p.is_file()]
     sessions.sort(key=lambda x: x.stat().st_mtime, reverse=True)
     return sessions
 
