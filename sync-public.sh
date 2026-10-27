@@ -85,8 +85,10 @@ fi
 # `--cached` deja copias sin trackear en el working tree; borrarlas para que el
 # checkout de vuelta a main no falle. (codex_sub_costs.json se restaura solo vía
 # el trap restore_codex_sub_costs.)
-rm -f session_history.json session_history.db session_history_legacy_freeze.json \
-      db_backups/session_history_*.db db_backups/*.db 2>/dev/null || true
+# OJO: NO borrar db_backups/*.db — son backups locales no trackeados que no
+# bloquean el checkout (main los tiene gitignored salvo el histórico de julio,
+# que el propio checkout restaura). Borrarlos destruía la rotación diaria.
+rm -f session_history.json session_history.db session_history_legacy_freeze.json 2>/dev/null || true
 
 echo "=== 5. Commit merge ==="
 git commit --no-edit -m "$MSG"
