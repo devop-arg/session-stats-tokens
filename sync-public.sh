@@ -63,7 +63,9 @@ echo "=== 4. Excluir datos sensibles ==="
 git rm --cached -f session_history.json session_history.db session_history_legacy_freeze.json 2>/dev/null || true
 git rm --cached -f codex_sub_costs.json 2>/dev/null || true
 # Los backups de DB pueden venir como M del squash o ya trackeados de antes.
-git rm --cached -f 'db_backups/session_history_*.db' 'db_backups/*.db' 2>/dev/null || true
+# Se excluye TODO db_backups/ (no solo *.db): hay snapshots .json y copias de
+# código que tampoco deben ir al público (leak detectado 2026-10-27).
+git rm -r --cached -f db_backups 2>/dev/null || true
 
 # Conflictos modify/delete (archivo modificado en main, borrado en public):
 # para datos sensibles la única resolución válida es BORRARLO del índice.
@@ -106,7 +108,7 @@ echo "=== 5. Commit merge ==="
 git commit --no-edit -m "$MSG"
 
 echo "=== 5b. VERIFICACIÓN ANTI-LEAK (pre-push, obligatoria) ==="
-SENSITIVE_RE='^(session_history\.db|session_history\.json|session_history_legacy_freeze\.json|codex_sub_costs\.json|capture\.log)$|^db_backups/.*\.db$'
+SENSITIVE_RE='^(session_history\.db|session_history\.json|session_history_legacy_freeze\.json|codex_sub_costs\.json|capture\.log)$|^db_backups/'
 LEAKS=$(git ls-tree -r HEAD --name-only | grep -E "$SENSITIVE_RE" || true)
 if [[ -n "$LEAKS" ]]; then
   echo "ERROR FATAL: el commit local contiene datos sensibles. NO se pushea:"

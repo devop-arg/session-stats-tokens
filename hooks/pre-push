@@ -11,7 +11,7 @@
 REMOTE="$1"
 ZERO="0000000000000000000000000000000000000000"
 
-SENSITIVE_RE='^(session_history\.db|session_history\.json|session_history_legacy_freeze\.json|codex_sub_costs\.json|capture\.log)$|^db_backups/.*\.db$'
+SENSITIVE_RE='^(session_history\.db|session_history\.json|session_history_legacy_freeze\.json|codex_sub_costs\.json|capture\.log)$|^db_backups/'
 
 reject() {
   echo "" >&2
