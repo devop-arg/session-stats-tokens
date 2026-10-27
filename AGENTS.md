@@ -193,3 +193,29 @@ era JSON (v1.1.x) viven SOLO en `session_history.db` y se pierden si se borran
 - **Si un backup/restore mueve `stats-web/` a otra máquina**, regenerar el
   `.session_secret` (o copiarlo junto con el directorio) para no invalidar
   sesiones existentes.
+
+## Fuentes Hermes, modelos y totales (2026-10-27)
+
+- **Fuentes Hermes**: `HERMES_SOURCES_SQL` en `stats_common.py` es la única
+  lista (`cli, telegram, subagent, discord, cron, oneshot, local`) y la usan
+  las TRES queries (listado, `has_real_usage_hermes`, `get_hermes_session_stats`).
+  Si las tres no coinciden, la sesión se lista pero no se captura. `cron`,
+  `oneshot` y `local` estaban afuera: 113 sesiones / ~$0.65 invisibles.
+- **Sesiones abiertas**: Hermes solo persiste al cerrar. Las huérfanas
+  (`ended_at IS NULL`) se cierran con `end_reason='stale_cleanup'`; si no, no se
+  capturan sus tokens y `session-stats` las muestra como "sesión actual"
+  (el cutoff de 6 h en `session-stats` evita el segundo problema, no el primero).
+- **Normalización de modelos**: `normalize_model_name()` quita sufijos entre
+  corchetes (`claude-opus-5-5[1m]` → `claude-opus-5-5`). Claude Code usa el
+  label `[1m]` solo en `modelUsage` (evento `cost-state`): sin normalizar se
+  duplican filas de `model_usage` con los mismos tokens y costo.
+- **Aliases**: un modelo pago con nombre corto (ej. `deepseek-flash` →
+  `deepseek-v4.1-flash`) va en `model_aliases.json`. **Nunca** sembrarlo con
+  precio `0.0`: eso anula el fallback y factura $0 para siempre.
+- **Totales**: `recalculate_historical_cost()` suma el costo **almacenado** por
+  modelo (`model_usage.cost`), no lo recalcula con los precios de hoy; el
+  recálculo desalineaba el CLI con la DB (gpt-5.4: -$38). El total incluye
+  `legacy` (por eso difiere de `/api/summary`, que lo excluye).
+- **Pendiente**: `session-stats-history` sigue inflando (doble conteo de
+  `requests` en `add_to_month()` y costos recalculados sin `source`, que
+  sobrecobran a Codex/ZCode porque su input ya incluye cache reads).

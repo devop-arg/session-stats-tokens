@@ -224,11 +224,15 @@ def get_current_session():
     if not candidates:
         return None
 
-    # Solo priorizar Hermes si la sesion MAS RECIENTE esta abierta (sin ended_at)
+    # Solo priorizar Hermes si la sesion MAS RECIENTE esta abierta (sin
+    # ended_at) Y es reciente. Una sesion huerfana que nunca se cerro no debe
+    # tapar la sesion realmente activa de otra fuente.
+    HERMES_OPEN_TTL_MS = 6 * 60 * 60 * 1000
+    now_ms = int(time.time() * 1000)
     hermes_candidates = [c for c in candidates if c[0] == "hermes"]
     if hermes_candidates:
         latest = max(hermes_candidates, key=lambda x: x[2])
-        if not latest[3]:
+        if not latest[3] and (now_ms - latest[2]) <= HERMES_OPEN_TTL_MS:
             return latest[:3]
 
     # Return the one with the highest timestamp

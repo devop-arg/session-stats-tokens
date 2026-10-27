@@ -11,6 +11,12 @@ CODEX_SESSIONS_DIR = Path.home() / ".codex/sessions"
 HERMES_DB_PATH = Path.home() / ".hermes/state.db"
 HERMES_SESSIONS_DIR = Path.home() / ".hermes/sessions"
 
+# Fuentes de Hermes con uso real de tokens que se contabilizan.
+# Incluye cron/oneshot/local: jobs programados y sesiones one-shot también
+# consumen tokens y antes quedaban fuera del historial. Subagent debe estar
+# acá en las TRES queries (captura, detección y stats) o se pierde igual.
+HERMES_SOURCES_SQL = "('cli', 'telegram', 'subagent', 'discord', 'cron', 'oneshot', 'local')"
+
 # Rutas de OpenCode SQLite (v1.3.0+)
 OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
 
@@ -268,6 +274,11 @@ def normalize_model_name(model):
         return "unknown"
 
     model_lower = model.lower()
+
+    # Variantes de contexto entre corchetes ("claude-opus-5-5[1m]"): Claude Code
+    # las reporta en modelUsage para el MISMO modelo y precio. Sin quitarlas se
+    # generan filas duplicadas en model_usage (tokens y costo x2).
+    model_lower = re.sub(r"\[[^\]]*\]", "", model_lower)
 
     # Remover prefijos de provider
     for prefix in [
@@ -851,13 +862,13 @@ def get_hermes_sessions():
     try:
         conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT id, model, input_tokens, output_tokens,
                    cache_read_tokens, cache_write_tokens, reasoning_tokens,
                    estimated_cost_usd, actual_cost_usd, ended_at, started_at, title,
                    billing_provider
             FROM sessions
-            WHERE source IN ('cli', 'telegram', 'subagent', 'discord') AND input_tokens > 0
+            WHERE source IN {HERMES_SOURCES_SQL} AND input_tokens > 0
             ORDER BY started_at DESC
         """)
         sessions = []
@@ -931,7 +942,7 @@ def has_real_usage_hermes(session_id):
         conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT input_tokens FROM sessions WHERE id = ? AND source IN ('cli', 'telegram', 'discord')",
+            f"SELECT input_tokens FROM sessions WHERE id = ? AND source IN {HERMES_SOURCES_SQL}",
             (session_id,)
         )
         row = cursor.fetchone()
@@ -952,11 +963,11 @@ def get_hermes_session_stats(session_id):
     try:
         conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
         cursor = conn.cursor()
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT model, input_tokens, output_tokens,
                    cache_read_tokens, cache_write_tokens, reasoning_tokens,
                    estimated_cost_usd, actual_cost_usd, ended_at, started_at, title
-            FROM sessions WHERE id = ? AND source IN ('cli', 'telegram', 'discord')
+            FROM sessions WHERE id = ? AND source IN {HERMES_SOURCES_SQL}
         """, (session_id,))
         row = cursor.fetchone()
         if not row:
@@ -2209,12 +2220,13 @@ def recalculate_historical_cost():
         placeholders = ",".join("?" for _ in session_keys)
         mrows = conn.execute(
             f"SELECT mu.session_id, mu.model, mu.requests, mu.input_tokens, mu.output_tokens, "
-            f"mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens, s.source, s.requests "
+            f"mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens, s.source, s.requests, "
+            f"mu.cost "
             f"FROM model_usage mu JOIN sessions s ON s.id = mu.session_id "
             f"WHERE mu.session_id IN ({placeholders})",
             session_keys,
         ).fetchall()
-        for session_id, model, reqs, inp, out, cache, cache_read, cache_write, source, session_requests in mrows:
+        for session_id, model, reqs, inp, out, cache, cache_read, cache_write, source, session_requests, mu_cost in mrows:
             effective_cache_read = effective_cache_read_tokens(cache, cache_read, cache_write)
             normalized = normalize_model_name(model)
             if normalized not in models_totals:
@@ -2229,15 +2241,12 @@ def recalculate_historical_cost():
             models_totals[normalized]["cache"] += cache
             models_totals[normalized]["cache_read"] += effective_cache_read
             models_totals[normalized]["cache_write"] += cache_write
-            # El write es un componente facturable aparte (claude/hermes);
-            # para fuentes cuyo input ya incluye cache (codex/zcode) NO se
-            # pasa: su cache_tokens legacy ya lo cubre.
-            sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
-            cw_billable = (sem["cache_write_billable"]
-                           and not sem["input_includes_cache_read"])
-            models_totals[normalized]["cost"] += calculate_cost(
-                normalized, inp, out, cache, source=source,
-                cache_write_tokens=cache_write if cw_billable else 0)
+            # Costo almacenado: valor facturado/registrado en la captura
+            # (Claude usa el costUSD real del CLI; Codex/Hermes el del momento).
+            # Recalcular desde tokens con los precios de HOY desalineaba el
+            # total del CLI con la DB (ej. gpt-5.4: -$38).
+            models_totals[normalized]["stored_cost"] += mu_cost or 0.0
+            models_totals[normalized]["cost"] += mu_cost or 0.0
             ratio_row = {
                 "session_id": session_id,
                 "session_requests": session_requests,
@@ -2268,7 +2277,10 @@ def recalculate_historical_cost():
 
     conn.close()
 
-    total_sessions = base_sessions + len(session_keys)
+    # historical_total es UNA fila agregada del período legacy (su
+    # reasoning_tokens guarda un conteo histórico que no corresponde a filas
+    # reales): sumarlo desalineaba el total de sesiones contra la DB.
+    total_sessions = len(session_keys) + (1 if historical_total_cost > 0 else 0)
 
     # Agregar tokens de historical_total desde model_usage
     if base_sessions > 0 and historical_total_cost > 0:
@@ -2332,6 +2344,11 @@ def recalculate_historical_cost():
     opencode_sqlite_sessions = get_opencode_sqlite_sessions()
     for sid, stats in opencode_sqlite_sessions.items():
         if sid in session_keys:
+            continue
+        if (stats.get("input", 0) + stats.get("output", 0)
+                + stats.get("cache", 0)) == 0:
+            # Sin tokens no hay consumo: la captura también la ignora
+            # (has_real_usage_sqlite). Contarla inflaba el total de sesiones.
             continue
         by_model = stats.get("by_model", {})
         for model, model_data in by_model.items():
