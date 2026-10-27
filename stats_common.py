@@ -2658,6 +2658,22 @@ def save_session(sid, source, date, timestamp, requests, input_tokens,
     for model, mdata in by_model.items():
         mu_cache_read = mdata.get("cache_read", mdata.get("cache", 0))
         mu_cache_write = mdata.get("cache_write", 0)
+        mu_reqs = mdata.get("requests", 0)
+        mu_in = mdata.get("input", 0)
+        mu_out = mdata.get("output", 0)
+        mu_cache = mdata.get("cache", mdata.get("cache_read", 0) + mdata.get("cache_write", 0))
+        # Alias lazily: Hermes reporta contadores ACUMULADOS y su label de
+        # modelo cambia con el tiempo. Si el mismo vector de tokens ya existe
+        # bajo otro nombre (misma cuota de uso), es un snapshot viejo: se borra
+        # para no duplicar tokens/costo. Los grupos en cero no se tocan.
+        if (mu_in + mu_out + mu_cache) > 0:
+            conn.execute(
+                """DELETE FROM model_usage
+                   WHERE session_id = ? AND model <> ?
+                     AND requests = ? AND input_tokens = ? AND output_tokens = ?
+                     AND cache_tokens = ?""",
+                (sid, model, mu_reqs, mu_in, mu_out, mu_cache)
+            )
         conn.execute(
             """INSERT INTO model_usage
             (session_id, model, requests, input_tokens, output_tokens,

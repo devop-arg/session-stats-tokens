@@ -223,10 +223,20 @@ era JSON (v1.1.x) viven SOLO en `session_history.db` y se pierden si se borran
   mes desde la fila `sessions` y `add_model_usage()` solo el desglose; el costo
   sale de `model_usage.cost` almacenado. Verificación: ratio 1.00 contra
   `SUM(...) FROM sessions`.
-- **Deuda de datos detectada**: 81 sesiones (79 Hermes + 2 OpenCode) tienen
-  filas duplicadas en `model_usage` — mismos tokens con alias distintos
-  (`deepseek-v4-flash` vs `-0731`, `ox-alpha`/`glm-5.3`/`glm-5.3-flash`),
-  porque el upsertea por nombre crudo y el modelo reportado cambió con el
-  tiempo. `sessions.cost` es la SUMA de esas filas, así que el gasto histórico
-  está sobrestimado en ~$64 (dedupe conservador max) a ~$169 (una sola fila).
-  No corregido: requiere decisión (migración de datos).
+- **Dedupe de `model_usage` (2026-10-27)**: Hermes reporta contadores
+  ACUMULADOS por sesión, pero `save_session()` upsertea por nombre de modelo
+  crudo. Cada vez que cambió el label/alias (ox-alpha → glm-5.3 →
+  glm-5.3-flash, deepseek-v4-flash → -0731, etc.) se insertó una fila NUEVA con
+  los totales completos de la sesión, y `sessions.cost` quedó como la SUMA de
+  esos snapshots (hasta 6x en una sesión).
+  **Regla de detección**: dentro de una sesión, filas con vector de tokens
+  idéntico `(requests, input, output, cache)` al de la fila `sessions` y con
+  tokens > 0 son snapshots de la misma sesión (los grupos en cero son conteos
+  por modelo legítimos y NO se tocan).
+  **Fix aplicado**: se conserva la última insertada (rowid max, snapshot más
+  reciente) y se borran las anteriores; `sessions.cost` se recalcula como la
+  suma de las filas que quedan. 137 filas borradas, 89 sesiones corregidas,
+  total histórico $4.640,79 → $4.465,15 (−3,8%). Backup:
+  `db_backups/session_history_pre_dedupe_20261027_124234.db`.
+  **Invariante post-fix** (verificar siempre): `SUM(sessions.cost) ==
+  SUM(model_usage.cost)`.
