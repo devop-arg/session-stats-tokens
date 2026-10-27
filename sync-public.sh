@@ -31,6 +31,18 @@ if [[ -f "$CODEX_SUB_COSTS_FILE" ]]; then
   cp -p "$CODEX_SUB_COSTS_FILE" "$CODEX_SUB_COSTS_BACKUP"
 fi
 
+echo "=== 0. Commitear backups pendientes (van al repo privado) ==="
+# db_backups/*.db está trackeado en main (privado). El cron diario crea uno
+# nuevo; acá se commitea para que el push del paso 1 lo suba. Se commitea SOLO
+# ese path: no toca cambios pendientes del resto del repo.
+git add -f db_backups/*.db 2>/dev/null || true
+if ! git diff --cached --quiet -- db_backups 2>/dev/null; then
+  git commit -q -m "chore: backups de session_history.db" -- db_backups
+  echo "backups pendientes commiteados"
+else
+  echo "sin backups nuevos"
+fi
+
 echo "=== 1. Push main a private ==="
 git push private main
 
@@ -85,9 +97,9 @@ fi
 # `--cached` deja copias sin trackear en el working tree; borrarlas para que el
 # checkout de vuelta a main no falle. (codex_sub_costs.json se restaura solo vía
 # el trap restore_codex_sub_costs.)
-# OJO: NO borrar db_backups/*.db — son backups locales no trackeados que no
-# bloquean el checkout (main los tiene gitignored salvo el histórico de julio,
-# que el propio checkout restaura). Borrarlos destruía la rotación diaria.
+# OJO: NO borrar db_backups/*.db del disco — están TRACKEADOS en main (repo
+# privado) y son la rotación de backups. `git rm --cached` (paso 4) ya los saca
+# del índice público; el checkout restaura los de main.
 rm -f session_history.json session_history.db session_history_legacy_freeze.json 2>/dev/null || true
 
 echo "=== 5. Commit merge ==="

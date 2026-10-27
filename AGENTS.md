@@ -67,9 +67,12 @@ cualquier estado A/M) más resolución explícita de conflictos modify/delete.
   borrarla sin aviso. Antes: `cp session_history.db /tmp/session_history.db.bak`.
   Si ya se borró: restaurar desde `db_backups/` + `session-stats --capture-all`.
 - **`sync-public.sh` no debe borrar `db_backups/*.db`** (bug corregido
-  2026-10-27): el `rm -f db_backups/*.db` del paso 4.borrado wipeaba la rotación
-  diaria en cada publicación. Solo hay que borrar los archivos sensibles de la
-  raíz, que el `checkout main` restaura por estar trackeados.
+  2026-10-27): el `rm -f db_backups/*.db` del paso 4 wipeaba la rotación diaria
+  en cada publicación. Los backups están **trackeados en el repo privado**
+  (`db_backups/` ya no está en `.gitignore`); `git rm --cached` los saca del
+  índice público y el hook `pre-push` + la verificación anti-leak los bloquean
+  si intentan irse a `origin`. Solo hay que borrar del disco los sensibles de
+  la raíz, que el `checkout main` restaura por estar trackeados.
 
 ## Lecciones del incidente 2026-08-24
 

@@ -1,0 +1,2841 @@
+import json
+import re
+import sqlite3
+import datetime
+from pathlib import Path
+
+# Rutas de Codex CLI
+CODEX_SESSIONS_DIR = Path.home() / ".codex/sessions"
+
+# Rutas de Hermes
+HERMES_DB_PATH = Path.home() / ".hermes/state.db"
+HERMES_SESSIONS_DIR = Path.home() / ".hermes/sessions"
+
+# Rutas de OpenCode SQLite (v1.3.0+)
+OPENCODE_DB_PATH = Path.home() / ".local/share/opencode/opencode.db"
+
+# Rutas de Kilocode CLI
+KILOCODE_STATE_FILE = Path.home() / ".kilocode/cli/global/global-state.json"
+KILOCODE_TASKS_DIR = Path.home() / ".kilocode/cli/global/tasks"
+
+# Rutas de Cursor CLI (hook afterAgentResponse → usage-events.jsonl)
+CURSOR_USAGE_JSONL = Path.home() / ".cursor" / "usage-events.jsonl"
+CURSOR_CHATS_DIR = Path.home() / ".cursor" / "chats"
+CURSOR_AGENT_LOGS_DIR = Path("/tmp") / f"cursor-agent-logs-{__import__('os').getuid()}"
+
+# Rutas de Grok CLI (session files en ~/.grok/sessions/<cwd>/<uuid>/)
+GROK_SESSIONS_DIR = Path.home() / ".grok" / "sessions"
+
+# Rutas de ZCode CLI (rollouts model-io en ~/.zcode/cli/rollout/)
+ZCODE_ROLLOUT_DIR = Path.home() / ".zcode" / "cli" / "rollout"
+
+# Rutas de Claude Code (JSONL por sesión en ~/.claude/projects/<cwd-slug>/)
+CLAUDE_PROJECTS_DIR = Path.home() / ".claude" / "projects"
+
+# Directorio del script (para JSON de modelos)
+SCRIPT_DIR = Path(__file__).resolve().parent
+MODEL_COSTS_FILE = SCRIPT_DIR / "model_costs.json"
+MODEL_ALIASES_FILE = SCRIPT_DIR / "model_aliases.json"
+
+
+# Costos por 1M tokens (USD) — valores por defecto, pisados por JSON si existe
+MODEL_COSTS = {
+    "glm-4.7": {"input": 0.39, "output": 1.75, "cache": 0.195},
+    "glm-4.7-flash": {"input": 0.06, "output": 0.4, "cache": 0.01},
+    "gpt-5.1-codex-max": {"input": 1.25, "output": 10},
+    "codex-max": {"input": 1.25, "output": 10},
+    "gpt-5.2-codex": {"input": 1.75, "output": 14},
+    "gpt-5.2": {"input": 1.75, "output": 14},
+    "gpt-5.3-codex": {"input": 1.75, "output": 14},
+    "gpt-5.4": {"input": 1.75, "output": 14},
+    "gpt-5-mini": {"input": 0.25, "output": 2},
+    "step-3.5-flash": {"input": 0.10, "output": 0.30, "cache": 0.02},
+    "antigravity-claude-opus-4-5-thinking": {"input": 5, "output": 25},
+    "antigravity-claude-opus-4-5-thinking/high": {"input": 5, "output": 25},
+    "antigravity-claude-opus-4-5-thinking/low": {"input": 5, "output": 25},
+    "claude-opus-4.5": {"input": 5, "output": 25},
+    "claude-opus-4.5-thinking": {"input": 5, "output": 25},
+    "claude-opus-4.5-thinking/high": {"input": 5, "output": 25},
+    "claude-opus-4.5-thinking/low": {"input": 5, "output": 25},
+    "antigravity-claude-opus-4-6-thinking": {"input": 5, "output": 25},
+    "claude-opus-4.6": {"input": 5, "output": 25},
+    "antigravity-claude-sonnet-4-5": {"input": 3, "output": 15},
+    "antigravity-claude-sonnet-4-5-thinking": {"input": 3, "output": 15},
+    "antigravity-claude-sonnet-4-5-thinking/high": {"input": 3, "output": 15},
+    "antigravity-claude-sonnet-4-5-thinking/low": {"input": 3, "output": 15},
+    "claude-sonnet-4.5": {"input": 3, "output": 15},
+    "claude-sonnet-4.5-thinking": {"input": 3, "output": 15},
+    "claude-sonnet-4.5-thinking/high": {"input": 3, "output": 15},
+    "claude-sonnet-4.5-thinking/low": {"input": 3, "output": 15},
+    "claude-haiku-4.5": {"input": 1, "output": 5},
+    "antigravity-gemini-3-flash": {"input": 0.5, "output": 3},
+    "antigravity-gemini-3-flash/minimal": {"input": 0.5, "output": 3},
+    "antigravity-gemini-3-flash/low": {"input": 0.5, "output": 3},
+    "antigravity-gemini-3-flash/medium": {"input": 0.5, "output": 3},
+    "antigravity-gemini-3-flash/high": {"input": 0.5, "output": 3},
+    "gemini-3-flash": {"input": 0.5, "output": 3},
+    "gemini-3-flash/minimal": {"input": 0.5, "output": 3},
+    "gemini-3-flash/low": {"input": 0.5, "output": 3},
+    "gemini-3-flash/medium": {"input": 0.5, "output": 3},
+    "gemini-3-flash/high": {"input": 0.5, "output": 3},
+    "tab_flash_lite_preview": {"input": 0.5, "output": 3},
+    "antigravity-gemini-3-pro": {"input": 2, "output": 12},
+    "antigravity-gemini-3-pro/low": {"input": 2, "output": 12},
+    "antigravity-gemini-3-pro/high": {"input": 2, "output": 12},
+    "gemini-3-pro": {"input": 2, "output": 12},
+    "gemini-3-pro/low": {"input": 2, "output": 12},
+    "gemini-3-pro/high": {"input": 2, "output": 12},
+    "antigravity-gemini-3.1-pro": {"input": 2, "output": 12, "cache": 0.2},
+    "antigravity-gemini-3.1-pro/low": {"input": 2, "output": 12, "cache": 0.2},
+    "antigravity-gemini-3.1-pro/high": {"input": 2, "output": 12, "cache": 0.2},
+    "gemini-3.1-pro": {"input": 2, "output": 12, "cache": 0.2},
+    "gemini-3.1-pro/low": {"input": 2, "output": 12, "cache": 0.2},
+    "gemini-3.1-pro/high": {"input": 2, "output": 12, "cache": 0.2},
+    "gemini-3.1-flash-lite": {"input": 0.25, "output": 1.5, "cache": 0.025},
+    "gemini-3.1-flash-image": {"input": 0.5, "output": 3.0},
+    "x-ai/grok-4.1-fast": {"input": 0.20, "output": 0.50, "cache": 0.05},
+    "kimi-k2.5": {"input": 0.50, "output": 2.60, "cache": 0.09},
+    "minimax-m2.1": {"input": 0.27, "output": 0.95},
+    "trinity-large-preview": {"input": 0.25, "output": 1.00},
+    "glm-5.1": {"input": 1.40, "output": 4.40, "cache": 0.26},
+    "glm-5": {"input": 0.80, "output": 2.56, "cache": 0.16},
+    "grok-code-fast-1-optimized-free": {"input": 0.20, "output": 1.50, "cache": 0.02},
+    "mimo-v2-pro": {"input": 1, "output": 3},
+    "qwen3.6-plus": {"input": 0.50, "output": 3.00, "cache": 0.50},
+    "minimax-m2.5": {"input": 0.30, "output": 1.20, "cache": 0.03},
+    "minimax-m2.7": {"input": 0.30, "output": 1.20, "cache": 0.06},
+    "gemma-4-31b": {"input": 0.15, "output": 0.40},
+    "deepseek-v4-flash": {"input": 0.14, "output": 0.28, "cache": 0.028},
+    "deepseek-v4-pro": {"input": 1.74, "output": 3.48, "cache": 0.145},
+}
+
+MODEL_ALIASES = {
+    "step-3.5-flash": "step-3.5-flash",
+    "step-3.5-flash-free": "step-3.5-flash",
+    "k2p5": "kimi-k2.5",
+    "kimi-k2.5-free": "kimi-k2.5",
+    "minimax-m2.1-free": "minimax-m2.1",
+    "minimax-m2.1-pro": "minimax-m2.1",
+    "minimax-m2.5-free": "minimax-m2.5",
+    "minimax-m2.5": "minimax-m2.5",
+    "minimax-m2.7": "minimax-m2.7",
+    "trinity-large-preview": "trinity-large-preview",
+    "trinity-large-preview-free": "trinity-large-preview",
+    "glm-5-free": "glm-5",
+    "claude-opus-4.5": "claude-opus-4.5",
+    "antigravity-claude-opus-4-5-thinking": "claude-opus-4.5",
+    "antigravity-claude-opus-4-5-thinking-high": "claude-opus-4.5",
+    "antigravity-claude-opus-4-5-thinking-low": "claude-opus-4.5",
+    "claude-opus-4.5-thinking": "claude-opus-4.5",
+    "claude-opus-4.5-thinking/high": "claude-opus-4.5",
+    "claude-opus-4.5-thinking/low": "claude-opus-4.5",
+    "claude-opus-4.6": "claude-opus-4.6",
+    "antigravity-claude-opus-4-6-thinking": "claude-opus-4.6",
+    "antigravity-claude-opus-4-6-thinking-high": "claude-opus-4.6",
+    "antigravity-claude-opus-4-6-thinking-low": "claude-opus-4.6",
+    "claude-sonnet-4.5": "claude-sonnet-4.5",
+    "antigravity-claude-sonnet-4-5-thinking": "claude-sonnet-4.5",
+    "antigravity-claude-sonnet-4-5-thinking-high": "claude-sonnet-4.5",
+    "antigravity-claude-sonnet-4-5-thinking-low": "claude-sonnet-4.5",
+    "claude-sonnet-4.5-thinking": "claude-sonnet-4.5",
+    "claude-sonnet-4.5-thinking/high": "claude-sonnet-4.5",
+    "claude-sonnet-4.5-thinking/low": "claude-sonnet-4.5",
+    "claude-haiku-4.5": "claude-haiku-4.5",
+    "gemini-3-flash": "gemini-3-flash",
+    "antigravity-gemini-3-flash": "gemini-3-flash",
+    "antigravity-gemini-3-flash/minimal": "gemini-3-flash",
+    "antigravity-gemini-3-flash/low": "gemini-3-flash",
+    "antigravity-gemini-3-flash/medium": "gemini-3-flash",
+    "antigravity-gemini-3-flash/high": "gemini-3-flash",
+    "antigravity-gemini-3-flash-lite": "gemini-3-flash",
+    "antigravity-gemini-3-flash-preview": "gemini-3-flash",
+    "gemini-3-flash-preview": "gemini-3-flash",
+    "tab_flash_lite_preview": "gemini-3-flash",
+    "gemini-3-pro": "gemini-3-pro",
+    "antigravity-gemini-3-pro": "gemini-3-pro",
+    "antigravity-gemini-3-pro/low": "gemini-3-pro",
+    "antigravity-gemini-3-pro/high": "gemini-3-pro",
+    "antigravity-gemini-3-pro-low": "gemini-3-pro",
+    "antigravity-gemini-3-pro-high": "gemini-3-pro",
+    "gemini-3.1-pro": "gemini-3.1-pro",
+    "gemini-3.1": "gemini-3.1-pro",
+    "antigravity-gemini-3.1-pro": "gemini-3.1-pro",
+    "antigravity-gemini-3.1-pro/low": "gemini-3.1-pro",
+    "antigravity-gemini-3.1-pro/high": "gemini-3.1-pro",
+    "antigravity-gemini-3.1-pro-low": "gemini-3.1-pro",
+    "antigravity-gemini-3.1-pro-high": "gemini-3.1-pro",
+    "gpt-5.2": "gpt-5.2",
+    "gpt-5.4": "gpt-5.4",
+    "gpt-5.2-codex": "gpt-5.2-codex",
+    "gpt-5.3-codex": "gpt-5.3-codex",
+    "gpt-5.1-codex-max": "gpt-5.1-codex-max",
+    "gpt-5-mini": "gpt-5-mini",
+    "glm-4.7-free": "glm-4.7",
+    "glm-4.7": "glm-4.7",
+    "glm4.7": "glm-4.7",
+    "glm-5": "glm-5",
+    "glm-5-free": "glm-5",
+    "glm5": "glm-5",
+    "glm-5.1": "glm-5.1",
+    "glm-5.1-free": "glm-5.1",
+    "historical_adjustment": "historical_adjustment",
+    "x-ai/grok-4.1-fast": "x-ai/grok-4.1-fast",
+    "grok-4.1-fast": "x-ai/grok-4.1-fast",
+    "grok-code-fast-1-optimized-free": "grok-code-fast-1-optimized-free",
+    "grok-code-fast": "grok-code-fast-1-optimized-free",
+    "grok-code": "grok-code-fast-1-optimized-free",
+    "mimo-v2-pro": "mimo-v2-pro",
+    "mimo-v2": "mimo-v2-pro",
+    "xiaomi/mimo-v2-pro": "mimo-v2-pro",
+    "hunter-alpha": "mimo-v2-pro",
+    "pony-alpha": "mimo-v2-pro",
+    "healer-alpha": "mimo-v2-pro",
+    "qwen3.6-plus-free": "qwen3.6-plus",
+    "qwen3.6-plus-preview-free": "qwen3.6-plus",
+    "qwen3.6-plus-preview": "qwen3.6-plus",
+    "qwen-modelo": "qwen3.6-plus",
+    "gemma-4-31b": "gemma-4-31b",
+    "gemma-4-31b-free": "gemma-4-31b",
+    "deepseek-v4-flash": "deepseek-v4-flash",
+    "deepseek-v4-flash-free": "deepseek-v4-flash",
+    "deepseek/deepseek-v4-flash": "deepseek-v4-flash",
+    "deepseek-v4-pro": "deepseek-v4-pro",
+    "deepseek-v4-pro-free": "deepseek-v4-pro",
+    "deepseek/deepseek-v4-pro": "deepseek-v4-pro",
+}
+
+
+# Semántica de cache por fuente (derivada, no persistida)
+SOURCE_CACHE_SEMANTICS = {
+    "codex":    {"input_includes_cache_read": True,  "cache_write_billable": True},
+    "zcode":    {"input_includes_cache_read": True,  "cache_write_billable": True},
+    "opencode": {"input_includes_cache_read": False, "cache_write_billable": False},
+    "hermes":   {"input_includes_cache_read": False, "cache_write_billable": True},
+    "kilocode": {"input_includes_cache_read": False, "cache_write_billable": False},
+    "cursor":   {"input_includes_cache_read": False, "cache_write_billable": False},
+    "claude":   {"input_includes_cache_read": False, "cache_write_billable": True},
+    "unknown":  {"input_includes_cache_read": False, "cache_write_billable": False},
+    "grok":     {"input_includes_cache_read": False, "cache_write_billable": False},
+}
+
+
+def _load_model_overrides():
+    """Pisa MODEL_COSTS y MODEL_ALIASES desde JSON si los archivos existen."""
+    for var_name, file_path in [
+        ("MODEL_COSTS", MODEL_COSTS_FILE),
+        ("MODEL_ALIASES", MODEL_ALIASES_FILE),
+    ]:
+        try:
+            if file_path.exists():
+                with open(file_path) as fh:
+                    data = json.load(fh)
+                globals()[var_name].clear()
+                globals()[var_name].update(data)
+        except Exception:
+            pass
+
+    # Alias protegidos: siempre presentes, nunca en JSON
+    MODEL_ALIASES["historical_adjustment"] = "historical_adjustment"
+
+
+def reload_model_costs():
+    """Recarga MODEL_COSTS desde model_costs.json.
+
+    _load_model_overrides() corre solo una vez al importar el módulo, por lo
+    que los edits manuales al JSON (desde la UI web) no se reflejan en memoria.
+    Llamar esta función tras guardar precios o antes de recalcular para usar
+    los valores actuales del archivo. Idempotente: si el JSON no cambió, el
+    diccionario queda igual.
+    """
+    try:
+        if MODEL_COSTS_FILE.exists():
+            with open(MODEL_COSTS_FILE) as fh:
+                data = json.load(fh)
+            MODEL_COSTS.clear()
+            MODEL_COSTS.update(data)
+    except Exception:
+        pass
+
+
+_load_model_overrides()
+
+
+def normalize_model_name(model):
+    """Normaliza modelo a su base + version, agrupando variantes."""
+    if not model:
+        return "unknown"
+
+    model_lower = model.lower()
+
+    # Remover prefijos de provider
+    for prefix in [
+        "antigravity-",
+        "z-ai/",
+        "deepseek/",
+        "deepseek-ai/",
+        "google/",
+        "anthropic/",
+        "openai/",
+        "moonshot/",
+        "openrouter/",
+        "arcee-ai/",
+        "minimax/",
+        "nvidia/",
+        "qwen/",
+        "stepfun/",
+        "xiaomi/",
+        "zai-org/",
+    ]:
+        model_lower = model_lower.replace(prefix, "")
+
+    # Remover sufijos/variantes
+    suffixes = [
+        "-thinking-high",
+        "-thinking/low",
+        "-thinking/medium",
+        "-thinking/minimal",
+        "-thinking-low",
+        "-thinking-medium",
+        "-thinking-minimal",
+        "-thinking/high",
+        "/high",
+        "/low",
+        "/medium",
+        "/minimal",
+        "-high",
+        "-low",
+        "-medium",
+        "-minimal",
+        "-free",
+        ":free",
+        ":pro",
+        ":lite",
+        ":discounted",
+    ]
+    for suffix in suffixes:
+        model_lower = model_lower.replace(suffix, "")
+
+    if model in MODEL_ALIASES:
+        return MODEL_ALIASES[model]
+    if model_lower in MODEL_ALIASES:
+        return MODEL_ALIASES[model_lower]
+
+    return model_lower
+
+
+def extract_model_from_task(task_id):
+    """Extrae modelo del archivo api_conversation_history.json de kilocode."""
+    if not task_id:
+        return "unknown"
+
+    task_file = KILOCODE_TASKS_DIR / task_id / "api_conversation_history.json"
+    if not task_file.exists():
+        return "unknown"
+
+    try:
+        content = task_file.read_text()
+        match = re.search(r"<model>([^<]+)</model>", content)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+
+    return "unknown"
+
+
+def get_kilocode_history():
+    """Lee taskHistory de kilocode CLI y extrae modelo de cada tarea.
+
+    Retorna dict: {task_id: {model, input, output, cache, cost, date, task}}
+    """
+    if not KILOCODE_STATE_FILE.exists():
+        return None
+
+    try:
+        with open(KILOCODE_STATE_FILE) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+    task_history = data.get("taskHistory", [])
+    if not task_history:
+        return None
+
+    result = {}
+    for task in task_history:
+        task_id = task.get("id")
+        if not task_id:
+            continue
+
+        # Extraer modelo del archivo de tarea
+        raw_model = extract_model_from_task(task_id)
+        normalized_model = normalize_model_name(raw_model)
+
+        # Costo: usar totalCost si > 0, sino calcular
+        cost = task.get("totalCost", 0)
+        if cost == 0:
+            tokens_in = task.get("tokensIn", 0)
+            tokens_out = task.get("tokensOut", 0)
+            cache_tokens = (task.get("cacheReads", 0) or 0) + (
+                task.get("cacheWrites", 0) or 0
+            )
+            cost = calculate_cost(normalized_model, tokens_in, tokens_out, cache_tokens, source="codex")
+
+        ts = task.get("ts", 0)
+        try:
+            import datetime
+
+            date_str = datetime.datetime.fromtimestamp(ts / 1000).isoformat()
+        except Exception:
+            date_str = ""
+
+        result[f"kilocode_{task_id}"] = {
+            "model": normalized_model,
+            "input": task.get("tokensIn", 0) or 0,
+            "output": task.get("tokensOut", 0) or 0,
+            "cache": (task.get("cacheReads", 0) or 0)
+            + (task.get("cacheWrites", 0) or 0),
+            "cost": cost,
+            "date": date_str,
+            "task": task.get("task", "")[:50] if task.get("task") else "",
+        }
+
+    return result if result else None
+
+
+def get_codex_sessions():
+    """Retorna lista de archivos JSONL de sesiones de Codex CLI.
+
+    Returns list of Path objects sorted by modification time (newest first).
+    """
+    if not CODEX_SESSIONS_DIR.exists():
+        return []
+
+    import glob
+
+    files = glob.glob(str(CODEX_SESSIONS_DIR / "**/*.jsonl"), recursive=True)
+    sessions = [Path(f) for f in files]
+    sessions.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    return sessions
+
+
+def has_real_usage_codex(session_file):
+    """Check if a Codex session JSONL file has real token usage."""
+    try:
+        with open(session_file) as f:
+            for line in f:
+                data = json.loads(line)
+                if data.get("type") == "event_msg":
+                    p = data.get("payload", {})
+                    if p.get("type") == "token_count":
+                        info = p.get("info", {})
+                        if info and "total_token_usage" in info:
+                            usage = info["total_token_usage"]
+                            total = usage.get("input_tokens", 0) + usage.get(
+                                "output_tokens", 0
+                            )
+                            if total > 0:
+                                return True
+    except (json.JSONDecodeError, OSError):
+        pass
+    return False
+
+
+# Cache de secuencias de token_count de padres (por corrida de captura):
+# los N forks de un mismo padre comparten la lectura de su JSONL.
+_CODEX_PARENT_SEQ_CACHE = {}
+
+
+def _codex_tc_sequence(path):
+    """Extrae la secuencia de (input, output, cache) de los token_count de un JSONL."""
+    seq = []
+    try:
+        with open(path) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    break
+                if d.get("type") == "event_msg":
+                    p = d.get("payload", {}) or {}
+                    if p.get("type") == "token_count":
+                        info = p.get("info", {}) or {}
+                        usage = info.get("total_token_usage") or {}
+                        if usage:
+                            seq.append((
+                                int(usage.get("input_tokens", 0) or 0),
+                                int(usage.get("output_tokens", 0) or 0),
+                                int(usage.get("cached_input_tokens", 0) or 0),
+                            ))
+    except OSError:
+        pass
+    return seq
+
+
+def _codex_parent_sequence(parent_id):
+    """Secuencia de token_count del JSONL padre, con cache por corrida."""
+    if not parent_id:
+        return []
+    cached = _CODEX_PARENT_SEQ_CACHE.get(parent_id)
+    if cached is not None:
+        return cached
+    import glob
+    files = glob.glob(str(CODEX_SESSIONS_DIR / "**" / f"*{parent_id}.jsonl"), recursive=True)
+    seq = _codex_tc_sequence(files[0]) if files else []
+    _CODEX_PARENT_SEQ_CACHE[parent_id] = seq
+    return seq
+
+
+def _codex_copied_base(fork_file, parent_id):
+    """Detecta resume con historial copiado y devuelve (copied_events, base).
+
+    ``codex exec resume`` crea un rollout NUEVO que reproduce el historial
+    del padre: los primeros token_count del fork son IDENTICOS a los del
+    padre (copia literal). Alineando ambas secuencias se encuentra el punto
+    exacto de divergencia; todo lo anterior ya fue contado por la sesion
+    padre y debe excluirse.
+
+    Retorna (copied_events, base_usage) donde base_usage es el ultimo
+    token_count copiado, o (0, None) si no hay copia (spawn limpio con
+    forked_from_id, o padre ausente/borrado) — en ese caso el parser se
+    comporta exactamente como antes.
+    """
+    parent_seq = _codex_parent_sequence(parent_id)
+    if not parent_seq:
+        return 0, None
+    fork_seq = _codex_tc_sequence(fork_file)
+    n = 0
+    for a, b in zip(parent_seq, fork_seq):
+        if a == b:
+            n += 1
+        else:
+            break
+    if n == 0:
+        return 0, None
+    last_in, last_out, last_cache = fork_seq[n - 1]
+    base = {
+        "input": last_in,
+        "output": last_out,
+        "cache": last_cache,
+        "reasoning": 0,
+    }
+    return n, base
+
+
+def get_codex_session_stats(session_file):
+    """Extrae estadisticas de tokens de una sesion Codex (archivo JSONL).
+
+    Reconstruye el uso por modelo a partir de los deltas de los contadores
+    acumulados de Codex. ``requests`` conserva la semantica historica del
+    collector como contador global; este parser no modifica ni redistribuye
+    los requests persistidos por modelo.
+
+    Retorna dict con: model, input, output, cache, reasoning, requests,
+    session_id, date, by_model y complete.
+    """
+    result = {
+        "model": "gpt-5.4",
+        "input": 0,
+        "output": 0,
+        "cache": 0,
+        "reasoning": 0,
+        "requests": 0,
+        "session_id": "",
+        "date": "",
+        "by_model": {},
+        "complete": True,
+        "forked_from_id": "",
+        "copied_events": 0,
+    }
+
+    active_model = None
+    previous_usage = None
+    max_usage = None  # max counter across all parallel task windows
+    request_count = 0
+    pending_requests = 0
+    first_session_meta = True
+    by_model = {}
+    copied_events = 0
+    base_usage = None
+    tc_index = 0
+
+    def model_bucket(model):
+        return by_model.setdefault(model, {
+            "requests": 0,
+            "input": 0,
+            "output": 0,
+            "cache": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0,
+        })
+
+    try:
+        with open(session_file) as f:
+            for line in f:
+                try:
+                    data = json.loads(line)
+                except json.JSONDecodeError:
+                    # No reemplazar una captura valida con un JSONL parcial.
+                    result["complete"] = False
+                    break
+                typ = data.get("type", "")
+
+                if typ == "session_meta":
+                    if first_session_meta:
+                        payload = data.get("payload", {})
+                        result["session_id"] = payload.get("id", "")
+                        result["date"] = payload.get("timestamp", "")
+                        result["forked_from_id"] = payload.get("forked_from_id", "") or ""
+                        first_session_meta = False
+                        # Resume con historial copiado: calcular el punto de
+                        # divergencia con el padre ANTES de acumular deltas.
+                        if result["forked_from_id"]:
+                            copied_events, base_usage = _codex_copied_base(
+                                session_file, result["forked_from_id"]
+                            )
+                            result["copied_events"] = copied_events
+
+                elif typ == "turn_context":
+                    model = data.get("payload", {}).get("model", "")
+                    if model:
+                        active_model = model
+                        if pending_requests:
+                            pending_requests = 0
+                        result["model"] = model
+
+                elif typ == "event_msg":
+                    p = data.get("payload", {})
+                    if p.get("type") == "token_count":
+                        info = p.get("info", {})
+                        usage = info.get("total_token_usage") if info else None
+                        if not usage:
+                            continue
+                        if active_model is None:
+                            result["complete"] = False
+                            break
+
+                        # Resume con historial copiado: los primeros
+                        # copied_events token_count son la copia del padre
+                        # (ya contados en su fila) -> ignorarlos. El primer
+                        # evento nuevo arranca con la base del ultimo copiado.
+                        if copied_events:
+                            if tc_index < copied_events:
+                                tc_index += 1
+                                continue
+                            if tc_index == copied_events:
+                                previous_usage = dict(base_usage)
+                                max_usage = dict(base_usage)
+                            tc_index += 1
+
+                        current_usage = {
+                            "input": int(usage.get("input_tokens", 0) or 0),
+                            "output": int(usage.get("output_tokens", 0) or 0),
+                            "cache": int(usage.get("cached_input_tokens", 0) or 0),
+                            "reasoning": int(usage.get("reasoning_output_tokens", 0) or 0),
+                        }
+                        if previous_usage is None:
+                            max_usage = current_usage.copy()
+                            delta = current_usage.copy()
+                        else:
+                            # Codex puede ejecutar tareas paralelas con contadores
+                            # independientes, o compactar su contexto (counter reset).
+                            # En ambos casos el total real es el maximo observado
+                            # de cada campo, no la suma de deltas entre ventanas.
+                            delta = {}
+                            for field in current_usage:
+                                if current_usage[field] > previous_usage[field]:
+                                    delta[field] = current_usage[field] - previous_usage[field]
+                                    max_usage[field] = current_usage[field]
+                                else:
+                                    delta[field] = 0
+                                    if current_usage[field] > max_usage[field]:
+                                        max_usage[field] = current_usage[field]
+
+                        bucket = model_bucket(active_model)
+                        bucket["input"] += delta["input"]
+                        bucket["output"] += delta["output"]
+                        bucket["cache"] += delta["cache"]
+                        bucket["cache_read"] += delta["cache"]
+                        bucket["reasoning"] += delta["reasoning"]
+                        # Solo avanzar previous_usage si hubo consumo real
+                        # (delta positivo). En tareas paralelas el contador
+                        # baja y no debe reiniciar la linea base.
+                        prev = {}
+                        for field in current_usage:
+                            prev_val = previous_usage.get(field, 0) if previous_usage else 0
+                            prev[field] = max(current_usage[field], prev_val)
+                        previous_usage = prev
+                    elif p.get("type") == "user_message":
+                        if copied_events and tc_index < copied_events:
+                            # user_message del historial copiado: no es un
+                            # request real del fork (ya contado por el padre)
+                            pass
+                        else:
+                            request_count += 1
+                            if active_model is None:
+                                # Algunos JSONL antiguos registran el primer
+                                # user_message antes del primer turn_context.
+                                # Se asigna al modelo cuando aparezca ese contexto.
+                                pending_requests += 1
+    except OSError:
+        result["complete"] = False
+
+    if pending_requests:
+        if active_model is None:
+            result["complete"] = False
+        else:
+            pending_requests = 0
+
+    # Mantener el fallback historico de una request para sesiones con uso pero
+    # sin user_message explicito, sin inventar una segunda request por modelo.
+    if request_count == 0 and previous_usage is not None:
+        request_count = 1
+
+    result["requests"] = request_count
+    result["by_model"] = by_model
+    result["input"] = sum(m["input"] for m in by_model.values())
+    result["output"] = sum(m["output"] for m in by_model.values())
+    result["cache"] = sum(m["cache"] for m in by_model.values())
+    result["cache_read"] = sum(m["cache_read"] for m in by_model.values())
+    result["cache_write"] = sum(m["cache_write"] for m in by_model.values())
+    result["reasoning"] = sum(m["reasoning"] for m in by_model.values())
+
+    return result
+
+
+def get_opencode_sqlite_sessions():
+    """Lee sesiones de OpenCode SQLite (v1.3.0+).
+
+    Retorna dict: {session_id: {model, input, output, cache, requests, date}}
+    Solo incluye sesiones con uso real de tokens.
+    """
+    if not OPENCODE_DB_PATH.exists():
+        return {}
+
+    try:
+        import sqlite3
+
+        conn = sqlite3.connect(str(OPENCODE_DB_PATH))
+        cursor = conn.cursor()
+        seen = set()
+        sessions_raw = []
+        for table in ("session_v2", "session"):
+            try:
+                cursor.execute(
+                    f"SELECT id, title, time_updated FROM {table} ORDER BY time_updated DESC"
+                )
+                for row in cursor.fetchall():
+                    if row[0] in seen:
+                        continue
+                    seen.add(row[0])
+                    sessions_raw.append(row)
+            except sqlite3.Error:
+                continue
+
+        result = {}
+        for sid, title, time_updated in sessions_raw:
+            by_model = {}
+            requests = 0
+            seen_data = set()
+            seen_ids = set()
+
+            for table in ("session_message", "message"):
+                if table == "session_message":
+                    query = (
+                        "SELECT id, data FROM session_message "
+                        "WHERE session_id = ? AND type = 'assistant' ORDER BY time_created"
+                    )
+                else:
+                    query = (
+                        "SELECT id, data FROM message "
+                        "WHERE session_id = ? ORDER BY time_created"
+                    )
+                try:
+                    cursor.execute(query, (sid,))
+                except sqlite3.Error:
+                    continue
+
+                for (mid, data_str) in cursor.fetchall():
+                    if mid in seen_ids:
+                        continue
+                    seen_ids.add(mid)
+                    if data_str in seen_data:
+                        continue
+                    seen_data.add(data_str)
+
+                    try:
+                        msg = json.loads(data_str)
+                    except json.JSONDecodeError:
+                        continue
+
+                    if msg.get("role") not in (None, "assistant"):
+                        continue
+
+                    tokens = msg.get("tokens", {})
+                    if not tokens:
+                        continue
+
+                    model = (
+                        msg.get("modelID")
+                        or (msg.get("model") or {}).get("modelID")
+                        or (msg.get("model") or {}).get("id")
+                        or "unknown"
+                    )
+                    if model not in by_model:
+                        by_model[model] = {
+                            "requests": 0,
+                            "input": 0,
+                            "output": 0,
+                            "cache": 0,
+                            "cache_read": 0,
+                            "cache_write": 0,
+                        }
+
+                    by_model[model]["requests"] += 1
+                    requests += 1
+                    cache_obj = tokens.get("cache") or {}
+                    cache_read = cache_obj.get("read", 0)
+                    cache_write = cache_obj.get("write", 0)
+                    by_model[model]["input"] += abs(tokens.get("input", 0) or 0)
+                    by_model[model]["cache"] += abs(cache_read or 0) + abs(cache_write or 0)
+                    by_model[model]["cache_read"] += abs(cache_read or 0)
+                    by_model[model]["cache_write"] += abs(cache_write or 0)
+                    by_model[model]["output"] += abs(tokens.get("output", 0) or 0)
+
+            if requests > 0:
+                # Consolidar en un solo modelo (el más usado)
+                primary_model = max(
+                    by_model.keys(), key=lambda m: by_model[m]["requests"]
+                )
+                total_input = sum(m["input"] for m in by_model.values())
+                total_output = sum(m["output"] for m in by_model.values())
+                total_cache = sum(m["cache"] for m in by_model.values())
+
+                try:
+                    date_str = datetime.datetime.fromtimestamp(
+                        time_updated / 1000
+                    ).isoformat()
+                except Exception:
+                    date_str = ""
+
+                result[sid] = {
+                    "model": primary_model,
+                    "input": total_input,
+                    "output": total_output,
+                    "cache": total_cache,
+                    "requests": requests,
+                    "date": date_str,
+                    "by_model": by_model,
+                    "title": title or "",
+                }
+
+        conn.close()
+        return result
+    except Exception:
+        return {}
+
+
+# --- Hermes ---
+def get_hermes_sessions():
+    """Retorna lista de sesiones de Hermes desde SQLite.
+
+    Returns list of dicts: {id, model, input, output, cache, reasoning,
+    requests, date, title, by_model}
+    Solo incluye sesiones CLI con uso real de tokens.
+    """
+    if not HERMES_DB_PATH.exists():
+        return []
+    try:
+        conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, model, input_tokens, output_tokens,
+                   cache_read_tokens, cache_write_tokens, reasoning_tokens,
+                   estimated_cost_usd, actual_cost_usd, ended_at, started_at, title,
+                   billing_provider
+            FROM sessions
+            WHERE source IN ('cli', 'telegram', 'subagent', 'discord') AND input_tokens > 0
+            ORDER BY started_at DESC
+        """)
+        sessions = []
+        for row in cursor.fetchall():
+            sid = row[0]
+            model = row[1] or "unknown"
+            input_tokens = row[2] or 0
+            output_tokens = row[3] or 0
+            cache_read = row[4] or 0
+            cache_write = row[5] or 0
+            reasoning = row[6] or 0
+            started_at = row[10]
+            ended_at = row[9]
+            title = row[11] or ""
+            billing_provider = row[12] or ""
+
+            # Contar requests
+            cursor2 = conn.cursor()
+            cursor2.execute(
+                "SELECT COUNT(*) FROM messages WHERE session_id = ? AND role = 'assistant'",
+                (sid,)
+            )
+            requests = cursor2.fetchone()[0] or 1
+            cursor2.close()
+
+            try:
+                date_str = datetime.datetime.fromtimestamp(started_at).isoformat()
+            except Exception:
+                date_str = ""
+
+            normalized = normalize_model_name(model)
+            by_model = {
+                normalized: {
+                    "requests": requests,
+                    "input": input_tokens,
+                    "output": output_tokens,
+                    "cache": cache_read + cache_write,
+                    "cache_read": cache_read,
+                    "cache_write": cache_write,
+                    "provider": billing_provider,
+                    "reasoning": reasoning,
+                }
+            }
+
+            sessions.append({
+                "id": sid,
+                "model": model,
+                "input": input_tokens,
+                "output": output_tokens,
+                "cache": cache_read + cache_write,
+                "reasoning": reasoning,
+                "requests": requests,
+                "date": date_str,
+                "title": title,
+                "billing_provider": billing_provider,
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "by_model": by_model,
+            })
+        conn.close()
+        return sessions
+    except Exception:
+        return []
+
+
+def has_real_usage_hermes(session_id):
+    """Check if a Hermes session has real token usage."""
+    if not HERMES_DB_PATH.exists():
+        return False
+    try:
+        conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT input_tokens FROM sessions WHERE id = ? AND source IN ('cli', 'telegram', 'discord')",
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return row is not None and (row[0] or 0) > 0
+    except Exception:
+        return False
+
+
+def get_hermes_session_stats(session_id):
+    """Extrae estadísticas de una sesión Hermes.
+
+    Returns dict compatible con el formato de session-stats:
+    {model, input, output, cache, reasoning, requests, session_id, date, by_model}
+    """
+    if not HERMES_DB_PATH.exists():
+        return {}
+    try:
+        conn = sqlite3.connect(f"file:{HERMES_DB_PATH}?mode=ro", uri=True)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT model, input_tokens, output_tokens,
+                   cache_read_tokens, cache_write_tokens, reasoning_tokens,
+                   estimated_cost_usd, actual_cost_usd, ended_at, started_at, title
+            FROM sessions WHERE id = ? AND source IN ('cli', 'telegram', 'discord')
+        """, (session_id,))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return {}
+
+        model = row[0] or "unknown"
+        input_tokens = row[1] or 0
+        output_tokens = row[2] or 0
+        cache_read = row[3] or 0
+        cache_write = row[4] or 0
+        reasoning = row[5] or 0
+        estimated_cost = row[6] or 0
+        actual_cost = row[7]
+        ended_at = row[8]
+        started_at = row[9]
+        title = row[10] or ""
+
+        # Calcular requests desde message_count
+        cursor.execute(
+            "SELECT COUNT(*) FROM messages WHERE session_id = ? AND role = 'assistant'",
+            (session_id,)
+        )
+        requests = cursor.fetchone()[0] or 1
+        conn.close()
+
+        try:
+            date_str = datetime.datetime.fromtimestamp(started_at).isoformat()
+        except Exception:
+            date_str = ""
+
+        normalized = normalize_model_name(model)
+        by_model = {
+            normalized: {
+                "requests": requests,
+                "input": input_tokens,
+                "output": output_tokens,
+                "cache": cache_read + cache_write,
+                "cache_read": cache_read,
+                "cache_write": cache_write,
+                "reasoning": reasoning,
+            }
+        }
+
+        return {
+            "model": model,
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache": cache_read + cache_write,
+            "reasoning": reasoning,
+            "requests": requests,
+            "session_id": session_id,
+            "date": date_str,
+            "ended_at": ended_at,
+            "title": title,
+            "estimated_cost": estimated_cost,
+            "actual_cost": actual_cost,
+            "by_model": by_model,
+        }
+    except Exception:
+        return {}
+
+
+# --- Cursor CLI ---
+def _load_cursor_events_from_jsonl():
+    """Lee eventos del hook JSONL, deduplicados por generation_id."""
+    if not CURSOR_USAGE_JSONL.exists():
+        return []
+    seen = set()
+    events = []
+    try:
+        with open(CURSOR_USAGE_JSONL) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                gen_id = ev.get("generation_id")
+                if not gen_id or gen_id in seen:
+                    continue
+                seen.add(gen_id)
+                events.append(ev)
+    except OSError:
+        pass
+    return events
+
+
+def _load_cursor_events_from_agent_logs():
+    """Backfill desde logs de debug del cursor-agent (cli.request.*)."""
+    if not CURSOR_AGENT_LOGS_DIR.exists():
+        return []
+    pending = {}
+    events = []
+    for log_file in sorted(CURSOR_AGENT_LOGS_DIR.glob("session-*.log")):
+        try:
+            lines = log_file.read_text(errors="ignore").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            marker = "] analytics.track "
+            if marker not in line:
+                continue
+            try:
+                obj = json.loads(line.split(marker, 1)[1])
+            except (json.JSONDecodeError, IndexError):
+                continue
+            ev_name = obj.get("eventName")
+            props = obj.get("props") or {}
+            inv_id = props.get("invocationID")
+            if not inv_id:
+                continue
+            if ev_name == "cli.request.create":
+                pending[inv_id] = {
+                    "conversation_id": props.get("conversationId"),
+                    "model": props.get("model") or "unknown",
+                    "timestamp": line[1:25] + "Z",
+                }
+            elif ev_name == "cli.request.completed":
+                base = pending.pop(inv_id, {})
+                total = props.get("estimated_tokens") or 0
+                if total <= 0 or props.get("end_reason") != "success":
+                    continue
+                conv_id = base.get("conversation_id") or props.get("conversationId")
+                if not conv_id:
+                    continue
+                # estimated_tokens = total real reportado por Cursor CLI
+                input_tokens = int(total * 0.85)
+                output_tokens = total - input_tokens
+                events.append({
+                    "conversation_id": conv_id,
+                    "generation_id": inv_id,
+                    "model": base.get("model") or "unknown",
+                    "input_tokens": input_tokens,
+                    "output_tokens": output_tokens,
+                    "cache_read_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "timestamp": line[1:25] + "Z",
+                    "source": "agent_log",
+                })
+    return events
+
+
+def _load_cursor_events():
+    """Combina hook JSONL + backfill de agent logs (hook gana en duplicados)."""
+    by_gen = {}
+    for ev in _load_cursor_events_from_agent_logs():
+        gen_id = ev.get("generation_id")
+        if gen_id:
+            by_gen[gen_id] = ev
+    for ev in _load_cursor_events_from_jsonl():
+        gen_id = ev.get("generation_id")
+        if gen_id:
+            by_gen[gen_id] = ev
+    return list(by_gen.values())
+
+
+def _get_cursor_meta(conversation_id):
+    """Busca meta.json de una conversación Cursor CLI."""
+    if not CURSOR_CHATS_DIR.exists():
+        return {}
+    for user_dir in CURSOR_CHATS_DIR.iterdir():
+        if not user_dir.is_dir():
+            continue
+        meta_path = user_dir / conversation_id / "meta.json"
+        if meta_path.exists():
+            try:
+                with open(meta_path) as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, OSError):
+                pass
+    return {}
+
+
+def _aggregate_cursor_session(conversation_id, events):
+    """Agrega eventos de una conversación en stats por modelo."""
+    conv_events = [e for e in events if e.get("conversation_id") == conversation_id]
+    if not conv_events:
+        return None
+
+    by_model = {}
+    for ev in conv_events:
+        model = normalize_model_name(ev.get("model") or "unknown")
+        if model not in by_model:
+            by_model[model] = {
+                "requests": 0, "input": 0, "output": 0,
+                "cache": 0, "cache_read": 0, "cache_write": 0,
+                "reasoning": 0,
+            }
+        ev_cache_read = ev.get("cache_read_tokens") or 0
+        ev_cache_write = ev.get("cache_write_tokens") or 0
+        by_model[model]["requests"] += 1
+        by_model[model]["input"] += ev.get("input_tokens") or 0
+        by_model[model]["output"] += ev.get("output_tokens") or 0
+        by_model[model]["cache"] += ev_cache_read + ev_cache_write
+        by_model[model]["cache_read"] += ev_cache_read
+        by_model[model]["cache_write"] += ev_cache_write
+
+    meta = _get_cursor_meta(conversation_id)
+    title = meta.get("title") or ""
+
+    date_str = ""
+    ts_epoch = None
+    for ev in conv_events:
+        ts = ev.get("timestamp")
+        if ts:
+            date_str = ts
+            ts_epoch = _parse_timestamp(ts)
+
+    if ts_epoch is None and meta.get("updatedAtMs"):
+        ts_epoch = int(meta["updatedAtMs"] / 1000)
+        try:
+            date_str = datetime.datetime.fromtimestamp(ts_epoch).isoformat()
+        except Exception:
+            date_str = ""
+
+    return {
+        "id": conversation_id,
+        "title": title,
+        "date": date_str,
+        "updated_at": ts_epoch or 0,
+        "requests": sum(m["requests"] for m in by_model.values()),
+        "input": sum(m["input"] for m in by_model.values()),
+        "output": sum(m["output"] for m in by_model.values()),
+        "cache": sum(m["cache"] for m in by_model.values()),
+        "reasoning": 0,
+        "by_model": by_model,
+    }
+
+
+def get_cursor_sessions():
+    """Lista sesiones Cursor CLI agregadas desde usage-events.jsonl."""
+    events = _load_cursor_events()
+    if not events:
+        return []
+    conv_ids = list(dict.fromkeys(
+        e["conversation_id"] for e in events if e.get("conversation_id")
+    ))
+    sessions = []
+    for cid in conv_ids:
+        agg = _aggregate_cursor_session(cid, events)
+        if agg and (agg["input"] > 0 or agg["output"] > 0):
+            sessions.append(agg)
+    sessions.sort(key=lambda s: s.get("updated_at") or 0, reverse=True)
+    return sessions
+
+
+def has_real_usage_cursor(session_id):
+    """Verifica si una sesión Cursor tiene uso real de tokens."""
+    sid = session_id.removeprefix("cursor_")
+    for sess in get_cursor_sessions():
+        if sess["id"] == sid:
+            return sess["input"] > 0 or sess["output"] > 0
+    return False
+
+
+def get_cursor_session_stats(session_id):
+    """Extrae estadísticas de una sesión Cursor CLI."""
+    sid = session_id.removeprefix("cursor_")
+    events = _load_cursor_events()
+    agg = _aggregate_cursor_session(sid, events)
+    if not agg:
+        return {}
+    return {
+        "session_id": sid,
+        "session_title": agg.get("title", ""),
+        "model": next(iter(agg["by_model"]), "unknown"),
+        "input": agg["input"],
+        "output": agg["output"],
+        "cache": agg["cache"],
+        "reasoning": 0,
+        "requests": agg["requests"],
+        "date": agg["date"],
+        "by_model": agg["by_model"],
+    }
+
+
+# --- Grok ---
+def _grok_session_summaries():
+    """Itera los summary.json de sesiones de Grok (~/.grok/sessions/<cwd>/<uuid>/)."""
+    if not GROK_SESSIONS_DIR.exists():
+        return []
+    import glob
+
+    paths = glob.glob(str(GROK_SESSIONS_DIR / "**" / "summary.json"), recursive=True)
+    return [Path(p) for p in paths]
+
+
+def _grok_max_total_tokens(session_dir):
+    """Lee updates.jsonl y devuelve el maximo _meta.totalTokens (proxy de input).
+
+    Grok no expone input/output/cache reales localmente; totalTokens es el
+    contexto acumulado de la sesion. Se usa como estimacion de input.
+    """
+    updates = session_dir / "updates.jsonl"
+    if not updates.exists():
+        return 0
+    max_tokens = 0
+    try:
+        with open(updates) as f:
+            for line in f:
+                idx = line.find('"totalTokens"')
+                if idx == -1:
+                    continue
+                rest = line[idx + len('"totalTokens"'):]
+                m = re.search(r":\s*(\d+)", rest)
+                if m:
+                    v = int(m.group(1))
+                    if v > max_tokens:
+                        max_tokens = v
+    except OSError:
+        pass
+    return max_tokens
+
+
+def _grok_request_count(session_dir):
+    """Cuenta prompts del usuario (mensajes type=user en chat_history.jsonl).
+
+    prompt_history.jsonl esta a nivel de cwd (no por sesion), asi que se
+    cuenta por sesion desde chat_history.jsonl.
+    """
+    ch = session_dir / "chat_history.jsonl"
+    if not ch.exists():
+        return 0
+    n = 0
+    try:
+        with open(ch) as f:
+            for line in f:
+                if '"type":"user"' in line or '{"type": "user"' in line:
+                    n += 1
+    except OSError:
+        return 0
+    return n
+
+
+def get_grok_sessions():
+    """Lista sesiones de Grok CLI desde archivos de sesion.
+
+    Nota: Grok no expone input/output/cache reales localmente. Usa
+    max(_meta.totalTokens) de updates.jsonl como proxy de input (contexto
+    acumulado). output/cache = 0. El costo queda en 0 salvo que el modelo
+    este en model_costs.json.
+    """
+    out = []
+    for summary_path in _grok_session_summaries():
+        session_dir = summary_path.parent
+        try:
+            with open(summary_path) as f:
+                summary = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        info = summary.get("info", {})
+        raw_id = info.get("id") or session_dir.name
+        sid = "grok_" + raw_id
+        model = summary.get("current_model_id") or "grok-unknown"
+        created = summary.get("created_at") or ""
+        date_str = created
+        ts = 0
+        try:
+            ts = int(datetime.datetime.fromisoformat(
+                created.replace("Z", "+00:00")).timestamp())
+        except Exception:
+            pass
+        total_tokens = _grok_max_total_tokens(session_dir)
+        requests = _grok_request_count(session_dir)
+        if total_tokens <= 0:
+            continue
+        # totalTokens = contexto acumulado (input+output+system+tools).
+        # Grok no expone breakdown real; se estima con la heurística 85/15
+        # (igual que el backfill de Cursor desde logs de debug).
+        input_tokens = int(total_tokens * 0.85)
+        output_tokens = total_tokens - input_tokens
+        normalized = normalize_model_name(model)
+        by_model = {normalized: {
+            "requests": requests,
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache": 0,
+            "cache_read": 0,
+            "cache_write": 0,
+            "reasoning": 0,
+        }}
+        out.append({
+            "id": sid,
+            "model": model,
+            "date": date_str,
+            "updated_at": ts,
+            "requests": requests,
+            "input": input_tokens,
+            "output": output_tokens,
+            "cache": 0,
+            "reasoning": 0,
+            "by_model": by_model,
+        })
+    out.sort(key=lambda s: s.get("updated_at") or 0, reverse=True)
+    return out
+
+
+def has_real_usage_grok(session_id):
+    """Verifica si una sesion Grok tiene uso (totalTokens > 0)."""
+    sid = session_id.removeprefix("grok_")
+    for sess in get_grok_sessions():
+        if sess["id"] == "grok_" + sid or sess["id"] == sid:
+            return sess["input"] > 0
+    return False
+
+
+def get_grok_session_stats(session_id):
+    """Extrae estadisticas de una sesion Grok CLI."""
+    sid = session_id.removeprefix("grok_")
+    for sess in get_grok_sessions():
+        if sess["id"] == "grok_" + sid or sess["id"] == sid:
+            return {
+                "session_id": sess["id"],
+                "model": sess["model"],
+                "input": sess["input"],
+                "output": sess["output"],
+                "cache": sess["cache"],
+                "reasoning": 0,
+                "requests": sess["requests"],
+                "date": sess["date"],
+                "by_model": sess["by_model"],
+            }
+    return {}
+
+
+def get_zcode_sessions():
+    """Retorna lista de archivos JSONL model-io de sesiones de ZCode CLI.
+
+    Cada model-io-sess_*.jsonl contiene un registro por request con usage
+    real. Ordenados por mtime (más nuevo primero).
+    """
+    if not ZCODE_ROLLOUT_DIR.exists():
+        return []
+    sessions = [p for p in ZCODE_ROLLOUT_DIR.glob("model-io-sess_*.jsonl") if p.is_file()]
+    sessions.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+    return sessions
+
+
+def has_real_usage_zcode(session_file):
+    """Check if a ZCode session JSONL file has real token usage."""
+    try:
+        with open(session_file) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                usage = (d.get("response") or {}).get("usage") or {}
+                if (usage.get("inputTokens", 0) or 0) + (usage.get("outputTokens", 0) or 0) > 0:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def get_zcode_session_stats(session_file):
+    """Agrega usage por modelo de un JSONL model-io de ZCode.
+
+    Cada línea (type=model_io) es una request independiente con usage real.
+    Semántica igual a Codex: inputTokens INCLUYE cacheReadTokens; los
+    cacheWriteTokens van aparte. El archivo es append-only, por lo que el
+    agregado crece de forma monotónica y es seguro para upsert MAX().
+    """
+    by_model = {}
+    session_id = None
+    first_started = None
+    requests = 0
+    try:
+        with open(session_file) as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if d.get("type") != "model_io":
+                    continue
+                if not session_id and d.get("sessionId"):
+                    session_id = d["sessionId"]
+                started = d.get("startedAt")
+                if started and (first_started is None or started < first_started):
+                    first_started = started
+                usage = (d.get("response") or {}).get("usage") or {}
+                inp = usage.get("inputTokens", 0) or 0
+                out = usage.get("outputTokens", 0) or 0
+                if inp + out <= 0:
+                    continue
+                model = normalize_model_name(
+                    (d.get("model") or {}).get("modelId") or "unknown"
+                )
+                cache_read = usage.get("cacheReadTokens", 0) or 0
+                cache_write = usage.get("cacheWriteTokens", 0) or 0
+                m = by_model.setdefault(model, {
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                })
+                m["requests"] += 1
+                m["input"] += inp
+                m["output"] += out
+                m["cache_read"] += cache_read
+                m["cache_write"] += cache_write
+                m["cache"] += cache_read + cache_write
+                requests += 1
+    except OSError:
+        pass
+
+    return {
+        "session_id": session_id or session_file.stem.replace("model-io-sess_", ""),
+        "date": first_started or "",
+        "requests": requests,
+        "input": sum(m["input"] for m in by_model.values()),
+        "output": sum(m["output"] for m in by_model.values()),
+        "cache": sum(m["cache"] for m in by_model.values()),
+        "cache_read": sum(m["cache_read"] for m in by_model.values()),
+        "cache_write": sum(m["cache_write"] for m in by_model.values()),
+        "by_model": by_model,
+    }
+
+
+def get_claude_sessions():
+    """Retorna archivos JSONL de sesiones de Claude Code, agrupados por sessionId.
+
+    Claude Code guarda un JSONL por sesión en ~/.claude/projects/<cwd-slug>/.
+    Un mismo sessionId puede aparecer en más de un directorio (resume desde
+    otro cwd): se agrupa por sessionId y se concatenan los archivos (M6).
+    Ordenados por mtime del archivo más nuevo (más reciente primero).
+    """
+    if not CLAUDE_PROJECTS_DIR.exists():
+        return []
+    grouped = {}
+    for f in CLAUDE_PROJECTS_DIR.glob("*/*.jsonl"):
+        if not f.is_file():
+            continue
+        sid = f.stem
+        if sid not in grouped:
+            grouped[sid] = {"files": [], "mtime": 0}
+        grouped[sid]["files"].append(f)
+        grouped[sid]["mtime"] = max(grouped[sid]["mtime"], f.stat().st_mtime)
+    sessions = [
+        {"session_id": sid, "files": data["files"], "mtime": data["mtime"]}
+        for sid, data in grouped.items()
+    ]
+    sessions.sort(key=lambda x: x["mtime"], reverse=True)
+    return sessions
+
+
+def has_real_usage_claude(session):
+    """Check si una sesión de Claude Code tiene uso real de tokens.
+
+    ``session`` es el dict de get_claude_sessions(). 3 de cada 4 JSONL son
+    sesiones bridge/sdk-cli sin llamadas al modelo: sin este filtro insertarían
+    filas de 0 tokens/0 costo (B4 del review).
+    """
+    for f in session["files"]:
+        try:
+            with open(f) as fh:
+                for line in fh:
+                    try:
+                        d = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if d.get("type") != "assistant":
+                        continue
+                    u = (d.get("message") or {}).get("usage") or {}
+                    total = (
+                        (u.get("input_tokens") or 0)
+                        + (u.get("output_tokens") or 0)
+                        + (u.get("cache_read_input_tokens") or 0)
+                        + (u.get("cache_creation_input_tokens") or 0)
+                    )
+                    if total > 0:
+                        return True
+        except OSError:
+            continue
+    return False
+
+
+def get_claude_session_stats(session):
+    """Agrega usage por modelo de una sesión de Claude Code.
+
+    Cada línea type=assistant con message.usage es un request. Semántica
+    Anthropic: input_tokens y cache_* son separados (no incluidos entre sí).
+    cache_read_input_tokens va a cache_read; cache_creation_input_tokens va a
+    cache_write (se factura aparte, ~2x input para TTL 1h — verificado
+    empíricamente contra totalCostUSD, no es input normal).
+
+    Costo y tokens: si hay evento cost-state con totalCostUSD > 0, el costo y
+    los tokens de modelUsage son AUTORITATIVOS para el tramo que cubren
+    (Claude Code los factura aunque el evento assistant no haya quedado
+    persistido en el JSONL, y ahí aparecen modelos sin eventos propios, ej.
+    el haiku generador de títulos). Pero el cost-state se emite solo en
+    hitos (cierre de sesión), NO periódicamente: en una sesión activa queda
+    viejo. Fix híbrido (snapshot+delta, 2026-09-24): al parsear un cs
+    válido se guarda snapshot del acumulado de eventos; al final, los
+    eventos posteriores al último cs (delta = acumulado - snapshot, con
+    max(0,...) por campo) se SUMAN al modelUsage y su costo se estima con
+    calculate_cost. Cs acumulativo: el final será >= A+B_est y el MAX() del
+    upsert corrige hacia arriba al cierre. modelUsage no trae requests:
+    requests sigue siendo el conteo dedup total de eventos (or 1 para filas
+    sintetizadas). Fallback sin cs: eventos deduplicados + estimación.
+
+    Dedupe (2026-09-23): el JSONL re-emite cada evento assistant 2-5 veces
+    (mismo message.id + requestId, usage idéntico; verificado empíricamente,
+    0 ids con usage divergente). Contarlas inflaba tokens/requests/reasoning
+    ~2.4x. Se dedupea por message.id: 1 request por id, merge max() campo a
+    campo (monotónico, seguro para el MAX() del upsert). Sin message.id no
+    se dedupea (la línea cuenta aparte). El dict de ids es por sesión
+    agregada (los archivos de un mismo sessionId se procesan juntos).
+
+    El archivo es append-only: el agregado crece de forma monotónica y es
+    seguro para upsert MAX().
+    """
+    by_model = {}
+    session_id = session["session_id"]
+    first_ts = None
+    requests = 0
+    real_cost = 0.0
+    model_usage_cost = {}
+    model_usage_tokens = {}
+    # Snapshot del acumulado de eventos al momento del último cost-state
+    # válido: los eventos posteriores son el delta que se suma al modelUsage.
+    event_snapshot = {}
+    # Dedupe por (modelo, message.id): {clave: [requests, input, output, cr, cw, thinking]}
+    seen_msgs = {}
+
+    for f in session["files"]:
+        try:
+            fh = open(f)
+        except OSError:
+            continue
+        with fh:
+            for line in fh:
+                # Línea parcialmente escrita (append en vivo): descartar solo
+                # esa línea, no abortar el parseo completo (B5).
+                try:
+                    d = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                t = d.get("type")
+                if t == "assistant":
+                    m = d.get("message") or {}
+                    u = m.get("usage") or {}
+                    inp = u.get("input_tokens") or 0
+                    out = u.get("output_tokens") or 0
+                    cr = u.get("cache_read_input_tokens") or 0
+                    cw = u.get("cache_creation_input_tokens") or 0
+                    if inp + out + cr + cw <= 0:
+                        continue
+                    model = normalize_model_name(m.get("model") or "unknown")
+                    ts = d.get("timestamp")
+                    if ts:
+                        try:
+                            iso = datetime.datetime.fromisoformat(
+                                ts.replace("Z", "+00:00")).timestamp()
+                            if first_ts is None or iso < first_ts:
+                                first_ts = iso
+                        except (ValueError, TypeError):
+                            pass
+                    thinking = ((u.get("output_tokens_details") or {})
+                                .get("thinking_tokens") or 0)
+                    mid = m.get("id")
+                    if mid:
+                        # Re-emisión de un request ya contado: merge max() por
+                        # campo (nunca pierde tokens ni rompe monotonicidad).
+                        key = (model, mid)
+                        prev = seen_msgs.get(key)
+                        if prev is not None:
+                            prev[1] = max(prev[1], inp)
+                            prev[2] = max(prev[2], out)
+                            prev[3] = max(prev[3], cr)
+                            prev[4] = max(prev[4], cw)
+                            prev[5] = max(prev[5], thinking)
+                            continue
+                        seen_msgs[key] = [1, inp, out, cr, cw, thinking]
+                    mm = by_model.setdefault(model, {
+                        "requests": 0, "input": 0, "output": 0,
+                        "cache": 0, "cache_read": 0, "cache_write": 0,
+                        "reasoning": 0,
+                    })
+                    mm["requests"] += 1
+                    mm["input"] += inp
+                    mm["output"] += out
+                    mm["cache_read"] += cr
+                    mm["cache_write"] += cw
+                    mm["cache"] += cr  # cache = solo lectura; write va aparte
+                    mm["reasoning"] += thinking
+                    requests += 1
+                elif t == "cost-state":
+                    # Varios eventos por archivo: tomar el último no nulo (B6).
+                    c = d.get("totalCostUSD")
+                    if c:
+                        real_cost = float(c)
+                        # Snapshot del acumulado de eventos al momento del cs:
+                        # el delta posterior se suma al modelUsage (híbrido).
+                        event_snapshot = {m: dict(v) for m, v in by_model.items()}
+                    mu = d.get("modelUsage") or {}
+                    for mname, mdata in mu.items():
+                        mc = mdata.get("costUSD")
+                        if mc:
+                            model_usage_cost[normalize_model_name(mname)] = float(mc)
+                        # Tokens autoritativos del cost-state (último gana).
+                        # Solo con cs válido: un cs con totalCostUSD=0 no debe
+                        # pisar tokens (dejaría tramo A en 0 con costo > 0).
+                        if c:
+                            model_usage_tokens[normalize_model_name(mname)] = {
+                                "input": mdata.get("inputTokens") or 0,
+                                "output": mdata.get("outputTokens") or 0,
+                                "cache_read": mdata.get("cacheReadInputTokens") or 0,
+                                "cache_write": mdata.get("cacheCreationInputTokens") or 0,
+                                "reasoning": mdata.get("thinkingTokens") or 0,
+                            }
+
+    # Costo y tokens por modelo. Si el cost-state es válido, modelUsage es
+    # autoritativo para el tramo que cubre (tramo A) y los eventos dedup
+    # posteriores al último cs (delta) se suman encima (tramo B, estimado).
+    by_model_with_cost = {}
+    delta_cost_total = 0.0
+    if real_cost > 0 and model_usage_tokens:
+        for model, t in model_usage_tokens.items():
+            ev = by_model.get(model) or {}
+            sn = event_snapshot.get(model) or {}
+            # Delta de eventos posteriores al último cs (por campo, >= 0).
+            delta = {
+                "requests": max(0, ev.get("requests", 0) - sn.get("requests", 0)),
+                "input": max(0, ev.get("input", 0) - sn.get("input", 0)),
+                "output": max(0, ev.get("output", 0) - sn.get("output", 0)),
+                "cache_read": max(0, ev.get("cache_read", 0) - sn.get("cache_read", 0)),
+                "cache_write": max(0, ev.get("cache_write", 0) - sn.get("cache_write", 0)),
+                "reasoning": max(0, ev.get("reasoning", 0) - sn.get("reasoning", 0)),
+            }
+            # Tramo A: costo real del modelUsage (no recalcular: el cs es el
+            # dato facturado). Tramo B: estimación del delta con calculate_cost.
+            d_cost = calculate_cost(
+                model, delta["input"], delta["output"], delta["cache_read"],
+                source="claude", cache_write_tokens=delta["cache_write"])
+            delta_cost_total += d_cost
+            by_model_with_cost[model] = {
+                "requests": ev.get("requests") or 1,
+                "input": t["input"] + delta["input"],
+                "output": t["output"] + delta["output"],
+                "cache_read": t["cache_read"] + delta["cache_read"],
+                "cache_write": t["cache_write"] + delta["cache_write"],
+                "cache": t["cache_read"] + delta["cache_read"],  # cache = solo lectura
+                "reasoning": t["reasoning"] + delta["reasoning"],
+                "cost": model_usage_cost.get(model, 0.0) + d_cost,
+            }
+        # Modelos con eventos pero ausentes en modelUsage (no debería pasar):
+        # conservar eventos con costo estimado.
+        for model, mdata in by_model.items():
+            if model not in by_model_with_cost:
+                by_model_with_cost[model] = {**mdata, "cost": calculate_cost(
+                    model, mdata["input"], mdata["output"], mdata["cache"],
+                    source="claude",
+                    cache_write_tokens=mdata["cache_write"])}
+    else:
+        # Fallback: eventos deduplicados; costo real por modelo si modelUsage
+        # lo trajo, si no estimación (con cache_write).
+        for model, mdata in by_model.items():
+            if model in model_usage_cost:
+                c = model_usage_cost[model]
+            else:
+                c = calculate_cost(model, mdata["input"], mdata["output"],
+                                   mdata["cache"], source="claude",
+                                   cache_write_tokens=mdata["cache_write"])
+            by_model_with_cost[model] = {**mdata, "cost": c}
+
+    # Fallback de fecha: mtime del archivo más nuevo.
+    if first_ts is None:
+        first_ts = session.get("mtime") or 0
+
+    # Con cost-state válido, los totales salen de by_model_with_cost (que
+    # incluye los tokens autoritativos de modelUsage, incluso modelos sin
+    # eventos persistidos). Sin cost-state, de los eventos deduplicados.
+    src_models = by_model_with_cost if (real_cost > 0 and model_usage_tokens) else by_model
+
+    return {
+        "session_id": session_id,
+        "date": (datetime.datetime.fromtimestamp(first_ts).isoformat()
+                 if first_ts else ""),
+        "requests": sum(m.get("requests", 0) for m in src_models.values()),
+        "input": sum(m["input"] for m in src_models.values()),
+        "output": sum(m["output"] for m in src_models.values()),
+        "cache": sum(m["cache"] for m in src_models.values()),
+        "cache_read": sum(m["cache_read"] for m in src_models.values()),
+        "cache_write": sum(m["cache_write"] for m in src_models.values()),
+        "reasoning": sum(m["reasoning"] for m in src_models.values()),
+        "cost": (real_cost + delta_cost_total if real_cost > 0
+                 else sum(m["cost"] for m in by_model_with_cost.values())),
+        "has_real_cost": real_cost > 0,
+        "by_model": by_model_with_cost,
+    }
+
+
+def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0, source=None,
+                   cache_write_tokens=0):
+    """Calcula costo basado en tokens.
+
+    La semántica de input_tokens depende del source:
+    - input_includes_cache_read=True (Codex): input_tokens INCLUYE cache reads.
+      Hay que descontar cache para obtener el input no-cacheado.
+    - input_includes_cache_read=False (Hermes, OpenCode, etc.): input_tokens y
+      cache_tokens son datos separados. Input siempre se cobra full.
+
+    cache_write_tokens: escritura de cache (cache_creation de Anthropic).
+    Si el modelo tiene precio "cache_write" en MODEL_COSTS, se cobra aparte a
+    ese precio (ej. claude-opus-5-5: ~2x input para TTL 1h). Si no tiene
+    precio y source marca cache_write_billable, se cobra al precio de input
+    (comportamiento retrocompatible). Default 0 => sin cambio para fuentes
+    existentes.
+    """
+    # Sonar: costo fijo por request
+    if model == "sonar":
+        return 0.0055
+
+    normalized = normalize_model_name(model)
+    costs = MODEL_COSTS.get(normalized)
+    if not costs:
+        model_lower = model.lower()
+        if "codex-max" in model_lower:
+            costs = {"input": 1.25, "output": 10}
+        elif "gemini-3.1-pro" in model_lower:
+            costs = {"input": 2, "output": 12, "cache": 0.2}
+        elif "gemini-3-pro" in model_lower:
+            costs = {"input": 2, "output": 12}
+        elif "gemini-3-flash" in model_lower:
+            costs = {"input": 0.5, "output": 3}
+        elif "claude-opus-4.6" in model_lower:
+            costs = {"input": 5, "output": 25}
+        elif "claude-opus" in model_lower:
+            costs = {"input": 5, "output": 25}
+        elif "claude-sonnet" in model_lower:
+            costs = {"input": 3, "output": 15}
+        elif "claude-haiku" in model_lower:
+            costs = {"input": 1, "output": 5}
+        elif "glm-5.1" in model_lower:
+            costs = {"input": 1.40, "output": 4.40, "cache": 0.26}
+        elif "glm-5" in model_lower:
+            costs = {"input": 0.80, "output": 2.56, "cache": 0.16}
+        elif "glm-4" in model_lower:
+            costs = {"input": 0.43, "output": 2.2}
+        elif "kimi" in model_lower:
+            costs = {"input": 0.50, "output": 2.60, "cache": 0.09}
+        elif "minimax" in model_lower:
+            if "m2.5" in model_lower:
+                costs = {"input": 0.30, "output": 1.20, "cache": 0.03}
+            else:
+                costs = {"input": 0.27, "output": 0.95}
+        elif "trinity" in model_lower:
+            costs = {"input": 0.25, "output": 1.00}
+
+    if not costs:
+        return 0
+
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    if sem["input_includes_cache_read"]:
+        # Codex: input_tokens incluye cache_read → descontar cache
+        uncached = max(0, input_tokens - cache_tokens)
+        input_cost = (uncached / 1000000) * costs["input"]
+    else:
+        # Hermes/OpenCode/etc: input_tokens y cache_tokens son separados
+        input_cost = (input_tokens / 1000000) * costs["input"]
+    output_cost = (output_tokens / 1000000) * costs["output"]
+    cache_cost = (cache_tokens / 1000000) * costs.get("cache", 0)
+    cache_write_cost = 0.0
+    if cache_write_tokens:
+        cw_price = costs.get("cache_write")
+        if cw_price is None and sem["cache_write_billable"]:
+            cw_price = costs["input"]
+        cache_write_cost = (cache_write_tokens / 1000000) * (cw_price or 0)
+    return input_cost + output_cost + cache_cost + cache_write_cost
+
+
+def effective_billable_tokens(source, input_tokens, output_tokens,
+                              cache_read_tokens=0, cache_write_tokens=0):
+    """Tokens efectivamente facturables según semántica de la fuente."""
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    total = (input_tokens or 0) + (output_tokens or 0)
+    if not sem["input_includes_cache_read"]:
+        total += cache_read_tokens or 0
+    if sem["cache_write_billable"]:
+        total += cache_write_tokens or 0
+    return total
+
+
+def effective_cache_read_tokens(cache_tokens=0, cache_read_tokens=0, cache_write_tokens=0):
+    """Cache read efectivo con fallback para filas legacy sin split read/write."""
+    cache_read_tokens = cache_read_tokens or 0
+    cache_write_tokens = cache_write_tokens or 0
+    cache_tokens = cache_tokens or 0
+    if cache_read_tokens == 0 and cache_write_tokens == 0 and cache_tokens > 0:
+        return cache_tokens
+    return cache_read_tokens
+
+
+def effective_uncached_input_tokens(source, input_tokens, cache_read_tokens=0):
+    """Input que no proviene de cache, conservando el input crudo aparte."""
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    input_tokens = input_tokens or 0
+    cache_read_tokens = cache_read_tokens or 0
+    if sem["input_includes_cache_read"]:
+        return max(0, input_tokens - cache_read_tokens)
+    return input_tokens
+
+
+def effective_cache_ratio_input(source, input_tokens, cache_read_tokens=0,
+                                cache_write_tokens=0):
+    """Input total considerado para el cálculo de cache ratio.
+
+    Para fuentes que facturan el cache write aparte (claude/hermes), el write
+    es cache miss: entra al denominador junto al input y el cache read
+    (decisión del dueño 2026-09-23). Para fuentes cuyo input ya incluye el
+    cache read (codex/zcode) no se suma nada extra.
+    """
+    sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+    if sem["input_includes_cache_read"]:
+        return input_tokens or 0
+    return ((input_tokens or 0) + (cache_read_tokens or 0)
+            + (cache_write_tokens or 0))
+
+
+CACHE_RATIO_MIN_REQUESTS = 5
+CACHE_RATIO_MIN_PERCENT = 5.0
+
+
+def calculate_session_cache_ratio(rows):
+    """Calcula ratios usando sesiones elegibles como unidad de confianza.
+
+    ``rows`` contiene una fila por modelo usado en una sesión y debe exponer
+    ``session_id`` y ``session_requests``. El contador de requests se toma de
+    la sesión, nunca de la suma de ``model_usage.requests``. El cache read y
+    el denominador se normalizan por fila antes de agregarse a la sesión para
+    conservar los fallbacks legacy cuando hay filas heterogéneas.
+    """
+    def value(row, name, default=None):
+        if hasattr(row, "keys") and name in row.keys():
+            return row[name]
+        if hasattr(row, "get"):
+            return row.get(name, default)
+        try:
+            return row[name]
+        except (IndexError, KeyError, TypeError):
+            return default
+
+    def nonnegative_int(raw):
+        try:
+            return max(0, int(raw or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    sessions = {}
+    prepared = []
+    for index, row in enumerate(rows):
+        session_id = value(row, "session_id", None)
+        if session_id is None:
+            # Las filas sin ID solo aparecen en callers legacy/tests; no
+            # mezclarlas artificialmente en una misma sesión.
+            session_id = f"__ratio_row_{index}"
+        source = value(row, "source", None) or value(row, "session_source", "unknown") or "unknown"
+        model = normalize_model_name(value(row, "model", "unknown") or "unknown")
+        session_requests = nonnegative_int(
+            value(row, "session_requests", value(row, "requests", 0))
+        )
+        input_tokens = nonnegative_int(value(row, "input_tokens", 0))
+        cache_read_tokens = effective_cache_read_tokens(
+            value(row, "cache_tokens", 0),
+            value(row, "cache_read_tokens", 0),
+            value(row, "cache_write_tokens", 0),
+        )
+        cache_read_tokens = nonnegative_int(cache_read_tokens)
+        # El denominador usa el cache_write CRUDO de la fila (no el fallback
+        # legacy de effective_cache_read_tokens, que puede devolver
+        # cache_tokens y duplicaría el write si la fila lo incluyera).
+        ratio_input_tokens = nonnegative_int(effective_cache_ratio_input(
+            source, input_tokens, cache_read_tokens,
+            nonnegative_int(value(row, "cache_write_tokens", 0)),
+        ))
+
+        session = sessions.setdefault(session_id, {
+            "requests": session_requests,
+            "cache_read_tokens": 0,
+            "ratio_input_tokens": 0,
+        })
+        session["cache_read_tokens"] += cache_read_tokens
+        session["ratio_input_tokens"] += ratio_input_tokens
+        prepared.append({
+            "session_id": session_id,
+            "model": model,
+            "input_tokens": input_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "ratio_input_tokens": ratio_input_tokens,
+        })
+
+    eligible_ids = set()
+    for session_id, session in sessions.items():
+        denominator = session["ratio_input_tokens"]
+        ratio = (
+            session["cache_read_tokens"] / denominator * 100
+            if denominator > 0 else 0.0
+        )
+        if session["requests"] < CACHE_RATIO_MIN_REQUESTS or ratio >= CACHE_RATIO_MIN_PERCENT:
+            eligible_ids.add(session_id)
+
+    by_model = {}
+    total_cache_read = 0
+    total_ratio_input = 0
+    for row in prepared:
+        if row["session_id"] not in eligible_ids:
+            continue
+        model = row["model"]
+        model_data = by_model.setdefault(model, {
+            "cache_read_tokens": 0,
+            "ratio_input_tokens": 0,
+            "input_tokens": 0,
+        })
+        model_data["cache_read_tokens"] += row["cache_read_tokens"]
+        model_data["ratio_input_tokens"] += row["ratio_input_tokens"]
+        model_data["input_tokens"] += row["input_tokens"]
+        total_cache_read += row["cache_read_tokens"]
+        total_ratio_input += row["ratio_input_tokens"]
+
+    for model_data in by_model.values():
+        denominator = model_data["ratio_input_tokens"]
+        model_data["ratio"] = round(
+            model_data["cache_read_tokens"] / denominator * 100,
+            1,
+        ) if denominator > 0 else 0.0
+
+    return {
+        "ratio": round(total_cache_read / total_ratio_input * 100, 1)
+        if total_ratio_input > 0 else 0.0,
+        "cache_read_tokens": total_cache_read,
+        "ratio_input_tokens": total_ratio_input,
+        "by_model": by_model,
+        "eligible_sessions": len(eligible_ids),
+        "excluded_sessions": len(sessions) - len(eligible_ids),
+    }
+
+
+def recalculate_historical_cost():
+    """Recalcula el costo total histórico desde SQLite.
+    Lee sesiones de la DB principal + fuentes externas (Codex, OpenCode, Hermes)
+    que aún no estén persistidas.
+
+    El recalculo calcula el costo desde tokens usando model_costs.json,
+    preservando la verificación de que los stored_cost coinciden con lo esperado.
+
+    Retorna dict con: total_cost, total_sessions, total_requests,
+    total_input, total_output, models_totals
+    """
+    if not DB_PATH.exists():
+        return {
+            "total_cost": 0,
+            "total_sessions": 0,
+            "total_requests": 0,
+            "total_input": 0,
+            "total_input_uncached": 0,
+            "total_output": 0,
+            "total_cache_read": 0,
+            "total_tokens": 0,
+            "cache_ratio": 0,
+            "models_totals": {},
+        }
+
+    conn = sqlite3.connect(str(DB_PATH))
+
+    # 1. Leer sesiones de SQLite (excluyendo las que manejan lógica especial)
+    session_keys = []
+    base_sessions = 0
+    historical_total_cost = 0.0
+    historical_models_cost = 0.0
+    models_totals = {}
+
+    srows = conn.execute(
+        "SELECT id, requests, input_tokens, output_tokens, cost, reasoning_tokens "
+        "FROM sessions ORDER BY timestamp"
+    ).fetchall()
+
+    for sid, reqs, inp, out, cost, reasoning in srows:
+        if sid == "historical_total":
+            base_sessions = reasoning  # sessions stored in reasoning_tokens
+            historical_total_cost = cost
+            # Leer by_model de historical_total: agregar a models_totals + calcular adjustment
+            mrows = conn.execute(
+                "SELECT model, requests, input_tokens, output_tokens, cache_tokens FROM model_usage "
+                "WHERE session_id = ?", (sid,)
+            ).fetchall()
+            for model, m_req, m_in, m_out, m_cache in mrows:
+                normalized = normalize_model_name(model)
+                if normalized not in models_totals:
+                    models_totals[normalized] = {
+                        "requests": 0, "input": 0, "output": 0,
+                        "cache": 0, "cache_read": 0, "cache_write": 0,
+                        "stored_cost": 0.0, "cost": 0.0,
+                    }
+                models_totals[normalized]["requests"] += m_req
+                models_totals[normalized]["input"] += m_in
+                models_totals[normalized]["output"] += m_out
+                models_totals[normalized]["cache"] += m_cache
+                models_totals[normalized]["cache_read"] += m_cache
+                models_totals[normalized]["cost"] += calculate_cost(normalized, m_in, m_out, m_cache, source="legacy")
+                historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache, source="legacy")
+            continue
+        if sid == "legacy_price_adjustment":
+            # Ajuste de precio legacy: no cuenta como sesión
+            continue
+        session_keys.append(sid)
+
+    # 2. Agregar tokens por modelo desde sesiones guardadas
+    total_requests = 0
+    total_input = 0
+    total_input_uncached = 0
+    total_output = 0
+    total_tokens = 0
+    cache_ratio_input = 0
+    total_cache_read = 0
+    cache_ratio_rows = []
+
+    if session_keys:
+        placeholders = ",".join("?" for _ in session_keys)
+        mrows = conn.execute(
+            f"SELECT mu.session_id, mu.model, mu.requests, mu.input_tokens, mu.output_tokens, "
+            f"mu.cache_tokens, mu.cache_read_tokens, mu.cache_write_tokens, s.source, s.requests "
+            f"FROM model_usage mu JOIN sessions s ON s.id = mu.session_id "
+            f"WHERE mu.session_id IN ({placeholders})",
+            session_keys,
+        ).fetchall()
+        for session_id, model, reqs, inp, out, cache, cache_read, cache_write, source, session_requests in mrows:
+            effective_cache_read = effective_cache_read_tokens(cache, cache_read, cache_write)
+            normalized = normalize_model_name(model)
+            if normalized not in models_totals:
+                models_totals[normalized] = {
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0, "cost": 0.0,
+                }
+            models_totals[normalized]["requests"] += reqs
+            models_totals[normalized]["input"] += inp
+            models_totals[normalized]["output"] += out
+            models_totals[normalized]["cache"] += cache
+            models_totals[normalized]["cache_read"] += effective_cache_read
+            models_totals[normalized]["cache_write"] += cache_write
+            # El write es un componente facturable aparte (claude/hermes);
+            # para fuentes cuyo input ya incluye cache (codex/zcode) NO se
+            # pasa: su cache_tokens legacy ya lo cubre.
+            sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+            cw_billable = (sem["cache_write_billable"]
+                           and not sem["input_includes_cache_read"])
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, inp, out, cache, source=source,
+                cache_write_tokens=cache_write if cw_billable else 0)
+            ratio_row = {
+                "session_id": session_id,
+                "session_requests": session_requests,
+                "model": model,
+                "source": source,
+                "input_tokens": inp,
+                "cache_tokens": cache,
+                "cache_read_tokens": cache_read,
+                "cache_write_tokens": cache_write,
+            }
+            cache_ratio_rows.append(ratio_row)
+
+        # Totales de sesión desde la tabla sessions
+        srows_agg = conn.execute(
+            f"SELECT source, requests, input_tokens, output_tokens, cache_tokens, cache_read_tokens, cache_write_tokens "
+            f"FROM sessions WHERE id IN ({placeholders})",
+            session_keys,
+        ).fetchall()
+        for source, reqs, inp, out, cache, cache_read, cache_write in srows_agg:
+            effective_cache_read = effective_cache_read_tokens(cache, cache_read, cache_write)
+            total_requests += reqs
+            total_input += inp
+            total_input_uncached += effective_uncached_input_tokens(source, inp, effective_cache_read)
+            total_output += out
+            total_tokens += effective_billable_tokens(source, inp, out, effective_cache_read, cache_write)
+            cache_ratio_input += effective_cache_ratio_input(source, inp, effective_cache_read)
+            total_cache_read += effective_cache_read
+
+    conn.close()
+
+    total_sessions = base_sessions + len(session_keys)
+
+    # Agregar tokens de historical_total desde model_usage
+    if base_sessions > 0 and historical_total_cost > 0:
+        conn2 = sqlite3.connect(str(DB_PATH))
+        ht_rows = conn2.execute(
+            "SELECT requests, input_tokens, output_tokens FROM model_usage WHERE session_id = 'historical_total'"
+        ).fetchall()
+        for reqs, inp, out in ht_rows:
+            total_requests += reqs
+            total_input += inp
+            total_input_uncached += inp
+            total_output += out
+            total_tokens += effective_billable_tokens("legacy", inp, out, 0, 0)
+        conn2.close()
+
+    # 3. Agregar sesiones de Codex que NO estan en SQLite
+    existing_codex_ids = {
+        k.replace("codex_", "") for k in session_keys if k.startswith("codex_")
+    }
+    for sess_file in get_codex_sessions():
+        if not has_real_usage_codex(sess_file):
+            continue
+        stats = get_codex_session_stats(sess_file)
+        sid = stats.get("session_id", "")
+        if sid and sid not in existing_codex_ids:
+            normalized = normalize_model_name(stats["model"])
+            if normalized not in models_totals:
+                models_totals[normalized] = {
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0, "cost": 0.0,
+                }
+            models_totals[normalized]["requests"] += stats["requests"]
+            models_totals[normalized]["input"] += stats["input"]
+            models_totals[normalized]["output"] += stats["output"]
+            models_totals[normalized]["cache"] += stats["cache"]
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, stats["input"], stats["output"], stats["cache"], source="codex")
+            total_requests += stats["requests"]
+            total_input += stats["input"]
+            total_output += stats["output"]
+            cache_read = stats.get("cache_read", stats.get("cache", 0))
+            cache_write = stats.get("cache_write", 0)
+            total_input_uncached += effective_uncached_input_tokens("codex", stats["input"], cache_read)
+            total_tokens += effective_billable_tokens("codex", stats["input"], stats["output"], cache_read, cache_write)
+            cache_ratio_input += effective_cache_ratio_input("codex", stats["input"], cache_read)
+            total_cache_read += cache_read
+            cache_ratio_rows.append({
+                "session_id": f"codex_{sid}",
+                "session_requests": stats["requests"],
+                "model": stats.get("model", "unknown"),
+                "source": "codex",
+                "input_tokens": stats.get("input", 0),
+                "cache_tokens": stats.get("cache", 0),
+                "cache_read_tokens": cache_read,
+                "cache_write_tokens": cache_write,
+            })
+            total_sessions += 1
+
+    # 4. Agregar sesiones de OpenCode SQLite (v1.3.0+) que NO estan en SQLite
+    opencode_sqlite_sessions = get_opencode_sqlite_sessions()
+    for sid, stats in opencode_sqlite_sessions.items():
+        if sid in session_keys:
+            continue
+        by_model = stats.get("by_model", {})
+        for model, model_data in by_model.items():
+            normalized = normalize_model_name(model)
+            if normalized not in models_totals:
+                models_totals[normalized] = {
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0, "cost": 0.0,
+                }
+            models_totals[normalized]["requests"] += model_data.get("requests", 0)
+            models_totals[normalized]["input"] += model_data.get("input", 0)
+            models_totals[normalized]["output"] += model_data.get("output", 0)
+            cache_read = model_data.get("cache_read", model_data.get("cache", 0))
+            cache_write = model_data.get("cache_write", 0)
+            models_totals[normalized]["cache"] += model_data.get("cache", 0)
+            models_totals[normalized]["cache_read"] += cache_read
+            models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, model_data.get("input", 0), model_data.get("output", 0),
+                model_data.get("cache", 0), source="opencode")
+            cache_ratio_rows.append({
+                "session_id": f"opencode_{sid}",
+                "session_requests": stats["requests"],
+                "model": model,
+                "source": "opencode",
+                "input_tokens": model_data.get("input", 0),
+                "cache_tokens": model_data.get("cache", 0),
+                "cache_read_tokens": model_data.get("cache_read", model_data.get("cache", 0)),
+                "cache_write_tokens": model_data.get("cache_write", 0),
+            })
+        cache_read = stats.get("cache_read", stats.get("cache", 0))
+        cache_write = stats.get("cache_write", 0)
+        total_requests += stats["requests"]
+        total_input += stats["input"]
+        total_input_uncached += effective_uncached_input_tokens("opencode", stats["input"], cache_read)
+        total_output += stats["output"]
+        total_tokens += effective_billable_tokens("opencode", stats["input"], stats["output"], cache_read, cache_write)
+        cache_ratio_input += effective_cache_ratio_input("opencode", stats["input"], cache_read)
+        total_cache_read += cache_read
+        total_sessions += 1
+
+    # 5. Agregar sesiones de Hermes que NO estan en SQLite
+    for sess in get_hermes_sessions():
+        sid = sess["id"]
+        if sid in session_keys:
+            continue
+        by_model = sess.get("by_model", {})
+        for model, model_data in by_model.items():
+            normalized = normalize_model_name(model)
+            if normalized not in models_totals:
+                models_totals[normalized] = {
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0, "cost": 0.0,
+                }
+            models_totals[normalized]["requests"] += model_data.get("requests", 0)
+            models_totals[normalized]["input"] += model_data.get("input", 0)
+            models_totals[normalized]["output"] += model_data.get("output", 0)
+            cache_read = model_data.get("cache_read", model_data.get("cache", 0))
+            cache_write = model_data.get("cache_write", 0)
+            models_totals[normalized]["cache"] += model_data.get("cache", 0)
+            models_totals[normalized]["cache_read"] += cache_read
+            models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, model_data.get("input", 0), model_data.get("output", 0),
+                model_data.get("cache", 0), source="hermes")
+            ratio_row = {
+                "session_id": sid,
+                "session_requests": sess.get("requests", 0),
+                "model": model,
+                "source": "hermes",
+                "input_tokens": model_data.get("input", 0),
+                "cache_tokens": model_data.get("cache", 0),
+                "cache_read_tokens": model_data.get("cache_read", model_data.get("cache", 0)),
+                "cache_write_tokens": model_data.get("cache_write", 0),
+            }
+            cache_ratio_rows.append(ratio_row)
+        cache_read = sess.get("cache_read", sess.get("cache", 0))
+        cache_write = sess.get("cache_write", 0)
+        total_requests += sess.get("requests", 0)
+        total_input += sess.get("input", 0)
+        total_input_uncached += effective_uncached_input_tokens("hermes", sess.get("input", 0), cache_read)
+        total_output += sess.get("output", 0)
+        total_tokens += effective_billable_tokens("hermes", sess.get("input", 0), sess.get("output", 0), cache_read, cache_write)
+        cache_ratio_input += effective_cache_ratio_input("hermes", sess.get("input", 0), cache_read)
+        total_cache_read += cache_read
+        total_sessions += 1
+
+    # 5b. Agregar sesiones de Claude Code que NO estan en SQLite
+    for sess in get_claude_sessions():
+        sid = "claude_" + sess["session_id"]
+        if sid in session_keys:
+            continue
+        if not has_real_usage_claude(sess):
+            continue
+        stats = get_claude_session_stats(sess)
+        by_model = stats.get("by_model", {})
+        for model, model_data in by_model.items():
+            normalized = normalize_model_name(model)
+            if normalized not in models_totals:
+                models_totals[normalized] = {
+                    "requests": 0, "input": 0, "output": 0,
+                    "cache": 0, "cache_read": 0, "cache_write": 0,
+                    "stored_cost": 0.0, "cost": 0.0,
+                }
+            models_totals[normalized]["requests"] += model_data.get("requests", 0)
+            models_totals[normalized]["input"] += model_data.get("input", 0)
+            models_totals[normalized]["output"] += model_data.get("output", 0)
+            cache_read = model_data.get("cache_read", model_data.get("cache", 0))
+            cache_write = model_data.get("cache_write", 0)
+            models_totals[normalized]["cache"] += model_data.get("cache", 0)
+            models_totals[normalized]["cache_read"] += cache_read
+            models_totals[normalized]["cache_write"] += cache_write
+            models_totals[normalized]["cost"] += calculate_cost(
+                normalized, model_data.get("input", 0), model_data.get("output", 0),
+                model_data.get("cache", 0), source="claude",
+                cache_write_tokens=cache_write)
+            cache_ratio_rows.append({
+                "session_id": sid,
+                "session_requests": stats.get("requests", 0),
+                "model": model,
+                "source": "claude",
+                "input_tokens": model_data.get("input", 0),
+                "cache_tokens": model_data.get("cache", 0),
+                "cache_read_tokens": cache_read,
+                "cache_write_tokens": cache_write,
+            })
+        cache_read = stats.get("cache_read", stats.get("cache", 0))
+        cache_write = stats.get("cache_write", 0)
+        total_requests += stats.get("requests", 0)
+        total_input += stats.get("input", 0)
+        total_input_uncached += effective_uncached_input_tokens("claude", stats.get("input", 0), cache_read)
+        total_output += stats.get("output", 0)
+        total_tokens += effective_billable_tokens("claude", stats.get("input", 0), stats.get("output", 0), cache_read, cache_write)
+        cache_ratio_input += effective_cache_ratio_input("claude", stats.get("input", 0), cache_read)
+        total_cache_read += cache_read
+        total_sessions += 1
+
+    # 6. Calcular costo total desde costos acumulados por fila + ajuste histórico
+    historical_cost_adjustment = historical_total_cost - historical_models_cost
+
+    total_cost = 0
+    for model, mdata in models_totals.items():
+        mdata["cost"] = mdata.get("cost", 0.0)
+        total_cost += mdata["cost"]
+    total_cost += historical_cost_adjustment
+
+    return {
+        "total_cost": total_cost,
+        "total_sessions": total_sessions,
+        "total_requests": total_requests,
+        "total_input": total_input,
+        "total_input_uncached": total_input_uncached,
+        "total_output": total_output,
+        "total_cache_read": total_cache_read,
+        "total_tokens": total_tokens,
+        "cache_ratio": calculate_session_cache_ratio(cache_ratio_rows)["ratio"],
+        "models_totals": models_totals,
+    }
+
+
+# --- SQLite Store ---
+
+DB_PATH = SCRIPT_DIR / "session_history.db"
+
+
+def _parse_timestamp(date_str):
+    if not date_str:
+        return None
+    try:
+        if date_str.endswith("Z"):
+            date_str = date_str[:-1] + "+00:00"
+        return int(datetime.datetime.fromisoformat(date_str).timestamp())
+    except (ValueError, TypeError):
+        return None
+
+
+def _detect_source(session_id):
+    if session_id in ("historical_total", "kilocode_legacy"):
+        return "legacy"
+    if session_id.startswith("codex_"):
+        return "codex"
+    if session_id.startswith("zcode_"):
+        return "zcode"
+    if session_id.startswith("claude_"):
+        return "claude"
+    if re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", session_id):
+        try:
+            if any(session_id in Path(p).name for p in get_codex_sessions()):
+                return "codex"
+        except Exception:
+            pass
+    if session_id.startswith("kilocode_") or session_id.startswith("kilo_"):
+        return "kilocode"
+    if session_id.startswith("hermes_"):
+        return "hermes"
+    if session_id.startswith("cursor_"):
+        return "cursor"
+    if session_id.startswith("grok_"):
+        return "grok"
+    if session_id.startswith("opencode_") or session_id.startswith("ses_"):
+        return "opencode"
+    # Sesiones Hermes: formato YYYYMMDD_HHMMSS_*
+    if len(session_id) > 15 and session_id[8] == '_' and session_id[15] == '_':
+        try:
+            int(session_id[:8])
+            return "hermes"
+        except ValueError:
+            pass
+    return "unknown"
+
+
+def init_db(db_path=None):
+    path = Path(db_path or DB_PATH)
+    conn = sqlite3.connect(str(path))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            source TEXT NOT NULL DEFAULT 'unknown',
+            date TEXT NOT NULL,
+            timestamp INTEGER,
+            requests INTEGER NOT NULL DEFAULT 0,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_tokens INTEGER NOT NULL DEFAULT 0,
+            reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+            cost REAL NOT NULL DEFAULT 0.0
+        );
+        CREATE TABLE IF NOT EXISTS model_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+            model TEXT NOT NULL,
+            requests INTEGER NOT NULL DEFAULT 0,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cache_tokens INTEGER NOT NULL DEFAULT 0,
+            reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+            cost REAL NOT NULL DEFAULT 0.0,
+            UNIQUE(session_id, model)
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_ts ON sessions(timestamp);
+        CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
+        CREATE INDEX IF NOT EXISTS idx_model_usage_model ON model_usage(model);
+        CREATE INDEX IF NOT EXISTS idx_model_usage_session ON model_usage(session_id);
+    """)
+    _ensure_column(conn, "sessions", "cache_read_tokens", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "sessions", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "model_usage", "cache_read_tokens", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "model_usage", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+    conn.close()
+
+
+def _ensure_column(conn, table, column, definition):
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
+def save_session(sid, source, date, timestamp, requests, input_tokens,
+                 output_tokens, cache_tokens, reasoning_tokens, cost,
+                 by_model, db_path=None,
+                 cache_read_tokens=None, cache_write_tokens=None):
+    """Persiste/actualiza estadísticas de una sesión en session_history.db.
+
+    NOTA: El 2025-06-25 se cambió INSERT OR REPLACE por INSERT ... ON CONFLICT
+    DO UPDATE SET con MAX() para evitar que borrar conversaciones en OpenCode
+    (o cualquier fuente) pisé valores históricos altos con datos más bajos.
+
+    Rollback: copiar el .bak sobre este archivo y reiniciar.
+
+    2026-07-01: se agregaron cache_read_tokens, cache_write_tokens y MIN() en timestamp.
+    """
+    if cache_read_tokens is None:
+        cache_read_tokens = sum((m.get("cache_read", m.get("cache", 0)) or 0) for m in by_model.values())
+    if cache_write_tokens is None:
+        cache_write_tokens = sum((m.get("cache_write", 0) or 0) for m in by_model.values())
+    path = Path(db_path or DB_PATH)
+    conn = sqlite3.connect(str(path))
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute(
+        """INSERT INTO sessions
+        (id, source, date, timestamp, requests, input_tokens, output_tokens,
+         cache_tokens, reasoning_tokens, cost,
+         cache_read_tokens, cache_write_tokens)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          date = MIN(date, excluded.date),
+          timestamp = MIN(timestamp, excluded.timestamp),
+          requests = MAX(requests, excluded.requests),
+          input_tokens = MAX(input_tokens, excluded.input_tokens),
+          output_tokens = MAX(output_tokens, excluded.output_tokens),
+          cache_tokens = MAX(cache_tokens, excluded.cache_tokens),
+          reasoning_tokens = MAX(reasoning_tokens, excluded.reasoning_tokens),
+          cost = MAX(cost, excluded.cost),
+          cache_read_tokens = MAX(cache_read_tokens, excluded.cache_read_tokens),
+          cache_write_tokens = MAX(cache_write_tokens, excluded.cache_write_tokens)""",
+        (sid, source, date, timestamp, requests, input_tokens, output_tokens,
+         cache_tokens, reasoning_tokens, cost,
+         cache_read_tokens, cache_write_tokens)
+    )
+    for model, mdata in by_model.items():
+        mu_cache_read = mdata.get("cache_read", mdata.get("cache", 0))
+        mu_cache_write = mdata.get("cache_write", 0)
+        conn.execute(
+            """INSERT INTO model_usage
+            (session_id, model, requests, input_tokens, output_tokens,
+             cache_tokens, reasoning_tokens, cost,
+             cache_read_tokens, cache_write_tokens)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id, model) DO UPDATE SET
+              requests = MAX(requests, excluded.requests),
+              input_tokens = MAX(input_tokens, excluded.input_tokens),
+              output_tokens = MAX(output_tokens, excluded.output_tokens),
+              cache_tokens = MAX(cache_tokens, excluded.cache_tokens),
+              reasoning_tokens = MAX(reasoning_tokens, excluded.reasoning_tokens),
+              cost = MAX(cost, excluded.cost),
+              cache_read_tokens = MAX(cache_read_tokens, excluded.cache_read_tokens),
+              cache_write_tokens = MAX(cache_write_tokens, excluded.cache_write_tokens)""",
+            (sid, model,
+             mdata.get("requests", 0),
+             mdata.get("input", 0),
+             mdata.get("output", 0),
+             mdata.get("cache", mdata.get("cache_read", 0) + mdata.get("cache_write", 0)),
+             mdata.get("reasoning", 0),
+             mdata.get("cost", 0.0),
+             mu_cache_read,
+             mu_cache_write)
+        )
+    conn.commit()
+    conn.close()
+
+
+def save_codex_session(sid, source, date, timestamp, requests, input_tokens,
+                       output_tokens, cache_tokens, reasoning_tokens, cost,
+                       by_model, db_path=None,
+                       cache_read_tokens=None, cache_write_tokens=None,
+                       request_model=None):
+    """Reemplaza tokens de Codex preservando requests exactamente.
+
+    Codex expone contadores acumulados y el parser reconstruye el snapshot
+    completo desde el JSONL. Por eso este camino no usa MAX() para tokens:
+    debe poder corregir filas previas que atribuyeron el acumulado al ultimo
+    modelo. Los campos requests se conservan de la fila existente; para una
+    sesion nueva se mantiene la logica historica de poner el total en el
+    modelo actual/final. Las demas fuentes siguen usando save_session().
+    """
+    if not by_model:
+        raise ValueError("No se puede guardar una sesion Codex sin modelos")
+    if cache_read_tokens is None:
+        cache_read_tokens = sum(
+            (m.get("cache_read", m.get("cache", 0)) or 0)
+            for m in by_model.values()
+        )
+    if cache_write_tokens is None:
+        cache_write_tokens = sum(
+            (m.get("cache_write", 0) or 0) for m in by_model.values()
+        )
+
+    path = Path(db_path or DB_PATH)
+    conn = sqlite3.connect(str(path))
+    conn.execute("PRAGMA foreign_keys=ON")
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        conn.execute("BEGIN")
+        existing_session = conn.execute(
+            "SELECT requests FROM sessions WHERE id = ?", (sid,)
+        ).fetchone()
+        existing_model_requests = {
+            model: model_requests
+            for model, model_requests in conn.execute(
+                "SELECT model, requests FROM model_usage WHERE session_id = ?",
+                (sid,),
+            ).fetchall()
+        }
+        stored_requests = (
+            existing_session[0] if existing_session is not None else requests
+        )
+        models_to_write = dict(by_model)
+        for model, model_requests in existing_model_requests.items():
+            if model not in models_to_write:
+                # Conservar siempre la fila y sus requests aunque no tenga
+                # token_count; su consumo de tokens correcto es cero.
+                models_to_write[model] = {
+                    "requests": model_requests,
+                    "input": 0,
+                    "output": 0,
+                    "cache": 0,
+                    "cache_read": 0,
+                    "cache_write": 0,
+                    "reasoning": 0,
+                    "cost": 0.0,
+                }
+        conn.execute(
+            """INSERT INTO sessions
+            (id, source, date, timestamp, requests, input_tokens, output_tokens,
+             cache_tokens, reasoning_tokens, cost,
+             cache_read_tokens, cache_write_tokens)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+              source = excluded.source,
+              date = MIN(date, excluded.date),
+              timestamp = MIN(timestamp, excluded.timestamp),
+              requests = excluded.requests,
+              input_tokens = excluded.input_tokens,
+              output_tokens = excluded.output_tokens,
+              cache_tokens = excluded.cache_tokens,
+              reasoning_tokens = excluded.reasoning_tokens,
+              cost = excluded.cost,
+              cache_read_tokens = excluded.cache_read_tokens,
+              cache_write_tokens = excluded.cache_write_tokens""",
+            (sid, source, date, timestamp, stored_requests, input_tokens, output_tokens,
+             cache_tokens, reasoning_tokens, cost,
+             cache_read_tokens, cache_write_tokens),
+        )
+
+        for model, mdata in models_to_write.items():
+            mu_cache_read = mdata.get("cache_read", mdata.get("cache", 0))
+            mu_cache_write = mdata.get("cache_write", 0)
+            stored_model_requests = existing_model_requests.get(model)
+            if stored_model_requests is None:
+                stored_model_requests = requests if model == request_model else 0
+            conn.execute(
+                """INSERT INTO model_usage
+                (session_id, model, requests, input_tokens, output_tokens,
+                 cache_tokens, reasoning_tokens, cost,
+                 cache_read_tokens, cache_write_tokens)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(session_id, model) DO UPDATE SET
+                  requests = excluded.requests,
+                  input_tokens = excluded.input_tokens,
+                  output_tokens = excluded.output_tokens,
+                  cache_tokens = excluded.cache_tokens,
+                  reasoning_tokens = excluded.reasoning_tokens,
+                  cost = excluded.cost,
+                  cache_read_tokens = excluded.cache_read_tokens,
+                  cache_write_tokens = excluded.cache_write_tokens""",
+                (sid, model,
+                 stored_model_requests,
+                 mdata.get("input", 0),
+                 mdata.get("output", 0),
+                 mdata.get("cache", mdata.get("cache_read", 0) + mdata.get("cache_write", 0)),
+                 mdata.get("reasoning", 0),
+                 mdata.get("cost", 0.0),
+                 mu_cache_read,
+                 mu_cache_write),
+            )
+
+        # No se eliminan filas model_usage: las ausentes en el JSONL
+        # quedan conservadas con tokens/costo en cero.
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def get_sessions(date_from=None, date_to=None, db_path=None):
+    path = Path(db_path or DB_PATH)
+    if not path.exists():
+        return []
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    query = "SELECT * FROM sessions"
+    params = []
+    conditions = []
+    if date_from:
+        conditions.append("date >= ?")
+        params.append(date_from)
+    if date_to:
+        conditions.append("date <= ?")
+        params.append(date_to)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    query += " ORDER BY timestamp DESC"
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_model_summary(db_path=None):
+    path = Path(db_path or DB_PATH)
+    if not path.exists():
+        return {}
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """SELECT model,
+        SUM(requests) as requests,
+        SUM(input_tokens) as input_tokens,
+        SUM(output_tokens) as output_tokens,
+        SUM(cache_tokens) as cache_tokens,
+        SUM(reasoning_tokens) as reasoning_tokens,
+        SUM(cost) as cost
+        FROM model_usage
+        GROUP BY model
+        ORDER BY cost DESC"""
+    ).fetchall()
+    conn.close()
+    return {r["model"]: dict(r) for r in rows}
+
+
+def get_monthly_data(db_path=None):
+    path = Path(db_path or DB_PATH)
+    if not path.exists():
+        return {}
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        """SELECT strftime('%%Y-%%m', date) as month,
+        COUNT(*) as sessions,
+        SUM(requests) as requests,
+        SUM(input_tokens) as input_tokens,
+        SUM(output_tokens) as output_tokens,
+        SUM(cache_tokens) as cache_tokens,
+        SUM(reasoning_tokens) as reasoning_tokens,
+        SUM(cost) as cost
+        FROM sessions
+        WHERE source != 'legacy'
+        GROUP BY month
+        ORDER BY month DESC"""
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def migrate_json_to_sqlite(json_path=None, db_path=None):
+    json_file = Path(json_path or SCRIPT_DIR / "session_history.json")
+    if not json_file.exists():
+        print(f"JSON not found: {json_file}")
+        return False
+
+    with open(json_file) as f:
+        data = json.load(f)
+
+    init_db(db_path)
+    count = 0
+    for sid, session in data.items():
+        source = _detect_source(sid)
+        date = session.get("date", "")
+        timestamp = _parse_timestamp(date)
+        requests = session.get("requests", 0)
+        input_tokens = session.get("input", 0)
+        output_tokens = session.get("output", 0)
+        cache_tokens = session.get("cache", 0)
+        cost = session.get("cost", 0.0)
+        by_model = session.get("by_model", {})
+
+        reasoning_tokens = sum(
+            m.get("reasoning", 0) for m in by_model.values()
+        )
+
+        # Store historical_total.sessions count in reasoning_tokens
+        if sid == "historical_total":
+            reasoning_tokens = session.get("sessions", 0)
+
+        save_session(
+            sid=sid, source=source, date=date, timestamp=timestamp,
+            requests=requests, input_tokens=input_tokens,
+            output_tokens=output_tokens, cache_tokens=cache_tokens,
+            reasoning_tokens=reasoning_tokens, cost=cost,
+            by_model=by_model, db_path=db_path
+        )
+        count += 1
+
+    print(f"Migrated {count} sessions to {db_path or DB_PATH}")
+    return True
+
+
+def verify_parity(json_path=None, db_path=None):
+    json_file = Path(json_path or SCRIPT_DIR / "session_history.json")
+    path = Path(db_path or DB_PATH)
+
+    with open(json_file) as f:
+        json_data = json.load(f)
+
+    conn = sqlite3.connect(str(path))
+    db_count = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+    json_count = len(json_data)
+    print(f"Sessions: JSON={json_count}, SQLite={db_count}")
+
+    db_cost = conn.execute("SELECT COALESCE(SUM(cost),0) FROM sessions").fetchone()[0]
+    json_cost = sum(s.get("cost", 0) for s in json_data.values())
+    print(f"Total cost: JSON={json_cost:.6f}, SQLite={db_cost:.6f}")
+
+    db_input = conn.execute("SELECT COALESCE(SUM(input_tokens),0) FROM sessions").fetchone()[0]
+    json_input = sum(s.get("input", 0) for s in json_data.values())
+    print(f"Total input: JSON={json_input}, SQLite={db_input}")
+
+    db_output = conn.execute("SELECT COALESCE(SUM(output_tokens),0) FROM sessions").fetchone()[0]
+    json_output = sum(s.get("output", 0) for s in json_data.values())
+    print(f"Total output: JSON={json_output}, SQLite={db_output}")
+
+    db_requests = conn.execute("SELECT COALESCE(SUM(requests),0) FROM sessions").fetchone()[0]
+    json_requests = sum(s.get("requests", 0) for s in json_data.values())
+    print(f"Total requests: JSON={json_requests}, SQLite={db_requests}")
+
+    conn.close()
+    return (
+        db_count == json_count
+        and abs(db_cost - json_cost) < 0.01
+        and db_input == json_input
+        and db_output == json_output
+        and db_requests == json_requests
+    )
+
+
+def backup_db(target_dir=None, keep=7, db_path=None):
+    """Backup online de session_history.db con rotación."""
+    target = Path(target_dir or SCRIPT_DIR / "db_backups")
+    target.mkdir(exist_ok=True)
+    ts = __import__("time").strftime("%Y%m%d_%H%M%S")
+    dest = target / f"session_history_{ts}.db"
+
+    srce = Path(db_path or DB_PATH)
+    if not srce.exists():
+        print(f"DB not found: {srce}")
+        return None
+
+    conn_src = sqlite3.connect(str(srce))
+    conn_dst = sqlite3.connect(str(dest))
+    conn_src.backup(conn_dst)
+    conn_dst.close()
+    conn_src.close()
+
+    backups = sorted(target.glob("session_history_*.db"))
+    for old in backups[:-keep]:
+        old.unlink()
+
+    size = dest.stat().st_size
+    print(f"Backup: {dest.name} ({size / 1024:.1f} KB), {len(backups)} total, keeping {keep}")
+    return str(dest)

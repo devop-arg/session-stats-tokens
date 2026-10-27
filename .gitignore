@@ -25,7 +25,8 @@ codex_sub_costs.json
 *.bak.*
 model_backups/
 __pycache__/
-db_backups/
+# db_backups/ SI se trackea en el repo privado (backups historicos de la DB).
+# El publico los excluye por sync-public.sh + hook pre-push.
 *.db-shm
 *.db-wal
 
