@@ -31,16 +31,27 @@ if [[ -f "$CODEX_SUB_COSTS_FILE" ]]; then
   cp -p "$CODEX_SUB_COSTS_FILE" "$CODEX_SUB_COSTS_BACKUP"
 fi
 
-echo "=== 0. Commitear backups pendientes (van al repo privado) ==="
+echo "=== 0. Commitear backups y DB pendientes (van al repo privado) ==="
 # db_backups/*.db está trackeado en main (privado). El cron diario crea uno
 # nuevo; acá se commitea para que el push del paso 1 lo suba. Se commitea SOLO
-# ese path: no toca cambios pendientes del resto del repo.
+# esos paths: no toca cambios pendientes del resto del repo.
 git add -f db_backups/*.db 2>/dev/null || true
 if ! git diff --cached --quiet -- db_backups 2>/dev/null; then
   git commit -q -m "chore: backups de session_history.db" -- db_backups
   echo "backups pendientes commiteados"
 else
   echo "sin backups nuevos"
+fi
+
+# La DB viva también se commitea: el paso 8 hace `checkout -f main`, que
+# revierte el working tree a la versión commiteada y perdería las capturas
+# hechas desde el último commit.
+git add -f session_history.db 2>/dev/null || true
+if ! git diff --cached --quiet -- session_history.db 2>/dev/null; then
+  git commit -q -m "chore: captura de session_history.db" -- session_history.db
+  echo "DB actualizada commiteada"
+else
+  echo "sin cambios en la DB"
 fi
 
 echo "=== 1. Push main a private ==="
