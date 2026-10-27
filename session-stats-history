@@ -120,20 +120,28 @@ def load_full_data_by_month():
     """
     monthly = defaultdict(lambda: {
         "sessions": 0, "requests": 0, "input": 0, "output": 0, "cache": 0,
-        "by_model": defaultdict(lambda: {"requests": 0, "input": 0, "output": 0, "cache": 0})
+        "by_model": defaultdict(lambda: {"requests": 0, "input": 0, "output": 0, "cache": 0, "cost": 0.0})
     })
     historical_adjustment = 0.0
     existing_sids = set()
 
-    def add_to_month(yymm, model, reqs, inp, out, cache):
+    def add_totals(yymm, sessions=0, reqs=0, inp=0, out=0, cache=0):
+        """Totales del mes: UNA escritura por sesion, desde la fuente
+        autoritativa (fila de `sessions`). Nunca desde el desglose por modelo."""
+        monthly[yymm]["sessions"] += sessions
         monthly[yymm]["requests"] += reqs
         monthly[yymm]["input"] += inp
         monthly[yymm]["output"] += out
         monthly[yymm]["cache"] += cache
-        monthly[yymm]["by_model"][model]["requests"] += reqs
-        monthly[yymm]["by_model"][model]["input"] += inp
-        monthly[yymm]["by_model"][model]["output"] += out
-        monthly[yymm]["by_model"][model]["cache"] += cache
+
+    def add_model_usage(yymm, model, reqs, inp, out, cache, cost=0.0):
+        """Solo desglose por modelo (no toca los totales del mes)."""
+        bm = monthly[yymm]["by_model"][model]
+        bm["requests"] += reqs
+        bm["input"] += inp
+        bm["output"] += out
+        bm["cache"] += cache
+        bm["cost"] += cost
 
     db_path = STATS_DIR / "session_history.db"
     if db_path.exists():
@@ -151,7 +159,8 @@ def load_full_data_by_month():
             if sid == "historical_total":
                 ht_sessions = reasoning  # stored in reasoning_tokens during migration
                 ht_mmyy = date_to_mmyy(date) or "0125"
-                monthly[ht_mmyy]["sessions"] += ht_sessions
+                add_totals(ht_mmyy, sessions=ht_sessions, reqs=reqs,
+                           inp=inp, out=out, cache=cache)
                 mrows = conn.execute(
                     "SELECT model, requests, input_tokens, output_tokens, cache_tokens, cost FROM model_usage WHERE session_id=?", (sid,)
                 ).fetchall()
@@ -159,21 +168,21 @@ def load_full_data_by_month():
                 for mr in mrows:
                     model, m_req, m_in, m_out, m_cache, m_cost = mr
                     normalized = normalize_model_name(model)
-                    add_to_month(ht_mmyy, normalized, m_req, m_in, m_out, m_cache)
-                    historical_models_cost += calculate_cost(normalized, m_in, m_out, m_cache)
+                    add_model_usage(ht_mmyy, normalized, m_req, m_in, m_out, m_cache, m_cost or 0.0)
+                    historical_models_cost += m_cost or 0.0
                 historical_adjustment = cost - historical_models_cost
                 continue
 
             if sid == "kilocode_legacy":
                 mmyy = date_to_mmyy(date) or "0125"
-                monthly[mmyy]["sessions"] += 1
+                add_totals(mmyy, sessions=1, reqs=reqs, inp=inp, out=out, cache=cache)
                 mrows = conn.execute(
-                    "SELECT model, requests, input_tokens, output_tokens, cache_tokens FROM model_usage WHERE session_id=?", (sid,)
+                    "SELECT model, requests, input_tokens, output_tokens, cache_tokens, cost FROM model_usage WHERE session_id=?", (sid,)
                 ).fetchall()
                 for mr in mrows:
-                    model, m_req, m_in, m_out, m_cache = mr
+                    model, m_req, m_in, m_out, m_cache, m_cost = mr
                     normalized = normalize_model_name(model)
-                    add_to_month(mmyy, normalized, m_req, m_in, m_out, m_cache)
+                    add_model_usage(mmyy, normalized, m_req, m_in, m_out, m_cache, m_cost or 0.0)
                 continue
 
             if sid == "legacy_price_adjustment":
@@ -183,19 +192,18 @@ def load_full_data_by_month():
             mmyy = date_to_mmyy(date)
             if not mmyy:
                 continue
-            monthly[mmyy]["sessions"] += 1
-            monthly[mmyy]["requests"] += reqs
-            monthly[mmyy]["input"] += inp
-            monthly[mmyy]["output"] += out
-            monthly[mmyy]["cache"] += cache
+            add_totals(mmyy, sessions=1, reqs=reqs, inp=inp, out=out, cache=cache)
 
             mrows = conn.execute(
-                "SELECT model, requests, input_tokens, output_tokens, cache_tokens FROM model_usage WHERE session_id=?", (sid,)
+                "SELECT model, requests, input_tokens, output_tokens, cache_tokens, cost FROM model_usage WHERE session_id=?", (sid,)
             ).fetchall()
+            if not mrows:
+                # Sesion sin desglose por modelo: conservar el costo propio.
+                add_model_usage(mmyy, "unknown", reqs, inp, out, cache, cost or 0.0)
             for mr in mrows:
-                model, m_req, m_in, m_out, m_cache = mr
+                model, m_req, m_in, m_out, m_cache, m_cost = mr
                 normalized = normalize_model_name(model)
-                add_to_month(mmyy, normalized, m_req, m_in, m_out, m_cache)
+                add_model_usage(mmyy, normalized, m_req, m_in, m_out, m_cache, m_cost or 0.0)
 
         conn.close()
 
@@ -212,36 +220,49 @@ def load_full_data_by_month():
         mmyy = date_to_mmyy(stats.get("date", ""))
         if not mmyy:
             continue
-        monthly[mmyy]["sessions"] += 1
-        monthly[mmyy]["requests"] += stats.get("requests", 0)
-        monthly[mmyy]["input"] += stats.get("input", 0)
-        monthly[mmyy]["output"] += stats.get("output", 0)
-        monthly[mmyy]["cache"] += stats.get("cache", 0)
+        add_totals(mmyy, sessions=1, reqs=stats["requests"], inp=stats["input"],
+                   out=stats["output"], cache=stats["cache"])
         normalized = normalize_model_name(stats["model"])
-        add_to_month(mmyy, normalized, stats["requests"], stats["input"], stats["output"], stats["cache"])
+        add_model_usage(mmyy, normalized, stats["requests"], stats["input"],
+                        stats["output"], stats["cache"],
+                        calculate_cost(normalized, stats["input"], stats["output"],
+                                       stats["cache"], source="codex"))
 
     # 3. OpenCode SQLite sessions not yet in SQLite
     opencode_sqlite = get_opencode_sqlite_sessions()
     for sid, stats in opencode_sqlite.items():
         if sid in existing_sids:
             continue
+        if (stats.get("input", 0) + stats.get("output", 0)
+                + stats.get("cache", 0)) == 0:
+            # Sin tokens no hay consumo: la captura también la ignora.
+            continue
         date_str = stats.get("date", "")
         mmyy = date_to_mmyy(date_str)
         if not mmyy:
             continue
-        monthly[mmyy]["sessions"] += 1
-        monthly[mmyy]["requests"] += stats.get("requests", 0)
-        monthly[mmyy]["input"] += stats.get("input", 0)
-        monthly[mmyy]["output"] += stats.get("output", 0)
-        monthly[mmyy]["cache"] += stats.get("cache", 0)
+        add_totals(mmyy, sessions=1, reqs=stats.get("requests", 0),
+                   inp=stats.get("input", 0), out=stats.get("output", 0),
+                   cache=stats.get("cache", 0))
         by_model = stats.get("by_model", {})
         if by_model:
             for model, mdata in by_model.items():
                 normalized = normalize_model_name(model)
-                add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
+                add_model_usage(
+                    mmyy, normalized, mdata.get("requests", 0),
+                    mdata.get("input", 0), mdata.get("output", 0),
+                    mdata.get("cache", 0),
+                    calculate_cost(normalized, mdata.get("input", 0),
+                                   mdata.get("output", 0),
+                                   mdata.get("cache", 0), source="opencode"))
         else:
             normalized = normalize_model_name(stats.get("model", "unknown"))
-            add_to_month(mmyy, normalized, stats.get("requests", 0), stats.get("input", 0), stats.get("output", 0), stats.get("cache", 0))
+            add_model_usage(
+                mmyy, normalized, stats.get("requests", 0), stats.get("input", 0),
+                stats.get("output", 0), stats.get("cache", 0),
+                calculate_cost(normalized, stats.get("input", 0),
+                               stats.get("output", 0), stats.get("cache", 0),
+                               source="opencode"))
 
     # 4. Hermes sessions not yet in SQLite
     for sess in get_hermes_sessions():
@@ -251,19 +272,56 @@ def load_full_data_by_month():
         mmyy = date_to_mmyy(sess.get("date", ""))
         if not mmyy:
             continue
-        monthly[mmyy]["sessions"] += 1
-        monthly[mmyy]["requests"] += sess.get("requests", 0)
-        monthly[mmyy]["input"] += sess.get("input", 0)
-        monthly[mmyy]["output"] += sess.get("output", 0)
-        monthly[mmyy]["cache"] += sess.get("cache", 0)
+        add_totals(mmyy, sessions=1, reqs=sess.get("requests", 0),
+                   inp=sess.get("input", 0), out=sess.get("output", 0),
+                   cache=sess.get("cache", 0))
         by_model = sess.get("by_model", {})
         if by_model:
             for model, mdata in by_model.items():
                 normalized = normalize_model_name(model)
-                add_to_month(mmyy, normalized, mdata.get("requests", 0), mdata.get("input", 0), mdata.get("output", 0), mdata.get("cache", 0))
+                add_model_usage(
+                    mmyy, normalized, mdata.get("requests", 0),
+                    mdata.get("input", 0), mdata.get("output", 0),
+                    mdata.get("cache", 0),
+                    calculate_cost(
+                        normalized, mdata.get("input", 0),
+                        mdata.get("output", 0), mdata.get("cache", 0),
+                        source="hermes",
+                        cache_write_tokens=mdata.get("cache_write", 0)))
         else:
             normalized = normalize_model_name(sess.get("model", "unknown"))
-            add_to_month(mmyy, normalized, sess.get("requests", 0), sess.get("input", 0), sess.get("output", 0), sess.get("cache", 0))
+            add_model_usage(
+                mmyy, normalized, sess.get("requests", 0), sess.get("input", 0),
+                sess.get("output", 0), sess.get("cache", 0),
+                calculate_cost(normalized, sess.get("input", 0),
+                               sess.get("output", 0), sess.get("cache", 0),
+                               source="hermes",
+                               cache_write_tokens=sess.get("cache_write", 0)))
+
+    # 5. ZCode sessions not yet in SQLite
+    existing_zcode_ids = {s.replace("zcode_", "", 1) for s in existing_sids if s.startswith("zcode_")}
+    for sess_file in get_zcode_sessions():
+        if not has_real_usage_zcode(sess_file):
+            continue
+        stats = get_zcode_session_stats(sess_file)
+        sid = stats.get("session_id", "")
+        if not sid or sid in existing_zcode_ids:
+            continue
+        mmyy = date_to_mmyy(stats.get("date", ""))
+        if not mmyy:
+            continue
+        add_totals(mmyy, sessions=1, reqs=stats.get("requests", 0),
+                   inp=stats.get("input", 0), out=stats.get("output", 0),
+                   cache=stats.get("cache", 0))
+        for model, mdata in stats.get("by_model", {}).items():
+            normalized = normalize_model_name(model)
+            add_model_usage(
+                mmyy, normalized, mdata.get("requests", 0),
+                mdata.get("input", 0), mdata.get("output", 0),
+                mdata.get("cache", 0),
+                calculate_cost(normalized, mdata.get("input", 0),
+                               mdata.get("output", 0), mdata.get("cache", 0),
+                               source="zcode"))
 
     # 5. ZCode sessions not yet in SQLite
     existing_zcode_ids = {s.replace("zcode_", "", 1) for s in existing_sids if s.startswith("zcode_")}
@@ -290,20 +348,25 @@ def load_full_data_by_month():
 
 def build_grouped_from_monthly(monthly_data):
     """Convierte datos de un mes al formato grouped para render_stats_box.
-    Filtra modelos con 1 request."""
+    Filtra modelos con 1 request (solo para la tabla; los totales se suman
+    desde by_model, no desde aca)."""
     grouped = {}
     for model, mdata in monthly_data["by_model"].items():
         if mdata["requests"] <= 1:
             continue
-        cost = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
         grouped[model] = {
             "requests": mdata["requests"],
             "input": mdata["input"],
             "output": mdata["output"],
             "cache": mdata["cache"],
-            "cost": cost,
+            "cost": mdata.get("cost", 0.0),
         }
     return grouped
+
+
+def sum_month_cost(mdata):
+    """Costo real del mes: suma by_model completo (sin filtro de 1 request)."""
+    return sum(v.get("cost", 0.0) for v in mdata["by_model"].values())
 
 
 def render_stats_box(label, total_sessions, total_requests, total_input, total_cache, total_output, total_cost, grouped, show_free=True):
@@ -378,7 +441,7 @@ def show_total():
     total_cache = 0
     total_output = 0
     total_cost = 0.0
-    all_by_model = defaultdict(lambda: {"requests": 0, "input": 0, "output": 0, "cache": 0})
+    all_by_model = defaultdict(lambda: {"requests": 0, "input": 0, "output": 0, "cache": 0, "cost": 0.0})
 
     for mmyy, mdata in monthly.items():
         total_sessions += mdata["sessions"]
@@ -391,22 +454,22 @@ def show_total():
             all_by_model[model]["input"] += mdata2["input"]
             all_by_model[model]["output"] += mdata2["output"]
             all_by_model[model]["cache"] += mdata2["cache"]
+            all_by_model[model]["cost"] += mdata2.get("cost", 0.0)
 
-    # Filtrar modelos con > 1 request
+    # Filtrar modelos con > 1 request (solo visual; el total usa todo)
     grouped = {}
     for model, mdata in all_by_model.items():
         if mdata["requests"] <= 1:
             continue
-        cost = calculate_cost(model, mdata["input"], mdata["output"], mdata.get("cache", 0))
         grouped[model] = {
             "requests": mdata["requests"],
             "input": mdata["input"],
             "output": mdata["output"],
             "cache": mdata["cache"],
-            "cost": cost,
+            "cost": mdata["cost"],
         }
 
-    total_cost = sum(m["cost"] for m in grouped.values()) + adjustment
+    total_cost = sum(m["cost"] for m in all_by_model.values()) + adjustment
 
     render_stats_box(
         "HISTORIAL ACUMULADO",
@@ -421,7 +484,7 @@ def show_total():
     )
 
 
-def show_month_menu(monthly_data):
+def show_month_menu(monthly_data, adjustment=0.0):
     print_header()
     print_box(f"{BOLD}RESUMEN MENSUAL{RESET}" + pad_right("", 36) + "Ses   Req       Costo")
     print_separator()
@@ -429,9 +492,6 @@ def show_month_menu(monthly_data):
     running_sessions = 0
     running_requests = 0
     running_cost = 0.0
-    adjustment = 0.0
-
-    _, adjustment = load_full_data_by_month()
 
     def sort_key(mmyy):
         month, year = int(mmyy[:2]), int(mmyy[2:])
@@ -444,8 +504,7 @@ def show_month_menu(monthly_data):
         running_sessions += mdata["sessions"]
         running_requests += mdata["requests"]
 
-        grouped = build_grouped_from_monthly(mdata)
-        month_cost = sum(m["cost"] for m in grouped.values())
+        month_cost = sum_month_cost(mdata)
         running_cost += month_cost
 
         mon_name = MONTH_NAMES.get(mmyy[:2], mmyy[:2])
@@ -487,8 +546,7 @@ def show_month(month, year, monthly_data):
     total_cache = mdata.get("cache", 0)
     total_output = mdata["output"]
     grouped = build_grouped_from_monthly(mdata)
-    _, adjustment = load_full_data_by_month()
-    total_cost = sum(m["cost"] for m in grouped.values())
+    total_cost = sum_month_cost(mdata)
 
     # Para historico (0125), incluir adjustment proporcional
     # Pero para meses individuales no aplica el adjustment, solo el calculado desde tokens
@@ -496,13 +554,13 @@ def show_month(month, year, monthly_data):
 
 
 def interactive_mode():
-    monthly_data, _ = load_full_data_by_month()
+    monthly_data, adjustment = load_full_data_by_month()
     month_yymms = sorted([k for k in monthly_data.keys()
                           if monthly_data[k]["sessions"] > 0 or monthly_data[k]["requests"] > 0])
 
     while True:
         os.system("clear")
-        show_month_menu(monthly_data)
+        show_month_menu(monthly_data, adjustment)
         try:
             choice = input("\nOpcion: ").strip().lower()
         except EOFError:

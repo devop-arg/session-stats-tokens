@@ -216,6 +216,17 @@ era JSON (v1.1.x) viven SOLO en `session_history.db` y se pierden si se borran
   modelo (`model_usage.cost`), no lo recalcula con los precios de hoy; el
   recálculo desalineaba el CLI con la DB (gpt-5.4: -$38). El total incluye
   `legacy` (por eso difiere de `/api/summary`, que lo excluye).
-- **Pendiente**: `session-stats-history` sigue inflando (doble conteo de
-  `requests` en `add_to_month()` y costos recalculados sin `source`, que
-  sobrecobran a Codex/ZCode porque su input ya incluye cache reads).
+- **`session-stats-history` (2026-10-27)**: tenía doble conteo (`monthly[].requests`
+  = 2,0x) por sumar a mano en los callers Y dentro de `add_to_month()`, y
+  recalculaba costos con `calculate_cost(..., source=None)` (3,3x: cobraba input
+  completo + cache a Codex/ZCode). Ahora `add_totals()` escribe los totales del
+  mes desde la fila `sessions` y `add_model_usage()` solo el desglose; el costo
+  sale de `model_usage.cost` almacenado. Verificación: ratio 1.00 contra
+  `SUM(...) FROM sessions`.
+- **Deuda de datos detectada**: 81 sesiones (79 Hermes + 2 OpenCode) tienen
+  filas duplicadas en `model_usage` — mismos tokens con alias distintos
+  (`deepseek-v4-flash` vs `-0731`, `ox-alpha`/`glm-5.3`/`glm-5.3-flash`),
+  porque el upsertea por nombre crudo y el modelo reportado cambió con el
+  tiempo. `sessions.cost` es la SUMA de esas filas, así que el gasto histórico
+  está sobrestimado en ~$64 (dedupe conservador max) a ~$169 (una sola fila).
+  No corregido: requiere decisión (migración de datos).
