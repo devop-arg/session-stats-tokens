@@ -763,6 +763,10 @@ class SaveModelPriceRequest(BaseModel):
     value: float | None
 
 
+class RecalcApplyRequest(BaseModel):
+    confirm: bool = False
+
+
 def _backup_model_files():
     MODEL_BACKUP_DIR.mkdir(exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -865,11 +869,26 @@ def api_save_model_price(req: SaveModelPriceRequest):
     return {"success": True, "model": req.model, "field": req.field, "value": req.value}
 
 
-@app.get("/api/model-prices/recalculate")
-def api_recalculate_history():
-    """Recalcula costos históricos usando precios actuales."""
+def _recalc_snapshot(result):
+    """Guarda el preview del recálculo en db_backups para auditoría."""
     try:
-        from stats_common import normalize_model_name, calculate_cost, reload_model_costs
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        dest = SCRIPT_DIR / "db_backups" / f"recalc_preview_{ts}.json"
+        with open(dest, "w") as fh:
+            _json.dump(result, fh, indent=2, default=str)
+    except Exception as e:
+        print(f"[WARN] no se pudo guardar snapshot de recálculo: {e}", file=sys.stderr)
+
+
+@app.get("/api/model-prices/recalculate")
+def api_recalculate_preview():
+    """Preview del recálculo: NO escribe nada.
+
+    Devuelve changes[], session_changes[], skipped_reported y
+    skipped_zero_price (modelos pendientes de precio). El apply es el POST.
+    """
+    try:
+        from stats_common import reload_model_costs, recalculate_model_usage_costs
     except ImportError:
         return JSONResponse({"success": False, "error": "stats_common import failed"}, status_code=500)
 
@@ -877,43 +896,62 @@ def api_recalculate_history():
     # si se editaron precios desde la UI después de que el server arrancó.
     reload_model_costs()
 
+    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    try:
+        result = recalculate_model_usage_costs(conn, dry_run=True)
+    finally:
+        conn.close()
+    return {"success": True, "dry_run": True,
+            "updated": result["updated"],
+            "total_delta": round(result["total_delta"], 4),
+            "session_total_delta": round(result["session_total_delta"], 4),
+            "changes": result["changes"],
+            "session_changes": result["session_changes"],
+            "skipped_reported": result["skipped_reported"],
+            "skipped_zero_price": result["skipped_zero_price"],
+            "has_cost_source": result["has_cost_source"]}
+
+
+@app.post("/api/model-prices/recalculate")
+def api_recalculate_apply(req: RecalcApplyRequest):
+    """Aplica el recálculo con los precios vigentes.
+
+    Solo sesiones no-reported (el costo facturado de Claude Code no se pisa),
+    saltando modelos sin precio o con precio 0 (pendientes). Hace backup de la
+    DB y guarda el preview antes de escribir.
+    """
+    if not req.confirm:
+        return JSONResponse({"success": False, "error": "confirm=false; usar POST {\"confirm\": true}"}, status_code=400)
+    try:
+        from stats_common import reload_model_costs, recalculate_model_usage_costs, backup_db
+    except ImportError:
+        return JSONResponse({"success": False, "error": "stats_common import failed"}, status_code=500)
+
+    reload_model_costs()
+    backup_db(keep=99)
+
+    # Preview fresco: snapshot de auditoría + valida que haya algo que aplicar.
+    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    try:
+        preview = recalculate_model_usage_costs(conn, dry_run=True)
+    finally:
+        conn.close()
+    _recalc_snapshot(preview)
+
     conn = sqlite3.connect(str(DB_PATH))
-    mrows = conn.execute(
-        "SELECT mu.id, mu.session_id, mu.model, mu.input_tokens, mu.output_tokens, "
-        "mu.cache_tokens, mu.cache_write_tokens, mu.cost, s.source "
-        "FROM model_usage mu JOIN sessions s ON s.id = mu.session_id"
-    ).fetchall()
-    updated = 0
-    claude_touched = 0
-    for mr in mrows:
-        mu_id = mr[0]
-        model = mr[2]
-        inp = mr[3]
-        out = mr[4]
-        cache = mr[5]
-        cw = mr[6] or 0
-        old_cost = mr[7]
-        source = mr[8]
-        sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
-        cw_billable = sem["cache_write_billable"] and not sem["input_includes_cache_read"]
-        new_cost = calculate_cost(model, inp, out, cache, source=source,
-                                  cache_write_tokens=cw if cw_billable else 0)
-        if abs(new_cost - old_cost) > 0.0001:
-            conn.execute("UPDATE model_usage SET cost=? WHERE id=?", (new_cost, mu_id))
-            updated += 1
-            if source == "claude":
-                claude_touched += 1
-    if updated:
-        conn.commit()
-        # El costo de las sesiones claude es autoritativo (sale del cost-state
-        # del JSONL de Claude Code): no se pisa con la suma de model_usage.
-        conn.execute(
-            "UPDATE sessions SET cost = (SELECT COALESCE(SUM(cost), 0) FROM model_usage WHERE session_id = sessions.id) "
-            "WHERE source != 'claude'"
-        )
-        conn.commit()
-    conn.close()
-    return {"success": True, "updated": updated, "claude_updated": claude_touched}
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        result = recalculate_model_usage_costs(conn, dry_run=False)
+    finally:
+        conn.close()
+    return {"success": True,
+            "updated": result["updated"],
+            "total_delta": round(result["total_delta"], 4),
+            "session_total_delta": round(result["session_total_delta"], 4),
+            "session_changes": result["session_changes"],
+            "skipped_reported": result["skipped_reported"],
+            "skipped_zero_price": result["skipped_zero_price"],
+            "has_cost_source": result["has_cost_source"]}
 
 
 @app.get("/api/sessions")

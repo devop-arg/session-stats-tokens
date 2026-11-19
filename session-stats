@@ -5,6 +5,9 @@ Usage: session-stats [OPTIONS]
 
 Options:
   --capture-all   Capture and persist all new sessions to the history DB.
+  --recapture-claude <uuid> [...]  Force re-capture of Claude sessions by UUID
+                  (bypasses the 15-minute recent window; use after a capture
+                  fix to repair historical sessions).
   -h, --help      Show this help message and exit.
 
 Features:
@@ -468,12 +471,16 @@ def _prune_residual_models(sid, by_model):
         return 0
 
 
-def capture_all_sessions():
+def capture_all_sessions(force_claude_ids=None):
     """Captura y persiste TODAS las sesiones de todas las fuentes (Kilo, OpenCode, Codex, Hermes).
 
     Idempotente: ejecutarla multiples veces no duplica entradas.
+    force_claude_ids: set de session_ids de Claude a re-capturar aunque su
+    JSONL no esté dentro de la ventana de 15 min del cron (para reparar
+    sesiones históricas tras un fix de captura).
     Retorna cantidad de sesiones nuevas capturadas.
     """
+    force_claude_ids = set(force_claude_ids or ())
     existing_keys = set()
     if DB_PATH.exists():
         try:
@@ -792,8 +799,9 @@ def capture_all_sessions():
         if not by_model:
             continue
         sid = "claude_" + stats.get("session_id", sess["session_id"])
+        forced = sess.get("session_id") in force_claude_ids
         recent = (_now - sess["mtime"]) <= _claude_recent_window
-        if not recent and sid in existing_keys:
+        if not (recent or forced) and sid in existing_keys:
             continue
         was_new = sid not in existing_keys
         try:
@@ -809,6 +817,9 @@ def capture_all_sessions():
                 by_model, DB_PATH,
                 cache_read_tokens=stats.get("cache_read", 0),
                 cache_write_tokens=stats.get("cache_write", 0),
+                # El costo de Claude es facturado cuando hay cost-state
+                # válido (totalCostUSD > 0); si no, es estimado.
+                cost_source="reported" if stats.get("has_real_cost") else "estimated",
             )
             if was_new:
                 new_count += 1
@@ -924,6 +935,18 @@ def main():
         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         if new > 0:
             print(f"[{now}] captured {new} new sessions")
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--recapture-claude":
+        # Re-captura forzada de sesiones Claude históricas (bypass de la
+        # ventana de 15 min). Uso: session-stats --recapture-claude <uuid> [uuid2 ...]
+        ids = [a for a in sys.argv[2:] if a and not a.startswith("-")]
+        if not ids:
+            print("Uso: session-stats --recapture-claude <uuid> [uuid2 ...]")
+            return
+        new = capture_all_sessions(force_claude_ids=set(ids))
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{now}] recapture-claude {','.join(ids)} (captured {new} new)")
         return
 
     session_info = get_current_session()

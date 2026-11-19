@@ -1794,22 +1794,37 @@ def get_claude_session_stats(session):
                         # el delta posterior se suma al modelUsage (híbrido).
                         event_snapshot = {m: dict(v) for m, v in by_model.items()}
                         cs_cutoff_ts = last_parent_ts
-                    mu = d.get("modelUsage") or {}
-                    for mname, mdata in mu.items():
-                        mc = mdata.get("costUSD")
-                        if mc:
-                            model_usage_cost[normalize_model_name(mname)] = float(mc)
-                        # Tokens autoritativos del cost-state (último gana).
-                        # Solo con cs válido: un cs con totalCostUSD=0 no debe
-                        # pisar tokens (dejaría tramo A en 0 con costo > 0).
-                        if c:
-                            model_usage_tokens[normalize_model_name(mname)] = {
-                                "input": mdata.get("inputTokens") or 0,
-                                "output": mdata.get("outputTokens") or 0,
-                                "cache_read": mdata.get("cacheReadInputTokens") or 0,
-                                "cache_write": mdata.get("cacheCreationInputTokens") or 0,
-                                "reasoning": mdata.get("thinkingTokens") or 0,
-                            }
+                        # modelUsage es acumulativo hasta este cs: el último cs
+                        # válido REEMPLAZA el acumulado, no suma entre cs.
+                        # Acumular por clave normalizada DENTRO del evento:
+                        # variantes del mismo modelo (ej. claude-opus-5-5 y
+                        # claude-opus-5-5[1m]) son facturaciones separadas y
+                        # no se pisan entre sí (fix 2026-11-19).
+                        event_cost = {}
+                        event_tokens = {}
+                        event_mu = d.get("modelUsage") or {}
+                        if event_mu:
+                            for mname, mdata in event_mu.items():
+                                key = normalize_model_name(mname)
+                                mc = mdata.get("costUSD")
+                                if mc:
+                                    event_cost[key] = event_cost.get(key, 0.0) + float(mc)
+                                tk = event_tokens.setdefault(key, {
+                                    "input": 0, "output": 0, "cache_read": 0,
+                                    "cache_write": 0, "reasoning": 0,
+                                })
+                                tk["input"] += mdata.get("inputTokens") or 0
+                                tk["output"] += mdata.get("outputTokens") or 0
+                                tk["cache_read"] += mdata.get("cacheReadInputTokens") or 0
+                                tk["cache_write"] += mdata.get("cacheCreationInputTokens") or 0
+                                tk["reasoning"] += mdata.get("thinkingTokens") or 0
+                            model_usage_cost = event_cost
+                            model_usage_tokens = event_tokens
+                        # cs válido pero sin modelUsage: conserva el acumulado
+                        # del cs anterior en lugar de borrarlo (hardening B1).
+                    # Un cs con totalCostUSD=0 no toca NI costo NI tokens:
+                    # pisar los tokens dejaría tramo A en 0 con costo > 0 y
+                    # pisar el costo perdería el tramo facturado previo (B6).
 
     # Costo y tokens por modelo. Si el cost-state es válido, modelUsage es
     # autoritativo para el tramo que cubre (tramo A) y los eventos dedup
@@ -1969,6 +1984,127 @@ def calculate_cost(model, input_tokens, output_tokens, cache_tokens=0, source=No
             cw_price = costs["input"]
         cache_write_cost = (cache_write_tokens / 1000000) * (cw_price or 0)
     return input_cost + output_cost + cache_cost + cache_write_cost
+
+
+def recalculate_model_usage_costs(conn, dry_run=True,
+                                  include_reported=False,
+                                  include_zero_price=False):
+    """Recalcula costos de model_usage desde tokens con los precios vigentes.
+
+    Reglas:
+    - Sesiones con cost_source='reported' (costo facturado, ej. Claude Code):
+      NO se tocan, salvo include_reported=True (solo tests/admin).
+    - Modelos sin entrada en MODEL_COSTS o con input==0 y output==0: se saltan
+      y se reportan como pendientes. Nunca se computa costo 0 desde una
+      entrada 0/0/0 ni se pisa con fallback un precio pendiente.
+    - dry_run=True: no escribe nada; devuelve el detalle de cambios.
+    - Apply: transacción única; alinea sessions.cost solo para sesiones
+      no-reported y con filas en model_usage (guarda EXISTS).
+
+    Sin la columna cost_source (modo legacy) degrada: las sesiones Claude se
+    tratan como reported (no se tocan) y el resto como estimated.
+
+    Returns dict: {updated, total_delta, session_total_delta, changes,
+                   session_changes, skipped_reported, skipped_zero_price,
+                   has_cost_source}
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(sessions)")}
+    has_cs = "cost_source" in cols
+    sel_cs = "s.cost_source" if has_cs else "'estimated' AS cost_source"
+    rows = conn.execute(
+        "SELECT mu.id, mu.session_id, mu.model, mu.input_tokens, mu.output_tokens, "
+        "mu.cache_tokens, mu.cache_write_tokens, mu.cost, s.source, s.cost, "
+        + sel_cs +
+        " FROM model_usage mu JOIN sessions s ON s.id = mu.session_id"
+    ).fetchall()
+
+    changes = []
+    skipped_zero_price = set()
+    skipped_reported = 0
+    total_delta = 0.0
+    mu_sums = {}
+    sess_costs = {}
+    sess_src = {}
+    sess_delta = {}
+
+    for mu_id, sid, model, inp, out, cache, cw, old_cost, source, s_cost, cs in rows:
+        mu_sums[sid] = mu_sums.get(sid, 0.0) + old_cost
+        sess_costs[sid] = s_cost
+        # Sin columna cost_source (modo legacy): Claude se trata como reported
+        # para no pisar costos facturados; el resto es estimated.
+        effective_cs = cs if has_cs else ("reported" if source == "claude" else "estimated")
+        sess_src[sid] = effective_cs
+        sess_delta[sid] = sess_delta.get(sid, 0.0)
+
+        normalized = normalize_model_name(model)
+        entry = MODEL_COSTS.get(normalized)
+        pending = (not entry) or (entry.get("input", 0) == 0 and entry.get("output", 0) == 0)
+        if pending and not include_zero_price:
+            skipped_zero_price.add(normalized)
+            continue
+        if effective_cs == "reported" and not include_reported:
+            skipped_reported += 1
+            continue
+
+        sem = SOURCE_CACHE_SEMANTICS.get(source, SOURCE_CACHE_SEMANTICS["unknown"])
+        cwb = cw if (sem["cache_write_billable"] and not sem["input_includes_cache_read"]) else 0
+        new_cost = calculate_cost(model, inp, out, cache, source=source,
+                                  cache_write_tokens=cwb)
+        if abs(new_cost - old_cost) > 0.0001:
+            changes.append({
+                "id": mu_id, "session_id": sid, "model": model,
+                "source": source, "old": old_cost, "new": new_cost,
+            })
+            total_delta += new_cost - old_cost
+            sess_delta[sid] += new_cost - old_cost
+
+    session_changes = []
+    for sid in sorted(sess_delta):
+        if sess_src.get(sid) == "reported":
+            continue
+        new_cost = mu_sums.get(sid, 0.0) + sess_delta[sid]
+        old_cost = sess_costs.get(sid, 0.0)
+        if abs(new_cost - old_cost) > 0.0001:
+            session_changes.append({
+                "session_id": sid, "old": old_cost, "new": new_cost,
+            })
+
+    result = {
+        "updated": len(changes),
+        "total_delta": total_delta,
+        "session_total_delta": sum(sc["new"] - sc["old"] for sc in session_changes),
+        "changes": changes,
+        "session_changes": session_changes,
+        "skipped_reported": skipped_reported,
+        "skipped_zero_price": sorted(skipped_zero_price),
+        "has_cost_source": has_cs,
+    }
+    if dry_run:
+        return result
+    # Sin changes de precio puede haber drift puro (session_changes != []):
+    # la alineación de sessions igual debe correr, o el preview promete un
+    # arreglo que el apply no ejecuta.
+    if not (changes or session_changes):
+        return result
+
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for ch in changes:
+            conn.execute("UPDATE model_usage SET cost=? WHERE id=?", (ch["new"], ch["id"]))
+        # Alinear sessions.cost solo donde corresponde: sesiones estimadas con
+        # filas en model_usage (EXISTS evita dejar en 0 sesiones sin filas).
+        conn.execute(
+            "UPDATE sessions SET cost = (SELECT COALESCE(SUM(cost), 0) FROM model_usage "
+            "WHERE session_id = sessions.id) "
+            + ("WHERE cost_source != 'reported' " if has_cs else "WHERE source != 'claude' ")
+            + "AND EXISTS (SELECT 1 FROM model_usage WHERE session_id = sessions.id)"
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    result["applied"] = True
+    return result
 
 
 def effective_billable_tokens(source, input_tokens, output_tokens,
@@ -2600,6 +2736,7 @@ def init_db(db_path=None):
     """)
     _ensure_column(conn, "sessions", "cache_read_tokens", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "sessions", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "sessions", "cost_source", "TEXT NOT NULL DEFAULT 'estimated'")
     _ensure_column(conn, "model_usage", "cache_read_tokens", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "model_usage", "cache_write_tokens", "INTEGER NOT NULL DEFAULT 0")
     conn.commit()
@@ -2615,7 +2752,8 @@ def _ensure_column(conn, table, column, definition):
 def save_session(sid, source, date, timestamp, requests, input_tokens,
                  output_tokens, cache_tokens, reasoning_tokens, cost,
                  by_model, db_path=None,
-                 cache_read_tokens=None, cache_write_tokens=None):
+                 cache_read_tokens=None, cache_write_tokens=None,
+                 cost_source=None):
     """Persiste/actualiza estadísticas de una sesión en session_history.db.
 
     NOTA: El 2025-06-25 se cambió INSERT OR REPLACE por INSERT ... ON CONFLICT
@@ -2625,11 +2763,15 @@ def save_session(sid, source, date, timestamp, requests, input_tokens,
     Rollback: copiar el .bak sobre este archivo y reiniciar.
 
     2026-07-01: se agregaron cache_read_tokens, cache_write_tokens y MIN() en timestamp.
+    2026-11-19: cost_source ('reported'|'estimated') marca si el costo viene
+    facturado (ej. Claude Code con cost-state) o calculado desde tokens. Nunca
+    se degrada un reported a estimated.
     """
     if cache_read_tokens is None:
         cache_read_tokens = sum((m.get("cache_read", m.get("cache", 0)) or 0) for m in by_model.values())
     if cache_write_tokens is None:
         cache_write_tokens = sum((m.get("cache_write", 0) or 0) for m in by_model.values())
+    cs = cost_source or "estimated"
     path = Path(db_path or DB_PATH)
     conn = sqlite3.connect(str(path))
     conn.execute("PRAGMA foreign_keys=ON")
@@ -2638,8 +2780,8 @@ def save_session(sid, source, date, timestamp, requests, input_tokens,
         """INSERT INTO sessions
         (id, source, date, timestamp, requests, input_tokens, output_tokens,
          cache_tokens, reasoning_tokens, cost,
-         cache_read_tokens, cache_write_tokens)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         cache_read_tokens, cache_write_tokens, cost_source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           date = MIN(date, excluded.date),
           timestamp = MIN(timestamp, excluded.timestamp),
@@ -2650,10 +2792,12 @@ def save_session(sid, source, date, timestamp, requests, input_tokens,
           reasoning_tokens = MAX(reasoning_tokens, excluded.reasoning_tokens),
           cost = MAX(cost, excluded.cost),
           cache_read_tokens = MAX(cache_read_tokens, excluded.cache_read_tokens),
-          cache_write_tokens = MAX(cache_write_tokens, excluded.cache_write_tokens)""",
+          cache_write_tokens = MAX(cache_write_tokens, excluded.cache_write_tokens),
+          cost_source = CASE WHEN excluded.cost_source = 'reported'
+                             THEN 'reported' ELSE sessions.cost_source END""",
         (sid, source, date, timestamp, requests, input_tokens, output_tokens,
          cache_tokens, reasoning_tokens, cost,
-         cache_read_tokens, cache_write_tokens)
+         cache_read_tokens, cache_write_tokens, cs)
     )
     for model, mdata in by_model.items():
         mu_cache_read = mdata.get("cache_read", mdata.get("cache", 0))

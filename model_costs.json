@@ -103,11 +103,6 @@
     "input": 0.25,
     "output": 1.5
   },
-  "gemini-3.1-flash-lite-preview": {
-    "cache": 0.0,
-    "input": 0.0,
-    "output": 0.0
-  },
   "gemini-3.1-pro": {
     "cache": 0.2,
     "input": 2,
@@ -452,9 +447,9 @@
     "cache": 0.0
   },
   "mimo-v2.6-flash": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
+    "input": 0.14,
+    "output": 0.28,
+    "cache": 0.0028
   },
   "gpt-6-luna": {
     "input": 0.1,
@@ -462,14 +457,16 @@
     "cache": 0.01
   },
   "claude-sonnet-5-5": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
+    "input": 2,
+    "output": 10,
+    "cache": 0.1,
+    "cache_write": 2.5
   },
   "gpt-6.1-sol": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
+    "input": 2,
+    "output": 10,
+    "cache": 0.1,
+    "cache_write": 2.5
   },
   "claude-haiku-5-5": {
     "input": 0.1,
@@ -478,13 +475,86 @@
     "cache_write": 0.2
   },
   "step-5-preview": {
-    "input": 0.0,
-    "output": 0.0,
-    "cache": 0.0
+    "input": 1,
+    "output": 2.7,
+    "cache": 0.1
   },
   "minimax-m3.1-flash": {
     "input": 0.15,
     "output": 0.6,
     "cache": 0.015
+  },
+  "gpt-5-nano": {
+    "input": 0.05,
+    "output": 0.4,
+    "cache": 0.005
+  },
+  "claude-fable-5-2": {
+    "input": 8,
+    "output": 40,
+    "cache": 0.2,
+    "cache_write": 10
+  },
+  "hy4-flash": {
+    "input": 0.035,
+    "output": 0.1405,
+    "cache": 0.0015
+  },
+  "gemini-4-argon": {
+    "input": 2,
+    "output": 10,
+    "cache": 0.1
+  },
+  "step-5-preview-free": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "mimo-v2.6-flash-free": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "hy4-flash-free": {
+    "input": 0.0,
+    "output": 0.0,
+    "cache": 0.0
+  },
+  "mimo-v2.6-pro": {
+    "input": 0.435,
+    "output": 0.87,
+    "cache": 0.003625
+  },
+  "kimi-k3.1-pro": {
+    "input": 2,
+    "output": 10,
+    "cache": 0.2,
+    "cache_write": 2
+  },
+  "qwen4-max": {
+    "input": 1.5,
+    "output": 4.5,
+    "cache": 0.075,
+    "cache_write": 1.875
+  },
+  "gemini-4-argon-contributor": {
+    "input": 4,
+    "output": 20,
+    "cache": 0.2
+  },
+  "grok-4.7": {
+    "input": 2,
+    "output": 6,
+    "cache": 0.5
+  },
+  "hy4": {
+    "input": 0.834,
+    "output": 2.501,
+    "cache": 0.042
+  },
+  "hy4-preview": {
+    "input": 0.834,
+    "output": 2.501,
+    "cache": 0.042
   }
 }

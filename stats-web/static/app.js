@@ -1279,21 +1279,18 @@ if (document.getElementById('models-tbody')) {
         });
         onCancelEdit(tr, model);
 
-        // Recalcular costos históricos y refrescar la tabla de modelos
+        // Guardar precio NO recalcula el histórico: el recálculo es una acción
+        // aparte, con preview y confirmación (botón "Recalcular costos").
         var badge = document.getElementById('save-global-badge');
-        if (badge) { badge.textContent = '✓ guardado — recalculando...'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-faint)'; }
-        fetch('/api/model-prices/recalculate')
-          .then(function(r) { return r.json(); })
-          .then(function() { return fetch('/api/models?limit=200'); })
+        if (badge) { badge.textContent = '✓ guardado — historial sin recalcular'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-accent-text)'; }
+        fetch('/api/models?limit=200')
           .then(function(r) { return r.json(); })
           .then(function(data) {
             modelsData = data;
             renderModels();
-            if (badge) { badge.textContent = '✓ guardado y recalculado'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-pos)'; }
-            setTimeout(function() { if (badge) badge.style.display = 'none'; }, 2000);
+            setTimeout(function() { if (badge) badge.style.display = 'none'; }, 3000);
           })
           .catch(function() {
-            if (badge) { badge.textContent = window.SS_I18N ? window.SS_I18N.t('dyn.saved_pending') : '✓ guardado (recálculo pendiente)'; badge.style.display = 'inline'; badge.style.color = 'var(--stats-accent-text)'; }
             setTimeout(function() { if (badge) badge.style.display = 'none'; }, 3000);
           });
       } else {
@@ -1365,35 +1362,88 @@ if (document.getElementById('models-tbody')) {
 
 }
 
-// --- Recalculate historical costs button ---
+// --- Recalculate historical costs button (preview -> confirm -> apply) ---
 if (document.getElementById('recalc-historical-btn')) {
   document.getElementById('recalc-historical-btn').addEventListener('click', function() {
     var btn = this;
     var badge = document.getElementById('recalc-badge');
     btn.disabled = true;
-    btn.textContent = 'Recalculando...';
+    btn.textContent = 'Previsualizando...';
     badge.style.display = 'inline';
     badge.textContent = '⌛';
     badge.style.color = 'var(--stats-faint)';
+
     fetch('/api/model-prices/recalculate')
       .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data.success) {
-          badge.textContent = '✓ ' + data.updated + ' costos recalculados';
+      .then(function(preview) {
+        if (!preview.success) {
+          badge.textContent = 'Error: ' + (preview.error || 'desconocido');
+          badge.style.color = 'var(--stats-neg)';
+          btn.disabled = false;
+          btn.textContent = window.SS_I18N ? window.SS_I18N.t('mod.recalc') : 'Recalcular costos históricos';
+          setTimeout(function() { badge.style.display = 'none'; }, 4000);
+          return null;
+        }
+        if (!preview.updated) {
+          badge.textContent = '✓ Sin cambios (todo ya coincide)';
           badge.style.color = 'var(--stats-pos)';
+          btn.disabled = false;
+          btn.textContent = window.SS_I18N ? window.SS_I18N.t('mod.recalc') : 'Recalcular costos históricos';
+          setTimeout(function() { badge.style.display = 'none'; }, 4000);
+          return null;
+        }
+        var lines = [
+          'Filas a recalcular: ' + preview.updated,
+          'Delta model_usage: ' + (preview.total_delta >= 0 ? '+$' : '-$') + Math.abs(preview.total_delta).toFixed(2),
+          'Delta sessions: ' + (preview.session_total_delta >= 0 ? '+$' : '-$') + Math.abs(preview.session_total_delta).toFixed(2)
+        ];
+        if (preview.skipped_reported) {
+          lines.push('Saltadas (costo facturado Claude): ' + preview.skipped_reported);
+        }
+        if (preview.skipped_zero_price && preview.skipped_zero_price.length) {
+          lines.push('Pendientes de precio (se saltan): ' + preview.skipped_zero_price.slice(0, 6).join(', ') + (preview.skipped_zero_price.length > 6 ? '…' : ''));
+        }
+        lines.push('¿Aplicar el recálculo?');
+        var ok = window.confirm(lines.join('\n'));
+        if (!ok) {
+          badge.textContent = 'Recálculo cancelado (nada escrito)';
+          badge.style.color = 'var(--stats-faint)';
+          btn.disabled = false;
+          btn.textContent = window.SS_I18N ? window.SS_I18N.t('mod.recalc') : 'Recalcular costos históricos';
+          setTimeout(function() { badge.style.display = 'none'; }, 4000);
+          return null;
+        }
+        badge.textContent = '⌛';
+        badge.style.color = 'var(--stats-faint)';
+        btn.textContent = 'Recalculando...';
+        return fetch('/api/model-prices/recalculate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ confirm: true })
+        }).then(function(r) { return r.json(); });
+      })
+      .then(function(data) {
+        if (!data) return;
+        if (data.success) {
+          badge.textContent = '✓ ' + data.updated + ' costos recalculados (' + (data.total_delta >= 0 ? '+$' : '-$') + Math.abs(data.total_delta).toFixed(2) + ')';
+          badge.style.color = 'var(--stats-pos)';
+          return fetch('/api/models?limit=200')
+            .then(function(r) { return r.json(); })
+            .then(function(d) { modelsData = d; renderModels(); })
+            .catch(function() {});
         } else {
           badge.textContent = 'Error: ' + (data.error || 'desconocido');
           badge.style.color = 'var(--stats-neg)';
         }
-        btn.disabled = false;
-        btn.textContent = window.SS_I18N ? window.SS_I18N.t('mod.recalc') : 'Recalcular costos históricos';
-        setTimeout(function() { badge.style.display = 'none'; }, 4000);
       })
       .catch(function() {
         badge.textContent = 'Error de red';
         badge.style.color = 'var(--stats-neg)';
+      })
+      .then(function() {
         btn.disabled = false;
         btn.textContent = window.SS_I18N ? window.SS_I18N.t('mod.recalc') : 'Recalcular costos históricos';
+        setTimeout(function() { if (badge) badge.style.display = 'none'; }, 5000);
       });
   });
 }

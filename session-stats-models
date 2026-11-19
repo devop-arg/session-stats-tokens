@@ -450,40 +450,53 @@ def search_models(costs, aliases):
 # ─── Recalcular histórico ──────────────────────────────
 
 def recalculate_history_costs():
-    """Recalcula costos de todas las sesiones en SQLite usando precios actuales."""
+    """Recalcula costos del histórico usando la función compartida.
+
+    Usa stats_common.recalculate_model_usage_costs: mismas reglas que el
+    dashboard (skip de costos facturados de Claude y de modelos sin precio,
+    backup y transacción). El recálculo anterior hacía su propio UPDATE sin
+    source ni cache_write y pisaba sesiones Claude: deprecado.
+    """
     if not DB_PATH.exists():
         print("  No hay historial para recalcular.")
         return
 
     import sys as _sys
     _sys.path.insert(0, str(SCRIPT_DIR))
-    from stats_common import normalize_model_name, calculate_cost
+    from stats_common import recalculate_model_usage_costs, backup_db
 
+    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    try:
+        preview = recalculate_model_usage_costs(conn, dry_run=True)
+    finally:
+        conn.close()
+
+    if not preview["updated"]:
+        print("  Sin cambios (todos los costos ya coinciden).")
+        if preview["skipped_zero_price"]:
+            print(f"  Pendientes de precio (se saltan): {', '.join(preview['skipped_zero_price'])}")
+        return
+
+    delta = preview["total_delta"]
+    print(f"  Filas a recalcular: {preview['updated']} (delta model_usage: {delta:+.2f})")
+    if preview["skipped_reported"]:
+        print(f"  Saltadas (costo facturado Claude): {preview['skipped_reported']}")
+    if preview["skipped_zero_price"]:
+        print(f"  Pendientes de precio (se saltan): {', '.join(preview['skipped_zero_price'])}")
+    r = input("  Aplicar el recálculo? [s/N]: ").strip().lower()
+    if r not in ('s', 'si', 'sí', 'y', 'yes'):
+        print("  Nada escrito. Preview disponible en /api/model-prices/recalculate.")
+        return
+
+    backup_db(keep=99)
     conn = sqlite3.connect(str(DB_PATH))
-    mrows = conn.execute("SELECT id, session_id, model, input_tokens, output_tokens, cache_tokens, cost FROM model_usage").fetchall()
-    updated = 0
-
-    for mr in mrows:
-        mu_id = mr[0]
-        model = mr[2]
-        inp = mr[3]
-        out = mr[4]
-        cache = mr[5]
-        old_cost = mr[6]
-        new_cost = calculate_cost(model, inp, out, cache)
-        if abs(new_cost - old_cost) > 0.0001:
-            conn.execute("UPDATE model_usage SET cost=? WHERE id=?", (new_cost, mu_id))
-            updated += 1
-
-    if updated:
-        conn.commit()
-        conn.execute("UPDATE sessions SET cost = (SELECT COALESCE(SUM(cost), 0) FROM model_usage WHERE session_id = sessions.id)")
-        conn.commit()
-        print(f"  \u2713 Recalculados {updated} costos de modelo.")
-    else:
-        print("  \u2713 Sin cambios (todos los costos ya coinciden).")
-
-    conn.close()
+    conn.execute("PRAGMA busy_timeout=5000")
+    try:
+        result = recalculate_model_usage_costs(conn, dry_run=False)
+    finally:
+        conn.close()
+    print(f"  Recalculados {result['updated']} costos de modelo "
+          f"(delta {result['total_delta']:+.2f}).")
 
 
 def ask_recalculate():
