@@ -38,10 +38,12 @@ class RecalcCostsTests(unittest.TestCase):
         self.db = _mk_db()
         _set_price("test-paid", {"input": 2, "output": 10, "cache": 0.1})
         _set_price("test-zero", {"input": 0.0, "output": 0.0, "cache": 0.0})
+        _set_price("test-free-marked", {"input": 0.0, "output": 0.0, "cache": 0.0, "free": True})
 
     def tearDown(self):
         _del_price("test-paid")
         _del_price("test-zero")
+        _del_price("test-free-marked")
         Path(self.db).unlink(missing_ok=True)
 
     def _rows(self, path):
@@ -124,6 +126,23 @@ class RecalcCostsTests(unittest.TestCase):
         sess, mu = self._rows(self.db)
         self.assertEqual(mu[0][2], 0.0)
         self.assertEqual(sess[0][1], 0.0)
+
+    def test_free_marked_model_is_skipped_silently(self):
+        # Entradas marcadas "free" (gratis confirmadas): se saltan como las
+        # pendientes pero SIN aparecer en el reporte de pendientes.
+        save_session("ses_cf", "opencode", "2026-01-01", 1000, 1, 500_000, 5_000,
+                     100_000, 0, 4.0,
+                     {"test-free-marked": {"input": 500_000, "output": 5_000,
+                                            "cache": 100_000, "cost": 4.0}},
+                     db_path=self.db, cache_read_tokens=100_000,
+                     cost_source="estimated")
+        conn = sqlite3.connect(self.db)
+        result = recalculate_model_usage_costs(conn, dry_run=True)
+        conn.close()
+        self.assertEqual(result["updated"], 0)
+        self.assertNotIn("test-free-marked", result["skipped_zero_price"])
+        _, mu = self._rows(self.db)
+        self.assertEqual(mu[0][2], 4.0)
 
     def test_codex_semantics_exclude_cache_from_input(self):
         # codex: input_tokens incluye cache reads; se cobra input no-cacheado

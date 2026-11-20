@@ -1121,18 +1121,23 @@ if (document.getElementById('models-tbody')) {
     sorted.forEach(function(m, i) {
       var totalT = modelTotalTokens(m);
       var price = modelPrices[m.model] || {};
-      var inpPrice = price.input;
-      var outPrice = price.output;
-      var cachePrice = price.cache;
+      // Pendiente (0/0/0): mostrar "—" en vez de 0.0000; editar arranca vacío.
+      var inpPrice = price.pending ? null : price.input;
+      var outPrice = price.pending ? null : price.output;
+      var cachePrice = price.pending ? null : price.cache;
       var hasPrice = modelPrices.hasOwnProperty(m.model);
       var colorIdx = i % MODEL_COLORS.length;
       var dotColor = MODEL_COLORS[colorIdx];
 
       var tr = document.createElement('tr');
       tr.setAttribute('data-model', m.model);
+      var pendingBadge = '';
+      if (price.pending) {
+        pendingBadge = ' <span class="price-pending-badge" style="display:inline-block;margin-left:6px;padding:0 5px;border-radius:3px;font-size:9px;letter-spacing:.03em;vertical-align:middle;background:rgba(255,137,4,.12);border:1px solid rgba(255,137,4,.35);color:#ffb054;" title="Precio sin confirmar (0/0/0): el rec&aacute;lculo lo salta y factura $0 hasta que se cargue el precio real o se confirme gratis">' + (window.SS_I18N ? window.SS_I18N.t('dyn.price_pending_badge') : 'pendiente') + '</span>';
+      }
       tr.innerHTML =
         '<td class="num"><span class="rank' + (i < 3 ? ' top-3' : '') + '">' + (i + 1) + '</span></td>' +
-        '<td><span class="model-color-dot" style="background:' + dotColor + '"></span><span class="model-name">' + escHtml(m.model) + '</span></td>' +
+        '<td><span class="model-color-dot" style="background:' + dotColor + '"></span><span class="model-name">' + escHtml(m.model) + '</span>' + pendingBadge + '</td>' +
         '<td class="num">' + fmt(m.requests) + '</td>' +
         '<td class="num col-input">' + fmt(modelInputTokens(m)) + '</td>' +
         '<td class="num col-output">' + fmt(m.output_tokens) + '</td>' +

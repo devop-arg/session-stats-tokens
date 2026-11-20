@@ -265,6 +265,26 @@ def reload_model_costs():
         pass
 
 
+def reload_model_aliases():
+    """Recarga MODEL_ALIASES desde model_aliases.json.
+
+    Igual que reload_model_costs pero para aliases: el dict en memoria puede
+    estar desactualizado si un script/edit de datos agregó aliases con el
+    server ya arrancado. Sin esto, normalize_model_name usa aliases viejos
+    (p.ej. manda variantes -free al canon pago).
+    """
+    try:
+        data = {}
+        if MODEL_ALIASES_FILE.exists():
+            with open(MODEL_ALIASES_FILE) as fh:
+                data = json.load(fh)
+        MODEL_ALIASES.clear()
+        MODEL_ALIASES.update(data)
+        MODEL_ALIASES["historical_adjustment"] = "historical_adjustment"
+    except Exception:
+        pass
+
+
 _load_model_overrides()
 
 
@@ -2038,9 +2058,18 @@ def recalculate_model_usage_costs(conn, dry_run=True,
 
         normalized = normalize_model_name(model)
         entry = MODEL_COSTS.get(normalized)
-        pending = (not entry) or (entry.get("input", 0) == 0 and entry.get("output", 0) == 0)
+        # Pendiente = sin entrada o 0/0/0 sin marcador free: se salta y se
+        # reporta (nunca se computa 0 ni se pisa con fallback). Las entradas
+        # marcadas "free" (gratis confirmadas) también se saltan pero sin
+        # ruido en el reporte.
+        if not entry:
+            pending, is_free = True, False
+        else:
+            pending = entry.get("input", 0) == 0 and entry.get("output", 0) == 0
+            is_free = bool(entry.get("free", False))
         if pending and not include_zero_price:
-            skipped_zero_price.add(normalized)
+            if not is_free:
+                skipped_zero_price.add(normalized)
             continue
         if effective_cs == "reported" and not include_reported:
             skipped_reported += 1

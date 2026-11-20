@@ -277,6 +277,32 @@ El costo se calcula en `stats_common.calculate_cost` como
 `input·price_in + output·price_out + cache_tokens·price_cache [+ cache_write_tokens·price_cache_write]`
 (si el modelo no registra cache tokens, el término cache es 0 da igual el precio).
 
+### Tiers de contexto: NO soportados
+
+models.dev expone precios por tier (`tiers`, `context_over_200k`) para modelos
+como `gpt-5.6-*`, `claude-haiku-5-5` o `minimax-m3`. **No se aplican**: la DB
+no guarda el tamaño de contexto por request, así que solo el precio plano es
+facturable. Para estos modelos se declara el precio del tier base (el de
+contexto estándar); sesiones muy largas quedan sub-facturadas y sesiones cortas
+sobre-facturadas en proporción pequeña. Si algún día se persiste el contexto
+por request, `calculate_cost` deberá extenderse antes de tocar `model_costs`.
+
+### Sync con models.dev
+
+`scripts/sync-prices.py` compara `model_costs.json` contra
+`https://models.dev/api.json`:
+
+- `--dry-run` (default): lista pendientes completables (0/0/0 con uso) y el
+  drift de los ya precio-ados. **Nunca escribe.**
+- `--apply-pending`: completa SOLO pendientes con uso cuyo precio matcheado
+  sea no-cero (prioridad: opencode-go > anthropic > openai > openrouter).
+  Nunca toca entradas ya precio-adas.
+
+Los precios "reverse-engineered" (ej. `cache_write: 8` de `claude-opus-5-5`,
+calibrado contra `totalCostUSD`) NO deben pisarse con los de models.dev: el
+sync solo reporta drift, no lo aplica.
+
+
 ### Comparador de costos en Android (`/costos`)
 
 En viewports mobile (`≤768px`), la tabla completa se reemplaza por un comparador

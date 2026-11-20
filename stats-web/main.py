@@ -791,12 +791,19 @@ def api_model_prices():
         alias_count[target] = alias_count.get(target, 0) + 1
     result = []
     for model, c in sorted(costs.items()):
+        # pending: entrada 0/0/0 SIN confirmar (sin marcador free). El
+        # recálculo la salta y factura 0 hasta que se cargue el precio real.
+        # Las marcadas "free" son gratis confirmadas: no son pendientes.
+        pending = (c.get("input") == 0 and c.get("output") == 0
+                   and not c.get("free", False))
         result.append({
             "model": model,
             "input": c.get("input"),
             "output": c.get("output"),
             "cache": c.get("cache"),
             "aliases": alias_count.get(model, 0),
+            "pending": pending,
+            "free": bool(c.get("free", False)),
         })
     return result
 
@@ -888,13 +895,16 @@ def api_recalculate_preview():
     skipped_zero_price (modelos pendientes de precio). El apply es el POST.
     """
     try:
-        from stats_common import reload_model_costs, recalculate_model_usage_costs
+        from stats_common import (reload_model_costs, reload_model_aliases,
+                                  recalculate_model_usage_costs)
     except ImportError:
         return JSONResponse({"success": False, "error": "stats_common import failed"}, status_code=500)
 
-    # Recargar precios desde el JSON: el dict en memoria puede estar desactualizado
-    # si se editaron precios desde la UI después de que el server arrancó.
+    # Recargar precios Y aliases desde los JSON: los dicts en memoria pueden
+    # estar desactualizados si se editaron (UI o scripts de datos) después de
+    # que el server arrancó.
     reload_model_costs()
+    reload_model_aliases()
 
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     try:
@@ -923,11 +933,13 @@ def api_recalculate_apply(req: RecalcApplyRequest):
     if not req.confirm:
         return JSONResponse({"success": False, "error": "confirm=false; usar POST {\"confirm\": true}"}, status_code=400)
     try:
-        from stats_common import reload_model_costs, recalculate_model_usage_costs, backup_db
+        from stats_common import (reload_model_costs, reload_model_aliases,
+                                  recalculate_model_usage_costs, backup_db)
     except ImportError:
         return JSONResponse({"success": False, "error": "stats_common import failed"}, status_code=500)
 
     reload_model_costs()
+    reload_model_aliases()
     backup_db(keep=99)
 
     # Preview fresco: snapshot de auditoría + valida que haya algo que aplicar.

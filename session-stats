@@ -969,7 +969,10 @@ def main():
         if not codex_stats.get("complete"):
             print("⚠️ Sesion Codex incompleta; no se actualiza el historial")
             return
-        session_id = codex_stats.get("session_id", session_ref.name)
+        # Prefijo codex_ igual que --capture-all: antes se guardaba con el
+        # UUID pelado y creaba sesiones duplicadas (par codex_<uuid>/<uuid>
+        # con el mismo consumo contado dos veces).
+        session_id = "codex_" + codex_stats.get("session_id", session_ref.name)
         session_date = codex_stats.get("date", "")
         # Usar el desglose completo reconstruido por deltas.
         stats = {
