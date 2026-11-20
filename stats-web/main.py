@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from itsdangerous import TimestampSigner, BadSignature, SignatureExpired
 from passlib.apache import HtpasswdFile
-from stats_common import DB_PATH, get_monthly_data, recalculate_historical_cost, effective_billable_tokens, effective_cache_read_tokens, effective_uncached_input_tokens, effective_cache_ratio_input, SOURCE_CACHE_SEMANTICS, init_db, normalize_model_name, calculate_session_cache_ratio
+from stats_common import DB_PATH, get_monthly_data, recalculate_historical_cost, get_recalculate_historical_cost_cached, invalidate_recalc_cache, effective_billable_tokens, effective_cache_read_tokens, effective_uncached_input_tokens, effective_cache_ratio_input, SOURCE_CACHE_SEMANTICS, init_db, normalize_model_name, calculate_session_cache_ratio
 from pydantic import BaseModel
 
 app = FastAPI(title="session-stats dashboard")
@@ -417,7 +417,10 @@ def api_summary():
     observed_ratio = _session_cache_ratio(ratio_rows)["ratio"]
 
     try:
-        rh = recalculate_historical_cost()
+        # Cache TTL (5 min): la recomputación completa toma ~1.5s y el
+        # dashboard la pide en cada /api/summary. Se invalida al guardar
+        # precios o aplicar recálculos.
+        rh = get_recalculate_historical_cost_cached()
         hc = {
             "sessions": rh["total_sessions"],
             "requests": rh["total_requests"],
@@ -873,6 +876,12 @@ def api_save_model_price(req: SaveModelPriceRequest):
     except Exception:
         pass
 
+    # El summary cacheado usa los precios vigentes: invalidarlo.
+    try:
+        invalidate_recalc_cache()
+    except Exception:
+        pass
+
     return {"success": True, "model": req.model, "field": req.field, "value": req.value}
 
 
@@ -956,6 +965,11 @@ def api_recalculate_apply(req: RecalcApplyRequest):
         result = recalculate_model_usage_costs(conn, dry_run=False)
     finally:
         conn.close()
+    # Los totales del summary cambiaron: invalidar el cache.
+    try:
+        invalidate_recalc_cache()
+    except Exception:
+        pass
     return {"success": True,
             "updated": result["updated"],
             "total_delta": round(result["total_delta"], 4),

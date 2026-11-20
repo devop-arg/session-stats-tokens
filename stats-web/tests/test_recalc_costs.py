@@ -259,5 +259,37 @@ class RecalcCostsTests(unittest.TestCase):
         self.assertEqual(mu[0][2], 7.77)
 
 
+class RecalcCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.orig = stats_common.recalculate_historical_cost
+        self.calls = []
+        stats_common.invalidate_recalc_cache()
+
+    def tearDown(self):
+        stats_common.recalculate_historical_cost = self.orig
+        stats_common.invalidate_recalc_cache()
+
+    def _fake(self):
+        self.calls.append(1)
+        return {"total_cost": float(len(self.calls))}
+
+    def test_ttl_cache_and_invalidation(self):
+        stats_common.recalculate_historical_cost = self._fake
+        r1 = stats_common.get_recalculate_historical_cost_cached()
+        r2 = stats_common.get_recalculate_historical_cost_cached()
+        self.assertEqual(len(self.calls), 1)
+        self.assertIs(r1, r2)
+        # invalidar fuerza recomputo
+        stats_common.invalidate_recalc_cache()
+        stats_common.get_recalculate_historical_cost_cached()
+        self.assertEqual(len(self.calls), 2)
+        # expiración por TTL
+        stats_common._RECALC_CACHE["ts"] -= 301
+        stats_common.get_recalculate_historical_cost_cached()
+        self.assertEqual(len(self.calls), 3)
+        # el valor cacheado es el último computado
+        self.assertEqual(stats_common.get_recalculate_historical_cost_cached()["total_cost"], 3.0)
+
+
 if __name__ == "__main__":
     unittest.main()

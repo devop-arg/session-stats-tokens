@@ -3151,6 +3151,34 @@ def verify_parity(json_path=None, db_path=None):
     )
 
 
+# --- Cache de recalculate_historical_cost para el dashboard -----------------
+# /api/summary la llama en cada request y la recomputación completa toma
+# ~1.5s (loop Python sobre todas las sesiones). TTL de 5 min = cadencia del
+# cron de captura. Invalidar con invalidate_recalc_cache() al aplicar un
+# recálculo o guardar precios.
+_RECALC_CACHE = {"ts": 0.0, "data": None}
+_RECALC_TTL = 300.0
+
+
+def invalidate_recalc_cache():
+    """Fuerza el próximo get_recalculate_historical_cost_cached() a recomputar."""
+    _RECALC_CACHE["data"] = None
+    _RECALC_CACHE["ts"] = 0.0
+
+
+def get_recalculate_historical_cost_cached(ttl=None):
+    """recalculate_historical_cost con cache en memoria (TTL default 300s)."""
+    import time as _time
+    if ttl is None:
+        ttl = _RECALC_TTL
+    if _RECALC_CACHE["data"] is not None and (_time.time() - _RECALC_CACHE["ts"]) < ttl:
+        return _RECALC_CACHE["data"]
+    data = recalculate_historical_cost()
+    _RECALC_CACHE["data"] = data
+    _RECALC_CACHE["ts"] = _time.time()
+    return data
+
+
 def backup_db(target_dir=None, keep=7, db_path=None):
     """Backup online de session_history.db con rotación."""
     target = Path(target_dir or SCRIPT_DIR / "db_backups")
